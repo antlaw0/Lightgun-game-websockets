@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<body>
+<button id="btn">Enable Orientation</button>
+<div id="debug">Tilt: </div>
+<script>
+const debug = document.getElementById('debug');
+document.getElementById('btn').addEventListener('click', () => {
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(res => {
+      if (res === 'granted') {
+        window.addEventListener('deviceorientation', e => {
+          debug.innerText = `gamma: ${e.gamma}, beta: ${e.beta}`;
+        });
+      } else alert('Permission denied');
+    });
+  } else {
+    window.addEventListener('deviceorientation', e => {
+      debug.innerText = `gamma: ${e.gamma}, beta: ${e.beta}`;
+    });
+  }
+});
+</script>
+</body>
+</html>
