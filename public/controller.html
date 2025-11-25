@@ -1,101 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lightgun Controller</title>
-  <style>
-    body { 
-      margin: 0; 
-      font-family: sans-serif; 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      justify-content: center; 
-      height: 100vh; 
-      background: #222; 
-      color: #fff; 
-    }
-    button { 
-      width: 80%; 
-      padding: 20px; 
-      margin: 10px; 
-      font-size: 1.5em; 
-      border-radius: 10px; 
-      border: none; 
-      cursor: pointer; 
-    }
-    button:active { 
-      background-color: #555; 
-    }
-    #debug {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      color: #0f0;
-      background: #000;
-      font-size: 16px;
-      padding: 5px;
-      z-index: 999;
-      max-width: 100%;
-      word-wrap: break-word;
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Lightgun - Controller (Phone)</title>
+<style>
+  html,body { height:100%; margin:0; font-family:Arial,Helvetica,sans-serif; background:#0b1220; color:#fff; display:flex; align-items:center; justify-content:center; }
+  .panel { width:100%; max-width:520px; padding:12px; box-sizing:border-box; }
+  .btn { display:inline-block; margin:6px 6px 6px 0; padding:12px 16px; border-radius:8px; background:#1b6; color:#002; font-weight:700; border:none; font-size:16px; }
+  .btn.secondary { background:#4b6; color:#001; }
+  .btn.warn { background:#f66; color:#200; }
+  #debug { margin-top:12px; background:rgba(255,255,255,0.04); padding:10px; border-radius:8px; font-size:13px; white-space:pre-wrap; min-height:80px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+</style>
 </head>
 <body>
-  <button id="orientationBtn">Enable Orientation</button>
-  <button id="fireBtn">FIRE</button>
-  <button id="reloadBtn">RELOAD</button>
-  <button id="calibrateBtn">CALIBRATE</button>
+<div class="panel" role="main">
+  <h2>Controller (Phone)</h2>
+  <div class="row">
+    <button id="enableBtn" class="btn">Enable Orientation</button>
+    <button id="calBtn" class="btn secondary">Calibrate</button>
+    <button id="fireBtn" class="btn warn">Fire</button>
+    <button id="reloadBtn" class="btn secondary">Reload</button>
+  </div>
+  <div id="debug" >Debug info will appear here</div>
+</div>
 
-  <div id="debug">Debug info will appear here</div>
-
-  <audio id="gunfireSound" src="sounds/gunfire.ogg"></audio>
-  <audio id="reloadSound" src="sounds/reload.ogg"></audio>
-  
-<div id="debug" style="font-size:18px; white-space:pre-wrap;"></div>
-<script>
-function dbg(msg) {
-    const out = document.getElementById("debug");
-    out.textContent += msg + "\n";
-}
-
-dbg("Controller page loaded.");
-
-const ws = new WebSocket("wss://" + location.hostname + ":8080");
-
-ws.addEventListener("open", () => {
-    dbg("WS OPEN — registering as controller");
-    ws.send(JSON.stringify({ type: "register", client: "controller" }));
-});
-
-ws.addEventListener("message", (ev) => {
-    dbg("WS message from server: " + ev.data);
-});
-
-ws.addEventListener("error", (err) => {
-    dbg("WS ERROR");
-});
-
-ws.addEventListener("close", () => {
-    dbg("WS CLOSED");
-});
-
-// Orientation
-window.addEventListener("deviceorientation", (event) => {
-    if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            type: "input",
-            payload: {
-                alpha: event.alpha,
-                beta: event.beta,
-                gamma: event.gamma
-            }
-        }));
-    }
-});
-</script>
-  
-  <script src="js/controller.js"></script>
+<script src="js/controller.js"></script>
 </body>
 </html>

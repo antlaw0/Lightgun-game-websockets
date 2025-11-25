@@ -1,200 +1,124 @@
-// js/game.js
+// public/js/game.js
+// PC/game side. Connects to wss, receives controller messages and draws reticle/target.
 
-//-------------------------------------------------------
-// DEBUG HUD
-//-------------------------------------------------------
-window.TILT_SENSITIVITY = 5; // how many units per degree of tilt
-window.LERP_SPEED = 0.2;     // smooth motion factor (0.0–1.0)
+(() => {
+  console.log('game.js starting');
 
-const debugDiv = document.createElement('div');
-debugDiv.style.position = 'absolute';
-debugDiv.style.top = '10px';
-debugDiv.style.left = '10px';
-debugDiv.style.padding = '10px';
-debugDiv.style.background = 'rgba(0,0,0,0.6)';
-debugDiv.style.color = 'lime';
-debugDiv.style.fontSize = '16px';
-debugDiv.style.zIndex = '9999';
-debugDiv.style.whiteSpace = 'pre-wrap';
-debugDiv.innerText = 'Debug HUD initialized...';
-document.body.appendChild(debugDiv);
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
 
-function dbg(msg) {
-    console.log(msg);
-    debugDiv.innerText = msg;
-}
+  const connStatus = document.getElementById('connStatus');
+  const retXY = document.getElementById('retXY');
+  const abc = document.getElementById('abc');
+  const debugConsole = document.getElementById('debugConsole');
 
-//-------------------------------------------------------
-// SCENE
-//-------------------------------------------------------
-let scene, camera, renderer;
-let reticle, target;
-let targetRadius = 0.5;
-let ws;
+  let cw = canvas.width = window.innerWidth;
+  let ch = canvas.height = window.innerHeight;
 
-// Reticle target coordinates
-let reticleX = 0;
-let reticleY = 0;
+  function resize() {
+    cw = canvas.width = window.innerWidth;
+    ch = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
 
-//-------------------------------------------------------
-// AUDIO
-//-------------------------------------------------------
-let backgroundMusic = new Audio('sounds/background.mp3');
-backgroundMusic.loop = true;
-backgroundMusic.volume = 0.5;
-backgroundMusic.play().catch(() => {});
+  // WebSocket (wss) - use same host, port 8080
+  const WS_URL = `wss://${window.location.hostname}:8080`;
+  console.log('Connecting to WS at', WS_URL);
+  const ws = new WebSocket(WS_URL);
 
-let hitSound = new Audio('sounds/hit.ogg');
+  ws.onopen = () => {
+    console.log('game ws open');
+    connStatus.textContent = 'WS: connected';
+    ws.send(JSON.stringify({ type: 'register', client: 'game' }));
+  };
 
-//-------------------------------------------------------
-// INIT
-//-------------------------------------------------------
-function init() {
-    dbg("Initializing scene...");
+  ws.onclose = () => {
+    console.log('game ws closed');
+    connStatus.textContent = 'WS: disconnected';
+  };
 
-    scene = new THREE.Scene();
+  ws.onerror = (e) => {
+    console.error('game ws error', e);
+    connStatus.textContent = 'WS: error';
+  };
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+  // Animation state
+  let ret = { x: cw / 2, y: ch / 2 };
+  const retRadius = 12;
+  let lastController = null;
 
-    camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.z = 5;
+  // target example
+  const target = { x: cw * 0.8, y: ch * 0.5, r: 30 };
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    document.body.appendChild(renderer.domElement);
+  // Sounds
+  const fireAudio = new Audio('sounds/fire.ogg');
+  const reloadAudio = new Audio('sounds/reload.ogg');
 
-    //-------------------------------------------------------
-    // RETICLE
-    //-------------------------------------------------------
-    const reticleGeometry = new THREE.CircleGeometry(0.1, 32);
-    const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
-    reticle.position.z = 0;
-    scene.add(reticle);
+  function logDebug(msg) {
+    const ts = new Date().toLocaleTimeString();
+    debugConsole.textContent = `${ts} - ${msg}\n` + debugConsole.textContent;
+    debugConsole.textContent = debugConsole.textContent.split('\n').slice(0, 200).join('\n');
+  }
 
-    //-------------------------------------------------------
-    // TARGET
-    //-------------------------------------------------------
-    const textureLoader = new THREE.TextureLoader();
-    textureLoader.load(
-        'images/target.png',
-        (texture) => {
-            dbg("Target loaded");
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-            target = new THREE.Sprite(spriteMaterial);
-            target.position.set(0, 0, 0);
-            target.scale.set(1, 1, 1);
-            scene.add(target);
-        },
-        undefined,
-        (err) => dbg("Target load error: " + err)
-    );
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
 
-    //-------------------------------------------------------
-    // WEBSOCKET
-    //-------------------------------------------------------
-    const wsURL = `wss://${window.location.hostname}:8080`;
-    dbg("Connecting WebSocket: " + wsURL);
-
-    ws = new WebSocket(wsURL);
-
-    ws.onopen = () => {
-        dbg("WS OPEN — registering as game");
-        ws.send(JSON.stringify({ type: "register", client: "game" }));
-    };
-
-    ws.onerror = (err) => dbg("WS ERROR: " + JSON.stringify(err));
-    ws.onclose = () => dbg("WS CLOSED");
-
-    ws.onmessage = (event) => {
-        let data;
-        try {
-            data = JSON.parse(event.data);
-        } catch (e) {
-            dbg("Invalid WS JSON");
-            return;
-        }
-
-        if (data.type === "controller") {
-            handleControllerOrientation(data.payload);
-        }
-    };
-
-    window.addEventListener("resize", onWindowResize);
-
-    animate();
-}
-
-//-------------------------------------------------------
-// HANDLE ORIENTATION INPUT
-//-------------------------------------------------------
-function handleControllerOrientation(payload) {
-    const { alpha, beta, gamma, fire, reload, calibrate } = payload;
-
-    // Calibration can be added if needed
-    // Adjust reticle target positions using TILT_SENSITIVITY
-    reticleX = gamma * window.TILT_SENSITIVITY;
-    reticleY = beta * window.TILT_SENSITIVITY;
-
-    // Debug info
-    dbg(
-        `alpha=${alpha.toFixed(1)} beta=${beta.toFixed(1)} gamma=${gamma.toFixed(1)}\n` +
-        `reticleX=${reticleX.toFixed(2)} reticleY=${reticleY.toFixed(2)}\n` +
-        `fire=${fire} reload=${reload} calibrate=${calibrate}`
-    );
-
-    // Fire
-    if (fire) {
-        checkHit();
-        ws.send(JSON.stringify({ type: 'audio', payload: { sound: 'gunfire' } }));
+    if (msg.type === 'registered') {
+      logDebug(`got register ack ${msg.client}`);
+      return;
     }
 
-    // Reload
-    if (reload) {
-        ws.send(JSON.stringify({ type: 'audio', payload: { sound: 'reload' } }));
+    if (msg.type === 'controller') {
+      const p = msg.payload;
+
+      lastController = p;
+
+      // x and y are already normalized -1..1
+      // Convert to screen coords
+      const px = ((p.x + 1) / 2) * cw;  // map [-1..1] to [0..cw]
+      const py = ((p.y + 1) / 2) * ch;  // map [-1..1] to [0..ch]
+
+      ret.x = px;
+      ret.y = py;
+
+      retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
+      abc.textContent = `${p.alpha?.toFixed(1)}, ${p.beta?.toFixed(1)}, ${p.gamma?.toFixed(1)}`;
+
+      if (p.fire) fireAudio.play();
+      if (p.reload) reloadAudio.play();
     }
-}
+  };
 
-//-------------------------------------------------------
-// HIT CHECK
-//-------------------------------------------------------
-function checkHit() {
-    if (!target) return;
-    const dx = reticle.position.x - target.position.x;
-    const dy = reticle.position.y - target.position.y;
-    const d = Math.sqrt(dx * dx + dy * dy);
+  // Draw everything
+  function draw() {
+    ctx.clearRect(0, 0, cw, ch);
 
-    if (d < targetRadius) {
-        dbg("HIT!");
-        hitSound.currentTime = 0;
-        hitSound.play();
-    }
-}
+    // background
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, cw, ch);
 
-//-------------------------------------------------------
-// WINDOW RESIZE
-//-------------------------------------------------------
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
+    // draw target
+    ctx.fillStyle = '#f33';
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
+    ctx.fill();
 
-//-------------------------------------------------------
-// ANIMATION LOOP
-//-------------------------------------------------------
-function animate() {
-    requestAnimationFrame(animate);
+    // draw reticle crosshair
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ret.x, ret.y, retRadius, 0, Math.PI * 2);
+    ctx.stroke();
 
-    // Smooth reticle motion
-    reticle.position.x += (reticleX - reticle.position.x) * window.LERP_SPEED;
-    reticle.position.y += (reticleY - reticle.position.y) * window.LERP_SPEED;
+    ctx.beginPath();
+    ctx.moveTo(ret.x - 20, ret.y);
+    ctx.lineTo(ret.x + 20, ret.y);
+    ctx.moveTo(ret.x, ret.y - 20);
+    ctx.lineTo(ret.x, ret.y + 20);
+    ctx.stroke();
 
-    renderer.render(scene, camera);
-}
+    requestAnimationFrame(draw);
+  }
 
-//-------------------------------------------------------
-// START
-//-------------------------------------------------------
-init();
+  draw();
+})();
