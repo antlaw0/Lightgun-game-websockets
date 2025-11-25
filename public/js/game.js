@@ -1,124 +1,147 @@
-// public/js/game.js
-// PC/game side. Connects to wss, receives controller messages and draws reticle/target.
-
 (() => {
-  console.log('game.js starting');
+console.log('game.js starting');
 
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
+const canvas = document.getElementById('canvas');
+const reticleDiv = document.getElementById('reticle');
+const connStatus = document.getElementById('connStatus');
+const retXY = document.getElementById('retXY');
+const abc = document.getElementById('abc');
+const debugConsole = document.getElementById('debugConsole');
 
-  const connStatus = document.getElementById('connStatus');
-  const retXY = document.getElementById('retXY');
-  const abc = document.getElementById('abc');
-  const debugConsole = document.getElementById('debugConsole');
+let cw = canvas.width = window.innerWidth;
+let ch = canvas.height = window.innerHeight;
+function resize() { cw = canvas.width = window.innerWidth; ch = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
 
-  let cw = canvas.width = window.innerWidth;
-  let ch = canvas.height = window.innerHeight;
+// WebSocket setup
+const WS_URL = `wss://${window.location.hostname}:8080`;
+const ws = new WebSocket(WS_URL);
+ws.onopen = () => { connStatus.textContent = 'WS: connected'; ws.send(JSON.stringify({ type:'register', client:'game' })); };
+ws.onclose = () => { connStatus.textContent = 'WS: disconnected'; };
+ws.onerror = (e) => { connStatus.textContent = 'WS: error'; console.error(e); };
 
-  function resize() {
-    cw = canvas.width = window.innerWidth;
-    ch = canvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resize);
-
-  // WebSocket (wss) - use same host, port 8080
-  const WS_URL = `wss://${window.location.hostname}:8080`;
-  console.log('Connecting to WS at', WS_URL);
-  const ws = new WebSocket(WS_URL);
-
-  ws.onopen = () => {
-    console.log('game ws open');
-    connStatus.textContent = 'WS: connected';
-    ws.send(JSON.stringify({ type: 'register', client: 'game' }));
-  };
-
-  ws.onclose = () => {
-    console.log('game ws closed');
-    connStatus.textContent = 'WS: disconnected';
-  };
-
-  ws.onerror = (e) => {
-    console.error('game ws error', e);
-    connStatus.textContent = 'WS: error';
-  };
-
-  // Animation state
-  let ret = { x: cw / 2, y: ch / 2 };
-  const retRadius = 12;
-  let lastController = null;
-
-  // target example
-  const target = { x: cw * 0.8, y: ch * 0.5, r: 30 };
-
-  // Sounds
-  const fireAudio = new Audio('sounds/fire.ogg');
-  const reloadAudio = new Audio('sounds/reload.ogg');
-
-  function logDebug(msg) {
+function logDebug(msg) {
     const ts = new Date().toLocaleTimeString();
     debugConsole.textContent = `${ts} - ${msg}\n` + debugConsole.textContent;
-    debugConsole.textContent = debugConsole.textContent.split('\n').slice(0, 200).join('\n');
-  }
+    debugConsole.textContent = debugConsole.textContent.split('\n').slice(0,200).join('\n');
+}
 
-  ws.onmessage = (ev) => {
+// ------------------ Three.js Setup ------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111111);
+
+const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 100);
+camera.position.set(0, 1.7, 5);
+camera.lookAt(0, 1.7, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(cw, ch);
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 10, 5);
+scene.add(dirLight);
+
+// Reticle coordinates
+let ret = { x: cw/2, y: ch/2 };
+let lastController = null;
+
+// Raycaster
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// ------------------ Targets ------------------
+const targets = [];
+const targetGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+const targetMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+
+function addTarget(x,y,z) {
+    const t = new THREE.Mesh(targetGeo, targetMat.clone());
+    t.position.set(x, y, z);
+    t.userData.health = 3;
+    scene.add(t);
+    targets.push(t);
+}
+
+// Add test targets at varying depths
+addTarget(0,1.5,0);
+addTarget(1.5,1.2,-2);
+addTarget(-1.2,1.0,-1.5);
+addTarget(0.8,1.8,-3);
+
+// ------------------ Duck & Zoom ------------------
+let ducking = false;
+let zoomed = false;
+document.addEventListener('keydown', (e) => {
+    if(e.key==='Shift') ducking=true;
+    if(e.key==='z' || e.key==='Z') zoomed=true;
+});
+document.addEventListener('keyup', (e) => {
+    if(e.key==='Shift') ducking=false;
+    if(e.key==='z' || e.key==='Z') zoomed=false;
+});
+
+// ------------------ Fire ------------------
+function fire() {
+    // Convert reticle position to NDC
+    mouse.x = (ret.x / cw) * 2 - 1;
+    mouse.y = - (ret.y / ch) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(targets);
+
+    if(hits.length > 0) {
+        const obj = hits[0].object;
+        obj.userData.health--;
+        logDebug(`Hit target at ${obj.position.x.toFixed(2)},${obj.position.y.toFixed(2)},${obj.position.z.toFixed(2)} | Health: ${obj.userData.health}`);
+        if(obj.userData.health <= 0){
+            scene.remove(obj);
+            targets.splice(targets.indexOf(obj),1);
+            logDebug('Target destroyed!');
+        }
+    } else {
+        logDebug('Miss!');
+    }
+}
+
+// Mouse click to test firing
+canvas.addEventListener('mousedown', fire);
+
+// ------------------ WebSocket controller input ------------------
+ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
 
-    if (msg.type === 'registered') {
-      logDebug(`got register ack ${msg.client}`);
-      return;
+    if(msg.type==='registered'){ logDebug(`WS registered ${msg.client}`); return; }
+
+    if(msg.type==='controller') {
+        const p = msg.payload;
+        lastController = p;
+        ret.x = ((p.x+1)/2)*cw;
+        ret.y = ((p.y+1)/2)*ch;
+        retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
+        abc.textContent = `${p.alpha?.toFixed(1)}, ${p.beta?.toFixed(1)}, ${p.gamma?.toFixed(1)}`;
+        if(p.fire) fire();
     }
+};
 
-    if (msg.type === 'controller') {
-      const p = msg.payload;
+// ------------------ Animation Loop ------------------
+function animate(){
+    requestAnimationFrame(animate);
 
-      lastController = p;
+    // Ducking camera adjustment
+    camera.position.y = 1.7 - (ducking? 0.8 : 0);
+    camera.fov = zoomed ? 30 : 60;
+    camera.updateProjectionMatrix();
 
-      // x and y are already normalized -1..1
-      // Convert to screen coords
-      const px = ((p.x + 1) / 2) * cw;  // map [-1..1] to [0..cw]
-      const py = ((p.y + 1) / 2) * ch;  // map [-1..1] to [0..ch]
+    // Update reticle CSS
+    reticleDiv.style.left = `${ret.x}px`;
+    reticleDiv.style.top = `${ret.y}px`;
 
-      ret.x = px;
-      ret.y = py;
+    renderer.render(scene, camera);
+}
 
-      retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
-      abc.textContent = `${p.alpha?.toFixed(1)}, ${p.beta?.toFixed(1)}, ${p.gamma?.toFixed(1)}`;
+animate();
 
-      //if (p.fire) fireAudio.play();
-      //if (p.reload) reloadAudio.play();
-    }
-  };
-
-  // Draw everything
-  function draw() {
-    ctx.clearRect(0, 0, cw, ch);
-
-    // background
-    ctx.fillStyle = '#222';
-    ctx.fillRect(0, 0, cw, ch);
-
-    // draw target
-    ctx.fillStyle = '#f33';
-    ctx.beginPath();
-    ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // draw reticle crosshair
-    ctx.strokeStyle = '#0f0';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(ret.x, ret.y, retRadius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(ret.x - 20, ret.y);
-    ctx.lineTo(ret.x + 20, ret.y);
-    ctx.moveTo(ret.x, ret.y - 20);
-    ctx.lineTo(ret.x, ret.y + 20);
-    ctx.stroke();
-
-    requestAnimationFrame(draw);
-  }
-
-  draw();
 })();
