@@ -84,8 +84,8 @@
       retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
       abc.textContent = `${p.alpha?.toFixed(1)}, ${p.beta?.toFixed(1)}, ${p.gamma?.toFixed(1)}`;
 
-      if (p.fire) fireAudio.play();
-      if (p.reload) reloadAudio.play();
+      //if (p.fire) fireAudio.play();
+      //if (p.reload) reloadAudio.play();
     }
   };
 
