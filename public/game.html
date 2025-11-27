@@ -59,6 +59,7 @@ canvas {
 <body>
 <canvas id="canvas"></canvas>
 <div id="reticle"></div>
+
 <div id="hud">
   <div><strong>Lightgun - 3D</strong></div>
   <div id="connStatus">WS: disconnected</div>
@@ -66,9 +67,16 @@ canvas {
   <div>alpha/beta/gamma: <span id="abc">-, -, -</span></div>
   <div><small>Mouse click or fire button to shoot, hold 'Shift' to duck, 'Z' to zoom</small></div>
 </div>
-<div id="debugConsole" aria-live="polite"></div>
 
-<script src="js/three.min.js"></script>
-<script src="js/game.js"></script>
+<div id="debugConsole" aria-live="polite"></div>
+<!-- Three.js global -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+<script>
+  window.THREE = THREE; // ensure modules can access it
+</script>
+<!-- Your game code (game.js is ES module if it uses imports) -->
+<script type="module" src="js/game.js"></script>
+
+
 </body>
 </html>

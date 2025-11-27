@@ -1,5 +1,6 @@
 // js/enemy.js
-import * as THREE from "three";
+//import * as THREE from './lib/three.module.js';
+
 import { ENEMY_DEFS } from "./scenes.js";
 
 export class Weapon {

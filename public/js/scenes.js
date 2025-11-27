@@ -65,23 +65,23 @@ export const ENEMY_DEFS = {
     // default weapon object
     weapon: {
       name: "Pistol",
-      fireSound: "assets/sfx/pistol.ogg",
+      fireSound: "assets/sfx/grunt/pistol_fire.ogg",
       fireRateMs: 600, // minimum time between shots
       damage: 1,
       clipSize: 6,
       reloadTimeMs: 1600,
-      reloadSound: "assets/sfx/pistolReload.ogg",
+      reloadSound: "assets/sfx/grunt/reload.ogg",
       ammoReserve: 36
     },
     // arrays of sound files; random pick on hit/death
     hitSounds: [
-      "assets/sfx/hit1.ogg",
-      "assets/sfx/hit2.ogg",
-      "assets/sfx/hit3.ogg"
+      "assets/sfx/grunt/hit1.ogg",
+      "assets/sfx/grunt/hit2.ogg",
+      "assets/sfx/grunt/hit3.ogg"
     ],
     deathSounds: [
-      "assets/sfx/death1.ogg",
-      "assets/sfx/death2.ogg"
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
     ],
     // simple AI tuning parameters
     accuracy: 0.65, // 0..1 - used when deciding if a shot hits (you can replace with raycast)
