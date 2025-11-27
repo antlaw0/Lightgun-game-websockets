@@ -19,6 +19,67 @@ const ws = new WebSocket(WS_URL);
 ws.onopen = () => { connStatus.textContent = 'WS: connected'; ws.send(JSON.stringify({ type:'register', client:'game' })); };
 ws.onclose = () => { connStatus.textContent = 'WS: disconnected'; };
 ws.onerror = (e) => { connStatus.textContent = 'WS: error'; console.error(e); };
+// ---------------------------------------------------
+// PC SIMULATION: control reticle + fire/reload on game.html
+// ---------------------------------------------------
+// ---------------------------------------------------
+// DESKTOP MOUSE SIMULATION (game.html controls)
+// ---------------------------------------------------
+(function setupDesktopControls() {
+    console.log("Desktop control simulation ON");
+
+    // store last known mouse position
+    let lastX = 0;
+    let lastY = 0;
+
+    // helper to send full payload
+    function sendDesktopPayload(overrides = {}) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const payload = {
+            x: lastX,
+            y: lastY,
+            alpha: 0,
+            beta: 0,
+            gamma: 0,
+            fire: false,
+            reload: false,
+            calibrate: false,
+            ...overrides // overrides like fire/reload
+        };
+
+        ws.send(JSON.stringify({
+            type: "controller",
+            payload
+        }));
+    }
+
+    // mouse movement updates x/y
+    window.addEventListener("mousemove", (e) => {
+        lastX = (e.clientX / window.innerWidth) * 2 - 1;
+        lastY = (e.clientY / window.innerHeight) * 2 - 1;
+
+        sendDesktopPayload(); // send full payload with new x/y
+    });
+
+    // left click → fire
+    window.addEventListener("mousedown", (e) => {
+        if (e.button === 0) {
+            const fireSound = new Audio('sounds/fire.ogg');
+  fireSound.play();
+			sendDesktopPayload({ fire: true });
+        }
+    });
+
+    // right click → reload
+    window.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const reloadSound = new Audio('sounds/reload.ogg');
+  reloadSound.play();
+		sendDesktopPayload({ reload: true });
+    });
+
+})();
 
 function logDebug(msg) {
     const ts = new Date().toLocaleTimeString();
@@ -38,17 +99,17 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(cw, ch);
 
 // Lights
-const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambient);
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(5, 10, 5);
 scene.add(dirLight);
 
-// Reticle coordinates
-let ret = { x: cw/2, y: ch/2 };
-let lastController = null;
+// ------------------ Reticle Tracking ------------------
+let ret = { x: cw/2, y: ch/2 };         // target position from controller
+let displayedRet = { x: cw/2, y: ch/2 }; // position actually shown on screen
+const LERP_SPEED = 0.9;
 
-// Raycaster
+// ------------------ Raycaster ------------------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -65,7 +126,7 @@ function addTarget(x,y,z) {
     targets.push(t);
 }
 
-// Add test targets at varying depths
+// Add test targets
 addTarget(0,1.5,0);
 addTarget(1.5,1.2,-2);
 addTarget(-1.2,1.0,-1.5);
@@ -85,13 +146,10 @@ document.addEventListener('keyup', (e) => {
 
 // ------------------ Fire ------------------
 function fire() {
-    // Convert reticle position to NDC
     mouse.x = (ret.x / cw) * 2 - 1;
     mouse.y = - (ret.y / ch) * 2 + 1;
-
     raycaster.setFromCamera(mouse, camera);
     const hits = raycaster.intersectObjects(targets);
-
     if(hits.length > 0) {
         const obj = hits[0].object;
         obj.userData.health--;
@@ -109,7 +167,7 @@ function fire() {
 // Mouse click to test firing
 canvas.addEventListener('mousedown', fire);
 
-// ------------------ WebSocket controller input ------------------
+// ------------------ WebSocket input ------------------
 ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
 
@@ -117,7 +175,6 @@ ws.onmessage = (ev) => {
 
     if(msg.type==='controller') {
         const p = msg.payload;
-        lastController = p;
         ret.x = ((p.x+1)/2)*cw;
         ret.y = ((p.y+1)/2)*ch;
         retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
@@ -130,14 +187,16 @@ ws.onmessage = (ev) => {
 function animate(){
     requestAnimationFrame(animate);
 
-    // Ducking camera adjustment
-    camera.position.y = 1.7 - (ducking? 0.8 : 0);
+    // Lerp displayed reticle toward controller input
+    displayedRet.x += (ret.x - displayedRet.x) * LERP_SPEED;
+    displayedRet.y += (ret.y - displayedRet.y) * LERP_SPEED;
+    reticleDiv.style.left = `${displayedRet.x}px`;
+    reticleDiv.style.top = `${displayedRet.y}px`;
+
+    // Ducking & zoom
+    camera.position.y = 1.7 - (ducking ? 0.8 : 0);
     camera.fov = zoomed ? 30 : 60;
     camera.updateProjectionMatrix();
-
-    // Update reticle CSS
-    reticleDiv.style.left = `${ret.x}px`;
-    reticleDiv.style.top = `${ret.y}px`;
 
     renderer.render(scene, camera);
 }
