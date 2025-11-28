@@ -12,6 +12,9 @@ export class SceneLoader {
     this.enemyMeshes = [];
     this.propMeshes = [];
     this.sceneDef = null;
+
+    // NEW: frame counter for duplicate hit prevention
+    this.frameCount = 0;
   }
 
   loadScene(sceneDef) {
@@ -19,7 +22,6 @@ export class SceneLoader {
     this.sceneDef = sceneDef;
     console.log(`[SceneLoader] loading scene: ${sceneDef.name}`);
 
-    // create static objects / props
     const staticObjs = sceneDef.environment?.staticObjects ?? [];
     staticObjs.forEach((pdef, idx) => {
       if (!pdef.id) pdef.id = `prop_${idx}`;
@@ -29,7 +31,6 @@ export class SceneLoader {
       this.propMeshes.push(p.mesh);
     });
 
-    // create enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) {
@@ -43,8 +44,10 @@ export class SceneLoader {
         return;
       }
 
-      // create Enemy with proper arguments
       const e = new Enemy(this.scene, def, edef);
+
+      // Make sure enemy has lastHitFrame
+      e.lastHitFrame = -1;
 
       this.enemies[e.id] = e;
       if (e.mesh) this.enemyMeshes.push(e.mesh);
@@ -68,19 +71,54 @@ export class SceneLoader {
   }
 
   update(deltaMs, nowMs) {
-    Object.values(this.enemies).forEach((en) => { try { en.update(deltaMs, nowMs, this.player); } catch(e){} });
+    // NEW: advance frame counter
+    this.frameCount++;
+
+    Object.values(this.enemies).forEach((en) => {
+      try { en.update(deltaMs, nowMs, this.player); }
+      catch(e){}
+    });
   }
 
+  // UPDATED: duplicate-hit-protected version
   applyDamageToMesh(mesh, damage = 1) {
-    if (!mesh || !mesh.userData) return false;
-    if (mesh.userData.enemyId) {
-      const id = mesh.userData.enemyId;
+    if (!mesh) return false;
+
+    console.log("[SceneLoader] applyDamageToMesh hit:", mesh, mesh.userData);
+
+    let obj = mesh;
+
+    // climb parent chain to find object with enemyId or propId
+    while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId) {
+      obj = obj.parent;
+    }
+
+    if (!obj || !obj.userData) {
+      console.warn("[SceneLoader] Hit object has no enemyId or propId");
+      return false;
+    }
+
+    // Enemy
+    if (obj.userData.enemyId) {
+      const id = obj.userData.enemyId;
       const en = this.enemies[id];
-      if (en) en.takeDamage(damage);
+      if (!en) return false;
+
+      // NEW: prevent multiple hits in same frame → fixes 3HP lost at once
+      if (en.lastHitFrame === this.frameCount) {
+        // already hit this frame — ignore duplicate mesh hits
+        return true;
+      }
+      en.lastHitFrame = this.frameCount;
+
+      en.takeDamage(damage);
       this._checkObjectiveAfterHit();
       return true;
-    } else if (mesh.userData.propId) {
-      const id = mesh.userData.propId;
+    }
+
+    // Prop
+    if (obj.userData.propId) {
+      const id = obj.userData.propId;
       const pr = this.props[id];
       if (pr) {
         const died = pr.takeDamage(damage);
@@ -88,6 +126,7 @@ export class SceneLoader {
       }
       return true;
     }
+
     return false;
   }
 

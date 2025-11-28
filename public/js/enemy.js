@@ -16,6 +16,7 @@ export class Weapon {
     this.ammoReserve = def.ammoReserve || 0;
     this.lastFireTimestamp = -Infinity;
     this.isReloading = false;
+	this.lastHitFrame = -1;
   }
 
   canFire(nowMs) {
@@ -95,7 +96,13 @@ export class Enemy {
     // Optional: rotate to face camera or player; for now rotate Y by facing
     this.mesh.rotation.y = this.facing;
 
-    this.sceneGroup = sceneGroup;
+    // Mark the mesh so raycasts can find which enemy was hit.
+    // Also set a human-friendly name for debug.
+    this.mesh.userData = this.mesh.userData || {};
+    this.mesh.userData.enemyId = this.id;
+    this.mesh.name = `enemy_${this.id}`;
+    
+	this.sceneGroup = sceneGroup;
     this.sceneGroup.add(this.mesh);
 
     // Behavior internals
