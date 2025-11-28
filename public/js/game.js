@@ -19,6 +19,11 @@ function logDebug(msg) {
   }
 }
 
+// prevent duplicate firing from multiple input sources (ms)
+let lastPlayerFireMs = 0;
+const FIRE_COOLDOWN_MS = 150; // 150 ms minimum between fired shots
+
+
 // ---- UI elements assumed in page ----
 const canvas = document.getElementById('canvas');
 const reticleDiv = document.getElementById('reticle');
@@ -192,20 +197,44 @@ function triggerReload() {
 }
 
 function triggerFire() {
+  const now = performance.now();
+  if (now - lastPlayerFireMs < FIRE_COOLDOWN_MS) {
+    // ignore duplicate/triplicate quick events
+    // console.debug("Fire suppressed by cooldown");
+    return;
+  }
+  lastPlayerFireMs = now;
+
   // Immediate raycast from current ret (use instantaneous ret)
   const px = ret.x;
   const py = ret.y;
   mouse.x = (px / cw) * 2 - 1;
   mouse.y = - (py / ch) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
+
+  // IMPORTANT: don't recurse into children — only test top-level meshes.
   const intersectables = sceneLoader.getIntersectableMeshes() || [];
-  const hits = raycaster.intersectObjects(intersectables, true);
+  const hits = raycaster.intersectObjects(intersectables, false);
+
+  // Debug: show hit candidates (helpful while tuning)
+  if (hits.length > 0) {
+    console.log("Ray hits (closest first):", hits.map(h => ({ name: h.object.name, userData: h.object.userData })));
+  }
+
   if (hits.length > 0) {
     const mesh = hits[0].object;
     // Apply damage (1 for now)
     const applied = sceneLoader.applyDamageToMesh(mesh, 1);
+
+    // applyDamageToMesh logs details; but also show a friendly message:
     if (applied) {
-      logDebug(`Hit: ${mesh.userData.enemyId ?? mesh.userData.propId}`);
+      // Try to get a human-friendly id — climb parents if needed
+      let obj = mesh;
+      while (obj && !(obj.userData && (obj.userData.enemyId || obj.userData.propId))) {
+        obj = obj.parent;
+      }
+      const id = obj?.userData?.enemyId ?? obj?.userData?.propId ?? "(unknown)";
+      logDebug(`Hit: ${id}`);
     } else {
       logDebug("Hit object but not damageable");
     }
@@ -214,10 +243,12 @@ function triggerFire() {
   }
 }
 
-// left mouse down firing (canvas click)
-canvas.addEventListener('mousedown', (e) => {
+// left mouse down firing (canvas click) - only attach one handler
+canvas.removeEventListener('mousedown', triggerFireWrapper, false); // safe to call even if not attached
+function triggerFireWrapper(e) {
   if (e.button === 0) triggerFire();
-});
+}
+canvas.addEventListener('mousedown', triggerFireWrapper, false);
 
 // ------------------ Duck & Zoom (unchanged) ------------------
 let ducking = false;
