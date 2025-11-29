@@ -1,6 +1,13 @@
 // js/Scene_W1_1.js
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
+  background: {
+    texture: "assets/backgrounds/warehouse_bg.png",
+    width: 20,     // world units
+    height: 11.25, // 20 / (16/9)
+    position: { x: 0, y: 2.5, z: -12 } // behind everything
+  },
+
   environment: {
     staticObjects: [
       {
@@ -30,7 +37,7 @@ export const Scene_W1_1 = {
       {
         id: "catwalk",
         type: "catwalk",
-        position: { x: 0, y: 2.5, z: -8 },
+        position: { x: 0, y: 2.7, z: -8 },
         size: { x: 4, y: 0.2, z: 1 },
         texture: null,
         hp: 9999,
@@ -41,6 +48,7 @@ export const Scene_W1_1 = {
       }
     ]
   },
+
   enemies: [
     {
       id: "gruntA",
@@ -103,6 +111,7 @@ export const Scene_W1_1 = {
       sprite: "assets/sprites/grunt.png"
     }
   ],
+
   objective: {
     type: "eliminateAllEnemies",
     description: "Eliminate all enemies to complete this scene."
