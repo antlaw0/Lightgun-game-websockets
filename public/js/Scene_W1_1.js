@@ -2,10 +2,10 @@
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
   background: {
-    texture: "assets/backgrounds/warehouse_bg.png",
-    width: 20,     // world units
-    height: 11.25, // 20 / (16/9)
-    position: { x: 0, y: 2.5, z: -12 } // behind everything
+    texture: "assets/backgrounds/black_bg.png",
+    width: 40,     // world units
+    height: 20, // 20 / (16/9)
+    position: { x: 0, y: 0, z: 0 } // behind everything
   },
 
   environment: {
@@ -13,7 +13,7 @@ export const Scene_W1_1 = {
       {
         id: "crateA",
         type: "crate",
-        position: { x: -2, y: 0.5, z: -6 },
+        position: { x: -2, y: 0.5, z: -2 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
@@ -25,7 +25,7 @@ export const Scene_W1_1 = {
       {
         id: "crateB",
         type: "crate",
-        position: { x: 1, y: 0.5, z: -5 },
+        position: { x: 1, y: 0.5, z: -2 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
@@ -54,7 +54,7 @@ export const Scene_W1_1 = {
       id: "gruntA",
       type: "Grunt",
       hp: 3,
-      position: { x: -2, y: 0.9, z: -6 },
+      position: { x: -2, y: 0.9, z: -2 },
       behavior: "coverShooter",
       coverObject: "crateA",
       pattern: "popOutShootThenHide",
@@ -74,7 +74,7 @@ export const Scene_W1_1 = {
       id: "gruntB",
       type: "Grunt",
       hp: 3,
-      position: { x: 1, y: 0.9, z: -5 },
+      position: { x: 1, y: 0.9, z: -2 },
       behavior: "coverShooter",
       coverObject: "crateB",
       pattern: "popOutShootThenHide",

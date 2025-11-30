@@ -23,6 +23,13 @@ function logDebug(msg) {
 let lastPlayerFireMs = 0;
 const FIRE_COOLDOWN_MS = 150; // 150 ms minimum between fired shots
 
+// ------------------ Projectiles ------------------
+const projectiles = [];
+const PROJECTILE_SPEED = 50;  // units per second
+const PROJECTILE_LIFETIME = 2.0; // seconds
+
+const enemyProjectiles = [];
+
 
 // ---- UI elements assumed in page ----
 const canvas = document.getElementById('canvas');
@@ -69,6 +76,57 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
+
+
+// -----------------------------------------------------
+// DEBUG FREE CAMERA (WASD + QE + Arrow keys)
+// -----------------------------------------------------
+const camSpeed = 0.2;
+const camRotSpeed = 0.02;
+
+document.addEventListener('keydown', (e) => {
+    switch (e.key.toLowerCase()) {
+
+        // Movement
+        case 'w': // forward
+            camera.position.z -= camSpeed;
+            break;
+        case 's': // backward
+            camera.position.z += camSpeed;
+            break;
+        case 'a': // left
+            camera.position.x -= camSpeed;
+            break;
+        case 'd': // right
+            camera.position.x += camSpeed;
+            break;
+        case 'q': // down
+            camera.position.y -= camSpeed;
+            break;
+        case 'e': // up
+            camera.position.y += camSpeed;
+            break;
+
+        // Rotation (arrow keys)
+        case 'arrowleft':
+            camera.rotation.y += camRotSpeed;
+            break;
+        case 'arrowright':
+            camera.rotation.y -= camRotSpeed;
+            break;
+        case 'arrowup':
+            camera.rotation.x += camRotSpeed;
+            break;
+        case 'arrowdown':
+            camera.rotation.x -= camRotSpeed;
+            break;
+    }
+});
+
+window.cam = () => {
+  console.log(`Camera position -> x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`);
+};
+
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(cw, ch);
@@ -153,6 +211,47 @@ window.addEventListener("enemyFiredHitPlayer", (e) => {
   const dmg = e.detail.damage || 1;
   if (player && typeof player.takeDamage === "function") player.takeDamage(dmg);
 });
+function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
+  const acc = enemy.accuracy ?? 0.6;
+  const origin = enemy.mesh.position.clone();
+  const trueDir = playerPos.clone().sub(origin).normalize();
+  const maxAngle = (1 - acc) * 0.25;
+  const randomAngle = (Math.random() * 2 - 1) * maxAngle;
+  const axis = new THREE.Vector3(0, 1, 0);
+  const deviatedDir = trueDir.clone().applyAxisAngle(axis, randomAngle).normalize();
+
+  // Create visual mesh like player bullets
+  const geo = new THREE.SphereGeometry(0.05, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // red for enemies
+  const bullet = new THREE.Mesh(geo, mat);
+  bullet.position.copy(origin);
+  bullet.userData = {
+    direction: deviatedDir.clone(),
+    bornTime: performance.now(),
+    damage: 1
+  };
+  scene.add(bullet);
+  enemyProjectiles.push(bullet);
+}
+
+
+function spawnProjectile(origin, direction) {
+  // Simple small sphere as bullet visual
+  const geo = new THREE.SphereGeometry(0.03, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const bullet = new THREE.Mesh(geo, mat);
+
+  bullet.position.copy(origin);
+  bullet.userData = {
+    direction: direction.clone().normalize(),
+    bornTime: performance.now(),
+    damage: 1
+  };
+
+  scene.add(bullet);
+  projectiles.push(bullet);
+}
+
 
 // ------------------ Input: Desktop simulation (mouse/keyboard) ------------------
 (function setupDesktopControls() {
@@ -212,36 +311,86 @@ function triggerFire() {
   mouse.y = - (py / ch) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
+
+const shootOrigin = camera.position.clone();
+const shootDir = raycaster.ray.direction.clone();
+
+// Instead of instant damage, spawn a projectile:
+spawnProjectile(shootOrigin, shootDir);
+logDebug("Projectile fired");
+
   // IMPORTANT: don't recurse into children — only test top-level meshes.
-  const intersectables = sceneLoader.getIntersectableMeshes() || [];
-  const hits = raycaster.intersectObjects(intersectables, false);
+  //const intersectables = sceneLoader.getIntersectableMeshes() || [];
+  //const hits = raycaster.intersectObjects(intersectables, false);
 
   // Debug: show hit candidates (helpful while tuning)
-  if (hits.length > 0) {
-    console.log("Ray hits (closest first):", hits.map(h => ({ name: h.object.name, userData: h.object.userData })));
+  //if (hits.length > 0) {
+//    console.log("Ray hits (closest first):", hits.map(h => ({ name: h.object.name, userData: h.object.userData })));
+//  }
+
+//  if (hits.length > 0) {
+    //const mesh = hits[0].object;
+    // Apply damage (1 for now)
+//    const applied = sceneLoader.applyDamageToMesh(mesh, 1);
+//
+    // applyDamageToMesh logs details; but also show a friendly message:
+    //if (applied) {
+      // Try to get a human-friendly id — climb parents if needed
+//      let obj = mesh;
+      //while (obj && !(obj.userData && (obj.userData.enemyId || obj.userData.propId))) {
+//        obj = obj.parent;
+      //}
+      //const id = obj?.userData?.enemyId ?? obj?.userData?.propId ?? "(unknown)";
+      //logDebug(`Hit: ${id}`);
+    //} else {
+//      logDebug("Hit object but not damageable");
+    //}
+  //} else {
+//    logDebug("Miss!");
+//  }
+}
+
+function updateProjectiles(dt) {
+  const toRemove = [];
+
+  const intersectables = sceneLoader.getIntersectableMeshes() || [];
+  const rayTemp = new THREE.Raycaster();
+
+  for (const bullet of projectiles) {
+    // Move projectile
+    const dir = bullet.userData.direction;
+    bullet.position.addScaledVector(dir, PROJECTILE_SPEED * (dt/1000));
+
+    // Lifetime check
+    const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
+    if (aliveTime > PROJECTILE_LIFETIME) {
+      toRemove.push(bullet);
+      continue;
+    }
+
+    // Collision check: cast a tiny ray from the bullet forward
+    rayTemp.set(bullet.position, dir);
+
+    const hits = rayTemp.intersectObjects(intersectables, false);
+    if (hits.length > 0) {
+      const mesh = hits[0].object;
+
+      // Apply damage
+      sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+      logDebug("Projectile hit target");
+
+      toRemove.push(bullet);
+    }
   }
 
-  if (hits.length > 0) {
-    const mesh = hits[0].object;
-    // Apply damage (1 for now)
-    const applied = sceneLoader.applyDamageToMesh(mesh, 1);
-
-    // applyDamageToMesh logs details; but also show a friendly message:
-    if (applied) {
-      // Try to get a human-friendly id — climb parents if needed
-      let obj = mesh;
-      while (obj && !(obj.userData && (obj.userData.enemyId || obj.userData.propId))) {
-        obj = obj.parent;
-      }
-      const id = obj?.userData?.enemyId ?? obj?.userData?.propId ?? "(unknown)";
-      logDebug(`Hit: ${id}`);
-    } else {
-      logDebug("Hit object but not damageable");
-    }
-  } else {
-    logDebug("Miss!");
+  // Remove dead bullets
+  for (const b of toRemove) {
+    scene.remove(b);
+    const idx = projectiles.indexOf(b);
+    if (idx !== -1) projectiles.splice(idx, 1);
   }
 }
+
 
 // left mouse down firing (canvas click) - only attach one handler
 canvas.removeEventListener('mousedown', triggerFireWrapper, false); // safe to call even if not attached
@@ -249,6 +398,34 @@ function triggerFireWrapper(e) {
   if (e.button === 0) triggerFire();
 }
 canvas.addEventListener('mousedown', triggerFireWrapper, false);
+
+function updateEnemyProjectiles(dt) {
+  const toRemove = [];
+
+  for (const bullet of enemyProjectiles) {
+    const dir = bullet.userData.direction;
+    bullet.position.addScaledVector(dir, PROJECTILE_SPEED * (dt / 1000));
+
+    // Lifetime check
+    if ((performance.now() - bullet.userData.bornTime) / 1000 > PROJECTILE_LIFETIME) {
+      toRemove.push(bullet);
+      continue;
+    }
+
+    // Collision with player (distance-based)
+    if (bullet.position.distanceTo(camera.position) < 0.3) {
+      player.takeDamage(bullet.userData.damage);
+      toRemove.push(bullet);
+    }
+  }
+
+  // Remove expired bullets
+  for (const b of toRemove) {
+    scene.remove(b);
+    const idx = enemyProjectiles.indexOf(b);
+    if (idx !== -1) enemyProjectiles.splice(idx, 1);
+  }
+}
 
 // ------------------ Duck & Zoom (unchanged) ------------------
 let ducking = false;
@@ -278,6 +455,8 @@ function animate(nowMs) {
     reticleDiv.style.top = `${displayedRet.y}px`;
   }
 
+
+
   // Ducking & zoom
   camera.position.y = 1.7 - (ducking ? 0.8 : 0);
   camera.fov = zoomed ? 30 : 60;
@@ -285,6 +464,8 @@ function animate(nowMs) {
 
   // Update scene loader (enemies AI)
   sceneLoader.update(deltaMs, nowMs);
+  updateProjectiles(deltaMs);
+updateEnemyProjectiles(deltaMs);
 
   renderer.render(scene, camera);
 }
