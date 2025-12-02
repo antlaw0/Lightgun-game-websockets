@@ -45,15 +45,100 @@ canvas {
     font-size: 12px;
 }
 
+/* Reticle sizes and styles */
+:root {
+  --reticle-size: 24px;       /* circle diameter */
+  --reticle-border: 2px;      /* circle outline thickness */
+  --cross-color: lime;
+  --cross-thickness: 2px;
+  --cross-length: 50vw;       /* length of lines extending from center */
+}
+
+/* Circle centered on the crosshair point */
 #reticle {
     position: absolute;
-    width: 24px;
-    height: 24px;
-    border: 2px solid lime;
+    width: var(--reticle-size);
+    height: var(--reticle-size);
+    border: var(--reticle-border) solid var(--cross-color);
     border-radius: 50%;
     pointer-events: none;
     transform: translate(-50%, -50%);
+    z-index: 9999;
 }
+
+/* Crosshair lines: both originate exactly at center */
+#reticle::before,
+#reticle::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    pointer-events: none;
+    background: var(--cross-color);
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+}
+
+/* Horizontal line */
+#reticle::before {
+    width: var(--cross-length);
+    height: var(--cross-thickness);
+}
+
+/* Vertical line */
+#reticle::after {
+    height: var(--cross-length);
+    width: var(--cross-thickness);
+}
+
+
+/* ----------------- Health bar (centered bottom, half screen) ----------------- */
+.hud-health {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50vw; /* half width of screen */
+  max-width: 720px;
+  min-width: 280px;
+  height: 36px;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-sizing: border-box;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hud-health .health-track {
+  flex: 1;
+  height: 100%;
+  background: rgba(255,255,255,0.06);
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+.hud-health .health-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 250ms linear, background-color 200ms linear;
+  display: block;
+  border-radius: 12px;
+  box-shadow: inset 0 -4px 10px rgba(0,0,0,0.3);
+  background: linear-gradient(90deg, #4caf50, #3ea34f); /* start green */
+}
+
+.hud-health .health-text {
+  min-width: 98px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  padding-right: 8px;
+}
+
 </style>
 </head>
 <body>
@@ -69,6 +154,39 @@ canvas {
 </div>
 
 <div id="debugConsole" aria-live="polite"></div>
+
+<!-- HUD Overlay -->
+<div class="hud-container" aria-hidden="false">
+  <!-- Health (center bottom) -->
+  <div class="hud-health" role="status" aria-label="Player health" aria-live="polite">
+    <div class="health-track" aria-hidden="true">
+      <div class="health-fill hp-green" style="width:100%"></div>
+    </div>
+    <div class="health-text" aria-hidden="true">100 / 100</div>
+  </div>
+
+  <!-- Weapon info (bottom-right) -->
+  <div class="hud-weapon" role="status" aria-label="Weapon information" aria-live="polite">
+    <div class="weapon-image">
+      <img style="width: 64px; height:  64px;" src="/assets/hud/weapon_placeholder.png" alt="weapon">
+    </div>
+    <div class="weapon-meta">
+      <div class="weapon-name">Starter Pistol</div>
+      <div class="ammo-row">
+        <div class="bullet-icon"><img style="width:  24px; height:  24px;" src="/assets/hud/bullet_placeholder.png" alt="bullets" width="18" height="18"></div>
+        <div class="ammo-count">12 / 12</div>
+        <div style="opacity:0.7">|</div>
+        <div class="total-ammo">48</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen-reader urgent announcements -->
+  <div id="hud-announce" role="alert" aria-live="assertive"></div>
+</div>
+
+
+
 <!-- Three.js global -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
 <script>

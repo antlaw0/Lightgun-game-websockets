@@ -1,0 +1,148 @@
+/* css/hud.css - HUD overlay styles; include after your main stylesheet */
+
+.hud-container {
+  pointer-events: none; /* allow clicks to pass through unless specifically set */
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000; /* ensure it's over the canvas */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #fff;
+}
+
+/* ----------------- Health bar (centered bottom, half screen) ----------------- */
+.hud-health {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50vw; /* half width of screen */
+  max-width: 720px; /* optional cap */
+  min-width: 280px;
+  height: 36px;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-sizing: border-box;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.hud-health .health-track {
+  flex: 1;
+  height: 100%;
+  background: rgba(255,255,255,0.06);
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+.hud-health .health-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 250ms linear, background-color 200ms linear;
+  display: block;
+  border-radius: 12px;
+  box-shadow: inset 0 -4px 10px rgba(0,0,0,0.3);
+}
+
+.hud-health .hp-green { background: linear-gradient(90deg, #4caf50, #3ea34f); }
+.hud-health .hp-yellow { background: linear-gradient(90deg, #ffb300, #ff9f00); }
+.hud-health .hp-red { background: linear-gradient(90deg, #e53935, #d32f2f); }
+
+.hud-health .health-text {
+  min-width: 98px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  padding-right: 8px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ----------------- Weapon info (bottom-right) ----------------- */
+.hud-weapon {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+  background: rgba(0,0,0,0.35);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.hud-weapon .weapon-image {
+  width: 64px;
+  height: 48px;
+  flex: 0 0 64px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-weapon .weapon-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.hud-weapon .weapon-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.hud-weapon .weapon-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.hud-weapon .ammo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hud-weapon .bullet-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-weapon img {
+  pointer-events: none;
+}
+
+/* accessibility live region (visually hidden, but available to screen readers) */
+#hud-announce {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

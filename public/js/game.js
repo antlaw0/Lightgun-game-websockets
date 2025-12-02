@@ -7,6 +7,34 @@
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
 
+
+// js/game.js
+import { Player } from './player.js';
+import { HUD } from './hud.js';
+
+export const player = new Player({
+  maxHp: 100,
+  hp: 100,
+  weapons: [
+    {
+      name: "Starter Pistol",
+      image: "/assets/hud/weapon_placeholder.png",
+      ammoType: "bullets",
+      clipSize: 12,
+      ammoInClip: 12,
+      totalAmmo: 48
+    }
+  ],
+  currentWeaponIndex: 0
+});
+
+HUD.init(player);
+
+// Example usage:
+setTimeout(() => player.takeDamage(30), 2000);
+setTimeout(() => player.useAmmo(1), 2500);
+setTimeout(() => player.reload(), 4000);
+
 // Basic console helper (screen-reader friendly)
 function logDebug(msg) {
   const ts = new Date().toLocaleTimeString();
@@ -123,6 +151,36 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+
+
+// ========================
+// Reload Key (R) With Rules
+// ========================
+let lastReloadPressMs = 0;
+const RELOAD_COOLDOWN_MS = 500; // half-second cooldown
+
+document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'r') return;
+
+    const now = performance.now();
+    if (now - lastReloadPressMs < RELOAD_COOLDOWN_MS) {
+        return; // Prevent reload spam
+    }
+
+    const w = player.currentWeapon;
+    if (!w) return;
+
+    // Only reload if ammoInClip < clipSize
+    if (w.ammoInClip < w.clipSize) {
+        lastReloadPressMs = now;
+        triggerReload();
+    } else {
+        // Optional: debug log to show reload is blocked
+        logDebug("Reload ignored: clip full.");
+    }
+});
+
+
 window.cam = () => {
   console.log(`Camera position -> x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`);
 };
@@ -145,16 +203,6 @@ const LERP_SPEED = 0.9;
 // ------------------ Raycaster ------------------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-
-// ------------------ Player object (minimal) ------------------
-const player = {
-  hp: 10,
-  takeDamage(dmg) {
-    this.hp -= dmg;
-    logDebug(`[Player] took ${dmg} damage. HP=${this.hp}`);
-    if (this.hp <= 0) logDebug("[Player] dead (implement respawn/gameover).");
-  }
-};
 
 // ------------------ Scene / Level management ------------------
 const sceneLoader = new SceneLoader(scene, camera, player);
@@ -274,13 +322,16 @@ function spawnProjectile(origin, direction) {
     lastY = (e.clientY / window.innerHeight) * 2 - 1;
     sendDesktopPayload();
   });
+  
   window.addEventListener("mousedown", (e) => {
     if (e.button === 0) {
-      try { const fireSound = new Audio('sounds/fire.ogg'); fireSound.currentTime = 0; fireSound.play().catch(()=>{}); } catch(e){}
+      
+      // Only send payload, let WS handler call triggerFire
       sendDesktopPayload({ fire: true });
-      triggerFire();
+      // triggerFire();  <-- REMOVE THIS
     }
-  });
+});
+
   window.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
@@ -291,20 +342,30 @@ function spawnProjectile(origin, direction) {
 
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
-  // In future: notify player weapon to reload
-  logDebug("Player reload requested (not implemented)");
+   try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
+    
+   player.reload();
+  logDebug("Player reloaded"); 
 }
-
 function triggerFire() {
-  const now = performance.now();
-  if (now - lastPlayerFireMs < FIRE_COOLDOWN_MS) {
-    // ignore duplicate/triplicate quick events
-    // console.debug("Fire suppressed by cooldown");
-    return;
+      const now = performance.now();
+  if (now - lastPlayerFireMs < FIRE_COOLDOWN_MS) return false; // cooldown
+
+  // Check ammo first
+  if (!player.useAmmo(1)) {
+    logDebug("No ammo! Reload first.");
+    try {
+      const clickSound = new Audio('sounds/click.ogg');
+      clickSound.currentTime = 0;
+      clickSound.play().catch(()=>{});
+    } catch(e){}
+    return false;
   }
+
   lastPlayerFireMs = now;
 
-  // Immediate raycast from current ret (use instantaneous ret)
+
+// Immediate raycast from current ret (use instantaneous ret)
   const px = ret.x;
   const py = ret.y;
   mouse.x = (px / cw) * 2 - 1;
@@ -312,42 +373,31 @@ function triggerFire() {
   raycaster.setFromCamera(mouse, camera);
 
 
-const shootOrigin = camera.position.clone();
+// Offset the projectile origin below camera eye-level:
+const muzzleOffset = new THREE.Vector3(0.0, -0.25, -0.3);
+// y = vertical drop (down)   (e.g. -0.25m)
+// z = slight forward offset toward screen (-0.3)
+// x = left/right (0 for centered; try +0.15 for right-handed gun)
+
+const shootOrigin = camera.localToWorld(muzzleOffset.clone());
+
 const shootDir = raycaster.ray.direction.clone();
 
 // Instead of instant damage, spawn a projectile:
 spawnProjectile(shootOrigin, shootDir);
+
+  // Play fire sound
+  try {
+    const fireSound = new Audio('sounds/fire.ogg');
+    fireSound.currentTime = 0;
+    fireSound.play().catch(()=>{});
+  } catch(e){}
+
+
+    
 logDebug("Projectile fired");
 
-  // IMPORTANT: don't recurse into children — only test top-level meshes.
-  //const intersectables = sceneLoader.getIntersectableMeshes() || [];
-  //const hits = raycaster.intersectObjects(intersectables, false);
-
-  // Debug: show hit candidates (helpful while tuning)
-  //if (hits.length > 0) {
-//    console.log("Ray hits (closest first):", hits.map(h => ({ name: h.object.name, userData: h.object.userData })));
-//  }
-
-//  if (hits.length > 0) {
-    //const mesh = hits[0].object;
-    // Apply damage (1 for now)
-//    const applied = sceneLoader.applyDamageToMesh(mesh, 1);
-//
-    // applyDamageToMesh logs details; but also show a friendly message:
-    //if (applied) {
-      // Try to get a human-friendly id — climb parents if needed
-//      let obj = mesh;
-      //while (obj && !(obj.userData && (obj.userData.enemyId || obj.userData.propId))) {
-//        obj = obj.parent;
-      //}
-      //const id = obj?.userData?.enemyId ?? obj?.userData?.propId ?? "(unknown)";
-      //logDebug(`Hit: ${id}`);
-    //} else {
-//      logDebug("Hit object but not damageable");
-    //}
-  //} else {
-//    logDebug("Miss!");
-//  }
+      
 }
 
 function updateProjectiles(dt) {
