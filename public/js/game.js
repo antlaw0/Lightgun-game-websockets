@@ -19,6 +19,8 @@ export const player = new Player({
     {
       name: "Starter Pistol",
       image: "/assets/hud/weapon_placeholder.png",
+	  fireMode:  "auto",
+	    rateOfFireMs: 120,
       ammoType: "bullets",
       clipSize: 12,
       ammoInClip: 12,
@@ -50,7 +52,7 @@ function logDebug(msg) {
 // prevent duplicate firing from multiple input sources (ms)
 let lastPlayerFireMs = 0;
 const FIRE_COOLDOWN_MS = 150; // 150 ms minimum between fired shots
-
+let isFiring = false;
 // ------------------ Projectiles ------------------
 const projectiles = [];
 const PROJECTILE_SPEED = 50;  // units per second
@@ -69,6 +71,27 @@ const debugConsole = document.getElementById('debugConsole');
 
 let cw = canvas.width = window.innerWidth;
 let ch = canvas.height = window.innerHeight;
+
+
+function sendDesktopPayload(overrides = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+        x: (ret.x / cw) * 2 - 1,
+        y: (ret.y / ch) * 2 - 1,
+        alpha: 0,
+        beta: 0,
+        gamma: 0,
+        fire: isFiring,
+        reload: false,
+        calibrate: false,
+        ...overrides
+    };
+
+    ws.send(JSON.stringify({ type: "controller", payload }));
+}
+
+
 function resize() { cw = canvas.width = window.innerWidth; ch = canvas.height = window.innerHeight; }
 window.addEventListener('resize', resize);
 
@@ -89,7 +112,8 @@ ws.onmessage = (ev) => {
       ret.y = ((p.y+1)/2)*ch;
       if (retXY) retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
       if (abc) abc.textContent = `${p.alpha?.toFixed(1) ?? ''}, ${p.beta?.toFixed(1) ?? ''}, ${p.gamma?.toFixed(1) ?? ''}`;
-      if (p.fire) triggerFire();
+      isFiring = !!p.fire; // just set firing state
+
       if (p.reload) triggerReload();
     }
   } catch (e) {
@@ -111,6 +135,28 @@ camera.lookAt(0, 1.7, 0);
 // -----------------------------------------------------
 const camSpeed = 0.2;
 const camRotSpeed = 0.02;
+
+// =========================
+// Mouse Auto-Fire
+// =========================
+window.addEventListener("mousedown", (e) => {
+    if (e.button === 0) {
+        isFiring = true;
+        sendDesktopPayload({ fire: true });
+    }
+});
+
+window.addEventListener("mouseup", (e) => {
+    if (e.button === 0) {
+        isFiring = false;
+        sendDesktopPayload({ fire: false });
+    }
+});
+
+window.addEventListener("mouseleave", () => {
+    isFiring = false;
+    sendDesktopPayload({ fire: false });
+});
 
 document.addEventListener('keydown', (e) => {
     switch (e.key.toLowerCase()) {
@@ -303,42 +349,74 @@ function spawnProjectile(origin, direction) {
 
 // ------------------ Input: Desktop simulation (mouse/keyboard) ------------------
 (function setupDesktopControls() {
-  logDebug("Desktop control simulation ON");
-  let lastX = 0;
-  let lastY = 0;
-  function sendDesktopPayload(overrides = {}) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const payload = {
-      x: lastX,
-      y: lastY,
-      alpha: 0, beta: 0, gamma: 0,
-      fire: false, reload: false, calibrate: false,
-      ...overrides
-    };
-    ws.send(JSON.stringify({ type: "controller", payload }));
-  }
-  window.addEventListener("mousemove", (e) => {
-    lastX = (e.clientX / window.innerWidth) * 2 - 1;
-    lastY = (e.clientY / window.innerHeight) * 2 - 1;
-    sendDesktopPayload();
-  });
-  
-  window.addEventListener("mousedown", (e) => {
-    if (e.button === 0) {
-      
-      // Only send payload, let WS handler call triggerFire
-      sendDesktopPayload({ fire: true });
-      // triggerFire();  <-- REMOVE THIS
-    }
-});
+    logDebug("Desktop control simulation ON");
 
-  window.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
-    sendDesktopPayload({ reload: true });
-    triggerReload();
-  });
-})();
+    let lastX = 0;
+    let lastY = 0;
+
+    // Desktop → WS payload sender
+    function sendDesktopPayload(overrides = {}) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const payload = {
+            x: lastX,
+            y: lastY,
+            alpha: 0,
+            beta: 0,
+            gamma: 0,
+            fire: isFiring,
+            reload: false,
+            calibrate: false,
+            ...overrides
+        };
+
+        ws.send(JSON.stringify({ type: "controller", payload }));
+    }   // <--- CORRECT CLOSING BRACE
+
+
+    // ------------------------------
+    // MOUSE MOVEMENT
+    // ------------------------------
+    window.addEventListener("mousemove", (e) => {
+        lastX = (e.clientX / window.innerWidth) * 2 - 1;
+        lastY = (e.clientY / window.innerHeight) * 2 - 1;
+        sendDesktopPayload();   // keep fire state
+    });
+
+
+    // ------------------------------
+    // LEFT CLICK → FIRE
+    // ------------------------------
+    window.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isFiring = true;
+        sendDesktopPayload({ fire: true });
+    });
+
+    window.addEventListener("mouseup", (e) => {
+        if (e.button !== 0) return;
+        isFiring = false;
+        sendDesktopPayload({ fire: false });
+    });
+
+
+    // ------------------------------
+    // RIGHT CLICK = RELOAD
+    // ------------------------------
+    window.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+
+        try {
+            const reloadSound = new Audio("sounds/reload.ogg");
+            reloadSound.currentTime = 0;
+            reloadSound.play().catch(() => {});
+        } catch (_) {}
+
+        sendDesktopPayload({ reload: true });
+        triggerReload();
+    });
+
+})();   // <--- CORRECT CLOSING OF IIFE
 
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
@@ -347,57 +425,61 @@ function triggerReload() {
    player.reload();
   logDebug("Player reloaded"); 
 }
+
+
+function updateAutoFire(nowMs) {
+    const w = player.currentWeapon;
+    if (!w) return;
+
+    // Auto mode: holds to fire
+    if (w.fireMode === "auto") {
+        if (!isFiring) return;
+
+        const elapsed = nowMs - lastPlayerFireMs;
+        if (elapsed >= w.rateOfFireMs) {
+            triggerFire();
+            lastPlayerFireMs = nowMs;
+        }
+    }
+}
+
 function triggerFire() {
-      const now = performance.now();
-  if (now - lastPlayerFireMs < FIRE_COOLDOWN_MS) return false; // cooldown
+    const w = player.currentWeapon;
+    if (!w) return false;
 
-  // Check ammo first
-  if (!player.useAmmo(1)) {
-    logDebug("No ammo! Reload first.");
+    // Check ammo first
+    if (!player.useAmmo(1)) {
+        logDebug("No ammo! Reload first.");
+        try {
+            const clickSound = new Audio('sounds/click.ogg');
+            clickSound.currentTime = 0;
+            clickSound.play().catch(()=>{});
+        } catch(e){}
+        return false;
+    }
+
+    lastPlayerFireMs = performance.now(); // record fire time
+
+    // --- Raycast and spawn projectile ---
+    const px = ret.x;
+    const py = ret.y;
+    mouse.x = (px / cw) * 2 - 1;
+    mouse.y = - (py / ch) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const muzzleOffset = new THREE.Vector3(0.0, -0.25, -0.3);
+    const shootOrigin = camera.localToWorld(muzzleOffset.clone());
+    const shootDir = raycaster.ray.direction.clone();
+
+    spawnProjectile(shootOrigin, shootDir);
+
     try {
-      const clickSound = new Audio('sounds/click.ogg');
-      clickSound.currentTime = 0;
-      clickSound.play().catch(()=>{});
+        const fireSound = new Audio('sounds/fire.ogg');
+        fireSound.currentTime = 0;
+        fireSound.play().catch(()=>{});
     } catch(e){}
-    return false;
-  }
 
-  lastPlayerFireMs = now;
-
-
-// Immediate raycast from current ret (use instantaneous ret)
-  const px = ret.x;
-  const py = ret.y;
-  mouse.x = (px / cw) * 2 - 1;
-  mouse.y = - (py / ch) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-
-
-// Offset the projectile origin below camera eye-level:
-const muzzleOffset = new THREE.Vector3(0.0, -0.25, -0.3);
-// y = vertical drop (down)   (e.g. -0.25m)
-// z = slight forward offset toward screen (-0.3)
-// x = left/right (0 for centered; try +0.15 for right-handed gun)
-
-const shootOrigin = camera.localToWorld(muzzleOffset.clone());
-
-const shootDir = raycaster.ray.direction.clone();
-
-// Instead of instant damage, spawn a projectile:
-spawnProjectile(shootOrigin, shootDir);
-
-  // Play fire sound
-  try {
-    const fireSound = new Audio('sounds/fire.ogg');
-    fireSound.currentTime = 0;
-    fireSound.play().catch(()=>{});
-  } catch(e){}
-
-
-    
-logDebug("Projectile fired");
-
-      
+    logDebug("Projectile fired");
 }
 
 function updateProjectiles(dt) {
@@ -497,6 +579,11 @@ function animate(nowMs) {
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
 
+  
+  
+  updateAutoFire(nowMs);
+
+  
   // Update displayed reticle
   displayedRet.x += (ret.x - displayedRet.x) * LERP;
   displayedRet.y += (ret.y - displayedRet.y) * LERP;
