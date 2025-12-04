@@ -330,22 +330,40 @@ function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
 
 
 function spawnProjectile(origin, direction) {
-  // Simple small sphere as bullet visual
-  const geo = new THREE.SphereGeometry(0.03, 8, 8);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-  const bullet = new THREE.Mesh(geo, mat);
+    // Capsule geometry: radius, length, capSegments, radialSegments
+    const geo = new THREE.CapsuleGeometry(0.02, 0.12, 4, 8); 
+    geo.rotateX(Math.PI / 2); // point along +Z axis (matches forward direction)
 
-  bullet.position.copy(origin);
-  bullet.userData = {
-    direction: direction.clone().normalize(),
-    bornTime: performance.now(),
-    damage: 1
-  };
+    // Material
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
 
-  scene.add(bullet);
-  projectiles.push(bullet);
+    const bullet = new THREE.Mesh(geo, mat);
+    bullet.position.copy(origin);
+
+    // Orient the capsule to the direction of travel
+    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
+
+    bullet.userData = {
+        direction: direction.clone().normalize(),
+        bornTime: performance.now(),
+        damage: 1,
+        trail: null // placeholder for motion trail
+    };
+
+    // Optional: create a simple motion trail
+    const trailLength = 0.1; // length of line behind bullet
+    const trailGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -trailLength)
+    ]);
+    const trailMat = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.7 });
+    const trail = new THREE.Line(trailGeo, trailMat);
+    bullet.add(trail);
+    bullet.userData.trail = trail;
+
+    scene.add(bullet);
+    projectiles.push(bullet);
 }
-
 
 // ------------------ Input: Desktop simulation (mouse/keyboard) ------------------
 (function setupDesktopControls() {
@@ -460,69 +478,78 @@ function triggerFire() {
 
     lastPlayerFireMs = performance.now(); // record fire time
 
-    // --- Raycast and spawn projectile ---
-    const px = ret.x;
-    const py = ret.y;
-    mouse.x = (px / cw) * 2 - 1;
-    mouse.y = - (py / ch) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
+    // --- Compute projectile origin and direction ---
+    // World position of the reticle (far out along camera ray)
+    const retNDC = new THREE.Vector2(
+        (ret.x / cw) * 2 - 1,
+        - (ret.y / ch) * 2 + 1
+    );
+    raycaster.setFromCamera(retNDC, camera);
+    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
 
-    const muzzleOffset = new THREE.Vector3(0.0, -0.25, -0.3);
-    const shootOrigin = camera.localToWorld(muzzleOffset.clone());
-    const shootDir = raycaster.ray.direction.clone();
+    // World origin at bottom center of the screen, slightly in front of camera
+    const bottomNDC = new THREE.Vector2(0, -1);
+    raycaster.setFromCamera(bottomNDC, camera);
+    const originDistance = 1; // units in front of camera
+    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(originDistance));
 
+    // Direction from bottom to reticle
+    const shootDir = retWorld.clone().sub(shootOrigin).normalize();
+
+    // Spawn projectile
     spawnProjectile(shootOrigin, shootDir);
 
+    // Play firing sound
     try {
         const fireSound = new Audio('sounds/fire.ogg');
         fireSound.currentTime = 0;
         fireSound.play().catch(()=>{});
     } catch(e){}
 
-    logDebug("Projectile fired");
+    logDebug("Projectile fired from bottom to reticle");
 }
 
 function updateProjectiles(dt) {
-  const toRemove = [];
+    const toRemove = [];
+    const intersectables = sceneLoader.getIntersectableMeshes() || [];
+    const rayTemp = new THREE.Raycaster();
 
-  const intersectables = sceneLoader.getIntersectableMeshes() || [];
-  const rayTemp = new THREE.Raycaster();
+    for (const bullet of projectiles) {
+        const dir = bullet.userData.direction;
+        const moveDist = PROJECTILE_SPEED * (dt / 1000);
 
-  for (const bullet of projectiles) {
-    // Move projectile
-    const dir = bullet.userData.direction;
-    bullet.position.addScaledVector(dir, PROJECTILE_SPEED * (dt/1000));
+        // Move the bullet
+        bullet.position.addScaledVector(dir, moveDist);
 
-    // Lifetime check
-    const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
-    if (aliveTime > PROJECTILE_LIFETIME) {
-      toRemove.push(bullet);
-      continue;
+        // Move trail slightly behind bullet
+        if (bullet.userData.trail) {
+            bullet.userData.trail.position.set(0, 0, 0); // local position; stays attached
+        }
+
+        // Lifetime check
+        const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
+        if (aliveTime > PROJECTILE_LIFETIME) {
+            toRemove.push(bullet);
+            continue;
+        }
+
+        // Collision detection
+        rayTemp.set(bullet.position, dir);
+        const hits = rayTemp.intersectObjects(intersectables, false);
+        if (hits.length > 0) {
+            const mesh = hits[0].object;
+            sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+            logDebug("Projectile hit target");
+            toRemove.push(bullet);
+        }
     }
 
-    // Collision check: cast a tiny ray from the bullet forward
-    rayTemp.set(bullet.position, dir);
-
-    const hits = rayTemp.intersectObjects(intersectables, false);
-    if (hits.length > 0) {
-      const mesh = hits[0].object;
-
-      // Apply damage
-      sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
-      logDebug("Projectile hit target");
-
-      toRemove.push(bullet);
+    for (const b of toRemove) {
+        scene.remove(b);
+        const idx = projectiles.indexOf(b);
+        if (idx !== -1) projectiles.splice(idx, 1);
     }
-  }
-
-  // Remove dead bullets
-  for (const b of toRemove) {
-    scene.remove(b);
-    const idx = projectiles.indexOf(b);
-    if (idx !== -1) projectiles.splice(idx, 1);
-  }
 }
-
 
 // left mouse down firing (canvas click) - only attach one handler
 canvas.removeEventListener('mousedown', triggerFireWrapper, false); // safe to call even if not attached
@@ -613,3 +640,4 @@ loadLevel(Level_Warehouse);
 
 // Expose nextScene globally so UI or user can advance after onSceneComplete
 window.nextScene = nextScene;
+window.player = player;
