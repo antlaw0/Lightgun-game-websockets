@@ -1,6 +1,4 @@
-//import * as THREE from "three";
 import { ENEMY_DEFS } from "./scenes.js";
-
 //
 // Weapon class
 //
@@ -94,26 +92,84 @@ export class Enemy {
 
     this.facing = instanceConfig.facing || 0;
     this.coverIndex = instanceConfig.coverIndex ?? null;
-    this.behavior = instanceConfig.behavior || { pattern: "standInOpen", params: {} };
+
+    // Behavior: default to standing, or use provided behavior
+    this.behavior = instanceConfig.behavior || (def.behavior ? def.behavior : { pattern: "standInOpen", params: {} });
+
+    // Allow explicit coverType via instanceConfig or behavior.params
+    this.coverType = instanceConfig.coverType || (this.behavior.params && this.behavior.params.coverType) || def.coverType || null;
+    // fallback inference: if coverIndex present assume low cover
+    if (!this.coverType && this.coverIndex !== null) this.coverType = "low";
 
     //
-    // Mesh
+    // Mesh (single-sprite)
     //
     const plane = new THREE.PlaneGeometry(1.2, 1.8);
     const tex = new THREE.TextureLoader().load(def.sprite);
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
     this.mesh = new THREE.Mesh(plane, mat);
-    this.mesh.position.copy(this.position);
-    this.mesh.rotation.y = this.facing;
 
+    // place mesh at given position
+    this.mesh.position.copy(this.position);
+    this.basePosition = this.mesh.position.clone(); // used for lerping back
+    this.baseRotationY = this.facing;
+
+    // preserve initial scale
+    this.baseScale = this.mesh.scale.clone();
+
+    this.mesh.rotation.y = this.baseRotationY;
     this.mesh.userData.enemyId = this.id;
     this.mesh.name = `enemy_${this.id}`;
 
     this.sceneGroup = sceneGroup;
     this.sceneGroup.add(this.mesh);
 
+    // animation/pop state variables
     this._lastUpdateMs = performance.now();
     this._isDead = false;
+
+    // Pop/out timing configuration with jitter
+    const p = this.behavior.params || {};
+    this._coverParams = {
+      hideDurationMs: (p.hideDurationMs ?? 1200),
+      popDurationMs: (p.popDurationMs ?? 800),
+      firingDurationMs: (p.firingDurationMs ?? 900),
+      minIntervalMs: (p.minIntervalMs ?? 700),
+      maxIntervalMs: (p.maxIntervalMs ?? 2200),
+      popTransitionMs: (p.popTransitionMs ?? 180), // lerp time when popping out
+      retreatTransitionMs: (p.retreatTransitionMs ?? 220), // lerp time when retreating
+      leanOffset: (p.leanOffset ?? 0.28),
+      crouchOffsetY: (p.crouchOffsetY ?? -0.55),
+      crouchScale: (p.crouchScale ?? 0.92),
+      leanRotationRad: (p.leanRotationRad ?? 0.20),
+      fireIntervalMs: (p.fireIntervalMs ?? 400)
+    };
+
+    // initialize pop/cover state - will randomize first hide
+    this._popState = {
+      phase: "hidden", // hidden | popping | firing | retreating
+      phaseSince: performance.now(),
+      // next interval chosen randomly to stagger many enemies
+      nextHiddenDuration: this._randInterval(this._coverParams.hideDurationMs, this._coverParams.maxIntervalMs)
+    };
+
+    // offsets used for animation targets (computed per enemy; lean side chosen randomly)
+    this._leanSide = (Math.random() < 0.5) ? -1 : 1; // -1 = left, 1 = right
+    this._targetOffset = new THREE.Vector3(0, 0, 0);
+    this._currentOffset = new THREE.Vector3(0, 0, 0);
+
+    // For firing cadence while popped
+    this._lastFireWhilePopped = 0;
+
+    // Safety: clamp mesh visible initially depending on state
+    if (this._popState.phase === "hidden") {
+      this.mesh.visible = (this.behavior.pattern !== "popOutFromCover"); // visible if not cover pattern
+    }
+  }
+
+  _randInterval(min, max) {
+    // return a random ms interval between min and max
+    return min + Math.floor(Math.random() * Math.max(0, (max - min)));
   }
 
   _playRandom(arr) {
@@ -157,6 +213,9 @@ export class Enemy {
     } else {
       this._updateStand(deltaMs, nowMs, p);
     }
+
+    // always apply smoothing interpolation to the mesh transform toward target offset/rotation/scale
+    this._applyAnimationSmoothing(deltaMs);
   }
 
   //
@@ -181,7 +240,7 @@ export class Enemy {
         Math.random() - 0.5,
         Math.random() - 0.5
       ).normalize();
-      const angle = Math.random() * maxAngle;
+      const angle = (Math.random() - 0.5) * maxAngle;
       deviatedDir.applyAxisAngle(randAxis, angle).normalize();
     }
 
@@ -236,32 +295,162 @@ export class Enemy {
   }
 
   _updatePopOut(deltaMs, nowMs, params) {
-    if (!this._popState) {
-      this._popState = { phase: "hidden", phaseSince: nowMs };
-      this.mesh.visible = false;
+    // Ensure _coverParams reflect any runtime overrides
+    const cp = this._coverParams;
+
+    // Evaluate the pop state machine
+    const s = this._popState;
+    const elapsed = nowMs - s.phaseSince;
+
+    if (s.phase === "hidden") {
+      // hidden: enemy should be mostly behind cover; we randomize duration on entry
+      if (!s.nextHiddenDuration) {
+        // initial randomization
+        s.nextHiddenDuration = this._randInterval(cp.hideDurationMs, cp.maxIntervalMs);
+      }
+      // Make sure mesh is set to "behind cover" pose
+      this._setTargetForCoverHidden();
+
+      if (elapsed >= s.nextHiddenDuration) {
+        // begin popping
+        s.phase = "popping";
+        s.phaseSince = nowMs;
+        // decide popDuration (how long transition to fully popped takes)
+        s.transitionMs = cp.popTransitionMs;
+        this.mesh.visible = true; // make visible and transition out
+        // reset firing cadence tracker
+        this._lastFireWhilePopped = 0;
+      }
+    } else if (s.phase === "popping") {
+      // transition toward popped pose
+      this._setTargetForCoverPopped();
+
+      if (elapsed >= (s.transitionMs || cp.popTransitionMs)) {
+        s.phase = "firing";
+        s.phaseSince = nowMs;
+        // how long will we stay firing before retreat
+        s.firingDuration = this._randInterval(cp.firingDurationMs * 0.6, cp.firingDurationMs * 1.4);
+      }
+    } else if (s.phase === "firing") {
+      // hold popped pose and periodically fire
+      this._setTargetForCoverPopped();
+      if (nowMs - this._lastFireWhilePopped > cp.fireIntervalMs) {
+        this._attemptFire(nowMs);
+        this._lastFireWhilePopped = nowMs;
+      }
+
+      if (elapsed >= (s.firingDuration || cp.firingDurationMs)) {
+        // start retreating
+        s.phase = "retreating";
+        s.phaseSince = nowMs;
+        s.transitionMs = cp.retreatTransitionMs;
+      }
+    } else if (s.phase === "retreating") {
+      // move back into hidden pose smoothly
+      this._setTargetForCoverHidden();
+
+      if (elapsed >= (s.transitionMs || cp.retreatTransitionMs)) {
+        // go hidden; pick next random wait
+        s.phase = "hidden";
+        s.phaseSince = nowMs;
+        s.nextHiddenDuration = this._randInterval(cp.hideDurationMs, cp.maxIntervalMs);
+        // optionally hide mesh if desired - keep visible but behind cover pose is enough
+        // this.mesh.visible = false; // commented out so the sprite stays visible but tucked behind cover
+      }
+    }
+  }
+
+  // compute pose target when fully popped (shooting)
+  _setTargetForCoverPopped() {
+    const cp = this._coverParams;
+    if (this.coverType === "low") {
+      // stand up slightly above basePosition
+      this._targetOffset.set(0, Math.abs(cp.crouchOffsetY) * -1 * 0.0, 0); // no big y move for popped (player sees full torso)
+      // keep scale normal
+      this._targetScale = this.baseScale.clone();
+      this._targetRotationY = this.baseRotationY;
+      this._targetPosition = this.basePosition.clone();
+      // For aesthetics, nudge slightly forward so they look like leaning out
+      this._targetPosition.x = this.basePosition.x;
+      this._targetPosition.y = this.basePosition.y;
+    } else if (this.coverType === "full") {
+      // Slight lean out left or right + rotate head/torso slightly
+      const lean = this._leanSide * this._coverParams.leanOffset;
+      this._targetOffset.set(lean, 0.02, 0);
+      // rotate on Y a little to simulate turning out from cover
+      this._targetRotationY = this.baseRotationY + (this._leanSide * -this._coverParams.leanRotationRad);
+      this._targetScale = this.baseScale.clone();
+      this._targetPosition = this.basePosition.clone();
+      this._targetPosition.x = this.basePosition.x + lean;
+    } else {
+      // default: simple pop up
+      this._targetOffset.set(0, 0.06, 0);
+      this._targetRotationY = this.baseRotationY;
+      this._targetScale = this.baseScale.clone();
+      this._targetPosition = this.basePosition.clone();
+    }
+  }
+
+  // compute pose target when hidden (behind cover)
+  _setTargetForCoverHidden() {
+    const cp = this._coverParams;
+    if (this.coverType === "low") {
+      // crouch: lower and slightly shrink
+      this._targetOffset.set(0, cp.crouchOffsetY, 0);
+      this._targetScale = new THREE.Vector3(this.baseScale.x * cp.crouchScale, this.baseScale.y * cp.crouchScale, this.baseScale.z * cp.crouchScale);
+      this._targetRotationY = this.baseRotationY;
+      this._targetPosition = this.basePosition.clone();
+    } else if (this.coverType === "full") {
+      // tuck back behind full cover: offset laterally away from pop side and keep mostly hidden
+      const tuck = -this._leanSide * Math.abs(cp.leanOffset);
+      this._targetOffset.set(tuck, -0.03, 0);
+      this._targetScale = new THREE.Vector3(this.baseScale.x * 0.98, this.baseScale.y * 0.98, this.baseScale.z * 0.98);
+      this._targetRotationY = this.baseRotationY + (this._leanSide * cp.leanRotationRad * 0.5);
+      this._targetPosition = this.basePosition.clone();
+      this._targetPosition.x = this.basePosition.x + tuck;
+    } else {
+      // default hidden slightly crouched
+      this._targetOffset.set(0, cp.crouchOffsetY * 0.6, 0);
+      this._targetScale = new THREE.Vector3(this.baseScale.x * 0.96, this.baseScale.y * 0.96, this.baseScale.z * 0.96);
+      this._targetRotationY = this.baseRotationY;
+      this._targetPosition = this.basePosition.clone();
+    }
+  }
+
+  // Smoothly lerp actual mesh transform toward target transforms each frame
+  _applyAnimationSmoothing(deltaMs) {
+    // If targets not set yet, ensure defaults
+    if (!this._targetPosition) {
+      this._targetPosition = this.basePosition.clone();
+    }
+    if (!this._targetRotationY && this._targetRotationY !== 0) {
+      this._targetRotationY = this.baseRotationY;
+    }
+    if (!this._targetScale) {
+      this._targetScale = this.baseScale.clone();
+    }
+    if (!this._targetOffset) {
+      this._targetOffset = new THREE.Vector3(0, 0, 0);
     }
 
-    const phase = this._popState.phase;
-    const elapsed = nowMs - this._popState.phaseSince;
+    // smoothing factor scaled by deltaMs to look consistent across framerates
+    const t = Math.min(1, deltaMs / 120); // adapt speed; tweak as needed
 
-    if (phase === "hidden") {
-      if (elapsed >= (params.hideDurationMs || 1200)) {
-        this._popState.phase = "popping";
-        this._popState.phaseSince = nowMs;
-        this.mesh.visible = true;
-      }
-    } else if (phase === "popping") {
-      this._popState.phase = "firing";
-      this._popState.phaseSince = nowMs;
-      this._attemptFire(nowMs);
-    } else if (phase === "firing") {
-      this._attemptFire(nowMs);
-      if (elapsed >= (params.popDurationMs || 800)) {
-        this._popState.phase = "hidden";
-        this._popState.phaseSince = nowMs;
-        this.mesh.visible = false;
-      }
-    }
+    // position: basePosition + offset
+    const desiredPos = this._targetPosition.clone().add(this._targetOffset);
+    this.mesh.position.lerp(desiredPos, t);
+
+    // rotation Y lerp (use simple interpolation)
+    const currentY = this.mesh.rotation.y;
+    const targetY = this._targetRotationY;
+    // normalize angles
+    let delta = targetY - currentY;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    this.mesh.rotation.y = currentY + delta * t;
+
+    // scale lerp
+    this.mesh.scale.lerp(this._targetScale, t);
   }
 
   dispose() {

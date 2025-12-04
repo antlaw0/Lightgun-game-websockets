@@ -18,6 +18,7 @@ export const Scene_W1_1 = {
         texture: "assets/props/crate.png",
         hp: 8,
         maxHp: 8,
+		coverType: "low",
         hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
@@ -30,6 +31,7 @@ export const Scene_W1_1 = {
         texture: "assets/props/crate.png",
         hp: 8,
         maxHp: 8,
+		coverType: "low",
         hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
@@ -55,7 +57,7 @@ export const Scene_W1_1 = {
       type: "Grunt",
       hp: 3,
       position: { x: -2, y: 0.9, z: -2 },
-      behavior: "coverShooter",
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateA",
       pattern: "popOutShootThenHide",
       weapon: {
@@ -75,7 +77,8 @@ export const Scene_W1_1 = {
       type: "Grunt",
       hp: 3,
       position: { x: 1, y: 0.9, z: -2 },
-      behavior: "coverShooter",
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
+      
       coverObject: "crateB",
       pattern: "popOutShootThenHide",
       weapon: {

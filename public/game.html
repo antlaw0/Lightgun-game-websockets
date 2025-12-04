@@ -139,6 +139,25 @@ canvas {
   padding-right: 8px;
 }
 
+
+
+.hud-weapon {
+  position: fixed;
+  left: 8px;          /* distance from left screen edge */
+  bottom: 28px;       /* aligns with health bar bottom */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* align text left */
+  gap: 4px;
+  font-size: 14px;
+  color: white;
+  z-index: 1000;      /* make sure it's above canvas */
+}
+.hud-weapon .weapon-image img {
+  width: 64px;
+  height: 64px;
+}
+
 </style>
 </head>
 <body>
@@ -166,20 +185,31 @@ canvas {
   </div>
 
   <!-- Weapon info (bottom-right) -->
-  <div class="hud-weapon" role="status" aria-label="Weapon information" aria-live="polite">
-    <div class="weapon-image">
-      <img style="width: 64px; height:  64px;" src="/assets/hud/weapon_placeholder.png" alt="weapon">
-    </div>
-    <div class="weapon-meta">
-      <div class="weapon-name">Starter Pistol</div>
-      <div class="ammo-row">
-        <div class="bullet-icon"><img style="width:  24px; height:  24px;" src="/assets/hud/bullet_placeholder.png" alt="bullets" width="18" height="18"></div>
-        <div class="ammo-count">12 / 12</div>
-        <div style="opacity:0.7">|</div>
-        <div class="total-ammo">48</div>
-      </div>
+<div class="hud-weapon" role="status" aria-label="Weapon information" aria-live="polite" >
+
+  <!-- Weapon Image -->
+  <div class="weapon-image">
+    <img style="width: 64px; height: 64px;" src="/assets/hud/weapon_placeholder.png" alt="weapon">
+  </div>
+
+  <!-- Weapon Name -->
+  <div class="weapon-name" style="font-size: 14px; color: white; text-align: center;">
+    Starter Pistol
+  </div>
+
+  <!-- Ammo Info -->
+  <div class="weapon-meta" style="display: flex; flex-direction: row; align-items: center; gap: 4px; font-size: 14px; color: white;">
+    <div class="ammo-row" style="display: flex; align-items: center; gap: 2px;">
+      <span class="bullet-icon">
+        <img style="width: 24px; height: 24px;" src="/assets/hud/bullet_placeholder.png" alt="bullets">
+      </span>
+      <span class="ammo-count">12 / 12</span>
+      <span style="opacity:0.7;">|</span>
+      <span class="total-ammo">48</span>
     </div>
   </div>
+
+</div>
 
   <!-- Screen-reader urgent announcements -->
   <div id="hud-announce" role="alert" aria-live="assertive"></div>
