@@ -3,6 +3,8 @@
 // <script type="module" src="js/game.js"></script>
 
 //import * as THREE from './lib/three.module.js';
+import { killAllEnemies } from "./enemy.js";
+killAllEnemies();
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
@@ -328,6 +330,11 @@ function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
   enemyProjectiles.push(bullet);
 }
 
+window.addEventListener("keydown", (e) => {
+    if (e.code === "KeyK") { // press K to kill all enemies
+        killAllEnemies();
+    }
+});
 
 function spawnProjectile(origin, direction) {
     // Capsule geometry: radius, length, capSegments, radialSegments

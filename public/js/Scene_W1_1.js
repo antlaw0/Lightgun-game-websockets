@@ -3,32 +3,33 @@ export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
   background: {
     texture: "assets/backgrounds/warehouse_bg.png",
-    width: 40,     // world units
-    height: 20, // 20 / (16/9)
+    width: 0,     // world units
+    height: 0, // 20 / (16/9)
     position: { x: 0, y: 0, z: 0 } // behind everything
   },
 lights: [
   {
     type: "ambient",
     color: 0xffffff,
-    intensity: 0.5
+    intensity: 1
   },
   {
     type: "directional",
     color: 0xffffff,
-    intensity: 0.8,
+    intensity: 0.7,
     position: { x: 5, y: 10, z: 7 },
     target: { x: 0, y: 0, z: 0 }  // optional
   },
   {
     type: "point",
     color: 0xffaa00,
-    intensity: 1.2,
+    intensity: 1,
     position: { x: -3, y: 2, z: -4 },
-    distance: 20,  // optional
+    distance: 30,  // optional
     decay: 2       // optional
   }
 ],
+
 
 roomTextures: {
   floor: "assets/textures/warehouse_floor.png",
@@ -42,7 +43,7 @@ roomTextures: {
       {
         id: "crateA",
         type: "crate",
-        position: { x: -2, y: 0.5, z: -2 },
+        position: { x: -5, y: 0.5, z: -6 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
@@ -55,7 +56,7 @@ roomTextures: {
       {
         id: "crateB",
         type: "crate",
-        position: { x: 1, y: 0.5, z: -2 },
+        position: { x: 1, y: 0.5, z: -6 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
@@ -65,6 +66,19 @@ roomTextures: {
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
+	  {
+  id: "wall1",
+  type: "wall",
+  hp:  10,
+  maxHp:  200,
+  position: { x: -4, y: 2, z: 6 },
+  size: { x: 1, y: 4, z: 1 },
+  rotation: { x: 0, y: 0, z: 0 },
+  texture: "assets/props/blue.png",
+  coverType: "full",
+  indestructible: true,
+  hitSounds: ["sounds/ric1.ogg"]
+},
       {
         id: "catwalk",
         type: "catwalk",

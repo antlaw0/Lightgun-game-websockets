@@ -1,3 +1,4 @@
+export const ENEMY_INSTANCES = [];
 import { ENEMY_DEFS } from "./scenes.js";
 //
 // Weapon class
@@ -15,6 +16,7 @@ export class Weapon {
     this.ammoReserve = def.ammoReserve || 0;
     this.lastFireTimestamp = -Infinity;
     this.isReloading = false;
+
   }
 
   canFire(nowMs) {
@@ -80,6 +82,8 @@ export class Enemy {
     this.deathSounds = def.deathSounds || [];
     this.accuracy = def.accuracy || 0.5;
     this.reactionTimeMs = def.reactionTimeMs || 300;
+	// Register this enemy globally for debugging / mass actions
+ENEMY_INSTANCES.push(this);
 
     this.player = player;
     this.fireCallback = fireCallback;
@@ -382,6 +386,10 @@ export class Enemy {
       this._targetScale = this.baseScale.clone();
       this._targetPosition = this.basePosition.clone();
       this._targetPosition.x = this.basePosition.x + lean;
+	  
+	    // Optional small forward nudge for visual depth
+  this._targetPosition.x = this.basePosition.x;
+  this._targetPosition.y = this.basePosition.y;
     } else {
       // default: simple pop up
       this._targetOffset.set(0, 0.06, 0);
@@ -462,3 +470,9 @@ export class Enemy {
     }
   }
 }
+export function killAllEnemies() {
+  ENEMY_INSTANCES.forEach(enemy => {
+    if (!enemy._isDead) enemy.die();
+  });
+}
+  

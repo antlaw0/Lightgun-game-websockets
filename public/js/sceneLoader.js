@@ -35,28 +35,29 @@ export class SceneLoader {
   // Lights
   // -------------------------------------------------------------
   _createLights() {
-    if (!this.sceneDef.lights || !Array.isArray(this.sceneDef.lights)) return;
+    // nothing to do if no lights array
+    if (!this.sceneDef || !Array.isArray(this.sceneDef.lights) || this.sceneDef.lights.length === 0) {
+      // ensure any previous lights are removed
+      this.sceneLights.forEach(light => this.scene.remove(light));
+      this.sceneLights = [];
+      return;
+    }
 
     // Clear old lights
     this.sceneLights.forEach(light => this.scene.remove(light));
     this.sceneLights = [];
 
+    // Create new lights from definition
     this.sceneDef.lights.forEach((lightDef) => {
-      let light;
+      let light = null;
 
       switch (lightDef.type) {
         case "ambient":
-          light = new THREE.AmbientLight(
-            lightDef.color ?? 0xffffff,
-            lightDef.intensity ?? 1
-          );
+          light = new THREE.AmbientLight(lightDef.color ?? 0xffffff, lightDef.intensity ?? 1);
           break;
 
         case "directional":
-          light = new THREE.DirectionalLight(
-            lightDef.color ?? 0xffffff,
-            lightDef.intensity ?? 1
-          );
+          light = new THREE.DirectionalLight(lightDef.color ?? 0xffffff, lightDef.intensity ?? 1);
           if (lightDef.position) {
             light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
           }
@@ -102,14 +103,16 @@ export class SceneLoader {
 
         default:
           console.warn("Unknown light type:", lightDef.type);
-          return;
+          break;
       }
 
-      this.scene.add(light);
-      this.sceneLights.push(light);
+      if (light) {
+        this.scene.add(light);
+        this.sceneLights.push(light);
+      }
     });
   }
-
+  
   // -------------------------------------------------------------
   // Load Scene
   // -------------------------------------------------------------
@@ -117,19 +120,36 @@ export class SceneLoader {
     this.unloadScene();
     this.sceneDef = sceneDef;
 
-    console.log(`[SceneLoader] loading scene: ${sceneDef.name}`);
+    console.log(`SceneLoader loading scene: ${sceneDef.name}`);
 
-    // Props
-    const staticObjs = sceneDef.environment?.staticObjects ?? [];
-    staticObjs.forEach((pdef, idx) => {
-      if (!pdef.id) pdef.id = `prop_${idx}`;
-      const p = new PropClass(pdef);
-      this.props[pdef.id] = p;
-      this.scene.add(p.mesh);
-      this.propMeshes.push(p.mesh);
-    });
+    // Props (including full-cover walls)
+const staticObjs = sceneDef.environment?.staticObjects ?? [];
+staticObjs.forEach((pdef, idx) => {
+  // Ensure ID
+if (!pdef.id) pdef.id = `prop_${idx}`;
+  
+  // Create PropClass with full wall support
+  // Pass the full definition to PropClass
+const p = new PropClass({
+    ...pdef,
+    id: pdef.id,
+    coverType: pdef.coverType ?? "none"
+});
 
-    // Enemies
+  this.props[pdef.id] = p;
+
+  // Let enemies / raycast know what this object is
+  p.mesh.userData = {
+    propId: pdef.id,
+    coverType: pdef.coverType ?? "none",
+    size: pdef.size
+  };
+
+  this.scene.add(p.mesh);
+  this.propMeshes.push(p.mesh);
+});
+
+// Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;
@@ -174,55 +194,61 @@ export class SceneLoader {
   _calculateRoomBounds() {
     let minX = Infinity, maxX = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
-    let maxY = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
 
     // Props
-    Object.values(this.props).forEach((p) => {
-      const sx = p.size.x / 2;
-      const sy = p.size.y;
-      const sz = p.size.z / 2;
+    Object.values(this.props).forEach(p => {
+        const sx = p.size.x / 2;
+        const sy = p.size.y;
+        const sz = p.size.z / 2;
 
-      minX = Math.min(minX, p.position.x - sx);
-      maxX = Math.max(maxX, p.position.x + sx);
-      maxY = Math.max(maxY, p.position.y + sy);
-      minZ = Math.min(minZ, p.position.z - sz);
-      maxZ = Math.max(maxZ, p.position.z + sz);
+        minX = Math.min(minX, p.position.x - sx);
+        maxX = Math.max(maxX, p.position.x + sx);
+        minY = Math.min(minY, p.position.y);
+        maxY = Math.max(maxY, p.position.y + sy);
+        minZ = Math.min(minZ, p.position.z - sz);
+        maxZ = Math.max(maxZ, p.position.z + sz);
     });
 
     // Enemies
-    Object.values(this.enemies).forEach((e) => {
-      const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
-      minX = Math.min(minX, pos.x);
-      maxX = Math.max(maxX, pos.x);
-      maxY = Math.max(maxY, pos.y + 1);
-      minZ = Math.min(minZ, pos.z);
-      maxZ = Math.max(maxZ, pos.z);
+    Object.values(this.enemies).forEach(e => {
+        const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
+        minX = Math.min(minX, pos.x);
+        maxX = Math.max(maxX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxY = Math.max(maxY, pos.y + 1);
+        minZ = Math.min(minZ, pos.z);
+        maxZ = Math.max(maxZ, pos.z);
     });
 
     // Padding
     minX -= this.padding;
     maxX += this.padding;
+    minY -= this.padding;
     maxY += this.padding;
     minZ -= this.padding;
     maxZ += this.padding;
 
+    // Room size
     this.roomWidth = maxX - minX;
-    this.roomHeight = maxY;
+    this.roomHeight = maxY - minY;
     this.roomDepth = maxZ - minZ;
 
-    // Center offset
+    // Room center offset
     this.roomCenterOffset = new THREE.Vector3(
-      (minX + maxX) / 2,
-      this.roomHeight / 2,
-      (minZ + maxZ) / 2
+        (minX + maxX) / 2,
+        (minY + maxY) / 2,
+        (minZ + maxZ) / 2
     );
 
-    // Shift props/enemies so room center is 0,0,0
-    Object.values(this.props).forEach((p) => p.mesh.position.sub(this.roomCenterOffset));
-    Object.values(this.enemies).forEach((e) => {
-      if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
+    // Shift props and enemies so room center is at origin
+    Object.values(this.props).forEach(p => {
+        p.mesh.position.sub(this.roomCenterOffset);
     });
-  }
+    Object.values(this.enemies).forEach(e => {
+        if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
+    });
+}
 
   // -------------------------------------------------------------
   // Create Room
@@ -235,23 +261,25 @@ export class SceneLoader {
     const texLoader = new THREE.TextureLoader();
     const roomTex = this.sceneDef.roomTextures || {};
 
+    // Materials
     const floorMat = roomTex.floor
-      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
-      : new THREE.MeshStandardMaterial({ color: 0x444444 });
+      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.floor) })
+      : new THREE.MeshBasicMaterial({ color: 0x444444 });
 
     const ceilingMat = roomTex.ceiling
-      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
-      : new THREE.MeshStandardMaterial({ color: 0x666666 });
+      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.ceiling) })
+      : new THREE.MeshBasicMaterial({ color: 0x666666 });
 
     const wallMat = roomTex.wall
-      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
-      : new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
+      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
+      : new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide });
 
     // Floor
     const floorGeo = new THREE.PlaneGeometry(w, d);
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, 0, 0);
+    floor.position.sub(this.roomCenterOffset); // <-- align with shifted props
     this.scene.add(floor);
     this.roomMeshes.push(floor);
 
@@ -260,6 +288,7 @@ export class SceneLoader {
     const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.set(0, h, 0);
+    ceiling.position.sub(this.roomCenterOffset);
     this.scene.add(ceiling);
     this.roomMeshes.push(ceiling);
 
@@ -267,6 +296,7 @@ export class SceneLoader {
     const backWallGeo = new THREE.PlaneGeometry(w, h);
     const backWall = new THREE.Mesh(backWallGeo, wallMat);
     backWall.position.set(0, h / 2, -d / 2);
+    backWall.position.sub(this.roomCenterOffset);
     this.scene.add(backWall);
     this.roomMeshes.push(backWall);
 
@@ -275,6 +305,7 @@ export class SceneLoader {
     const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
     leftWall.rotation.y = Math.PI / 2;
     leftWall.position.set(-w / 2, h / 2, -d / 2);
+    leftWall.position.sub(this.roomCenterOffset);
     this.scene.add(leftWall);
     this.roomMeshes.push(leftWall);
 
@@ -282,9 +313,10 @@ export class SceneLoader {
     const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
     rightWall.rotation.y = -Math.PI / 2;
     rightWall.position.set(w / 2, h / 2, -d / 2);
+    rightWall.position.sub(this.roomCenterOffset);
     this.scene.add(rightWall);
     this.roomMeshes.push(rightWall);
-  }
+}
 
   // -------------------------------------------------------------
   // Projectiles
