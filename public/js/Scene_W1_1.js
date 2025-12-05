@@ -7,6 +7,28 @@ export const Scene_W1_1 = {
     height: 20, // 20 / (16/9)
     position: { x: 0, y: 0, z: 0 } // behind everything
   },
+lights: [
+  {
+    type: "ambient",
+    color: 0xffffff,
+    intensity: 0.5
+  },
+  {
+    type: "directional",
+    color: 0xffffff,
+    intensity: 0.8,
+    position: { x: 5, y: 10, z: 7 },
+    target: { x: 0, y: 0, z: 0 }  // optional
+  },
+  {
+    type: "point",
+    color: 0xffaa00,
+    intensity: 1.2,
+    position: { x: -3, y: 2, z: -4 },
+    distance: 20,  // optional
+    decay: 2       // optional
+  }
+],
 
 roomTextures: {
   floor: "assets/textures/warehouse_floor.png",

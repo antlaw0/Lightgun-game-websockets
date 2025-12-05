@@ -2,7 +2,6 @@ import { Enemy } from "./enemy.js";
 import { Prop as PropClass } from "./prop.js";
 import { ENEMY_DEFS } from "./scenes.js";
 import { Projectile } from "./projectile.js";
-//import * as THREE from "three"; // Make sure THREE is available
 
 export class SceneLoader {
   constructor(scene, camera, player) {
@@ -19,27 +18,108 @@ export class SceneLoader {
     this.nextProjectileId = 1;
 
     this.sceneDef = null;
-    this.roomMeshes = []; // store room walls/floor/ceiling
+    this.roomMeshes = [];
 
-    // Used to avoid multi-hit bug
     this.frameCount = 0;
 
-    // Room dimensions, will be auto-calculated
     this.roomWidth = 10;
     this.roomHeight = 5;
     this.roomDepth = 12;
 
-    // Extra padding around objects
     this.padding = 2;
+
+    this.sceneLights = [];
   }
 
+  // -------------------------------------------------------------
+  // Lights
+  // -------------------------------------------------------------
+  _createLights() {
+    if (!this.sceneDef.lights || !Array.isArray(this.sceneDef.lights)) return;
+
+    // Clear old lights
+    this.sceneLights.forEach(light => this.scene.remove(light));
+    this.sceneLights = [];
+
+    this.sceneDef.lights.forEach((lightDef) => {
+      let light;
+
+      switch (lightDef.type) {
+        case "ambient":
+          light = new THREE.AmbientLight(
+            lightDef.color ?? 0xffffff,
+            lightDef.intensity ?? 1
+          );
+          break;
+
+        case "directional":
+          light = new THREE.DirectionalLight(
+            lightDef.color ?? 0xffffff,
+            lightDef.intensity ?? 1
+          );
+          if (lightDef.position) {
+            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
+          }
+          if (lightDef.target) {
+            const target = new THREE.Object3D();
+            target.position.set(lightDef.target.x, lightDef.target.y, lightDef.target.z);
+            this.scene.add(target);
+            light.target = target;
+          }
+          break;
+
+        case "point":
+          light = new THREE.PointLight(
+            lightDef.color ?? 0xffffff,
+            lightDef.intensity ?? 1,
+            lightDef.distance ?? 0,
+            lightDef.decay ?? 1
+          );
+          if (lightDef.position) {
+            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
+          }
+          break;
+
+        case "spot":
+          light = new THREE.SpotLight(
+            lightDef.color ?? 0xffffff,
+            lightDef.intensity ?? 1,
+            lightDef.distance ?? 0,
+            lightDef.angle ?? Math.PI / 4,
+            lightDef.penumbra ?? 0,
+            lightDef.decay ?? 1
+          );
+          if (lightDef.position) {
+            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
+          }
+          if (lightDef.target) {
+            const target = new THREE.Object3D();
+            target.position.set(lightDef.target.x, lightDef.target.y, lightDef.target.z);
+            this.scene.add(target);
+            light.target = target;
+          }
+          break;
+
+        default:
+          console.warn("Unknown light type:", lightDef.type);
+          return;
+      }
+
+      this.scene.add(light);
+      this.sceneLights.push(light);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // Load Scene
+  // -------------------------------------------------------------
   loadScene(sceneDef) {
     this.unloadScene();
     this.sceneDef = sceneDef;
 
     console.log(`[SceneLoader] loading scene: ${sceneDef.name}`);
 
-    // Load static objects first to get positions
+    // Props
     const staticObjs = sceneDef.environment?.staticObjects ?? [];
     staticObjs.forEach((pdef, idx) => {
       if (!pdef.id) pdef.id = `prop_${idx}`;
@@ -49,23 +129,27 @@ export class SceneLoader {
       this.propMeshes.push(p.mesh);
     });
 
-    // Load enemies to get positions
+    // Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;
       const def = ENEMY_DEFS[edef.type];
       if (!def) return;
+
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;
       this.enemies[e.id] = e;
       if (e.mesh) this.enemyMeshes.push(e.mesh);
     });
 
-    // ------------------ Auto-calculate room dimensions ------------------
+    // Construct room around enemies/props
     this._calculateRoomBounds();
     this._createRoom();
 
-    // Enemy firing callback (after room creation)
+    // Lights must be created AFTER room and AFTER sceneDef exists
+    this._createLights();
+
+    // Enemy firing callback
     const fireCallback = (origin, target, speed = 28) => {
       this.spawnProjectile(
         new THREE.Vector3(origin.x, origin.y, origin.z),
@@ -74,45 +158,48 @@ export class SceneLoader {
       );
     };
 
-    // Re-initialize enemies with real callback
     enemyDefs.forEach((edef) => {
-      if (!edef.type) return;
       const e = this.enemies[edef.id];
       if (e) e.fireCallback = fireCallback;
     });
 
     this.objective = sceneDef.objective ?? null;
+
     this._notifyLoaded();
   }
 
+  // -------------------------------------------------------------
+  // Calculate Room Bounds
+  // -------------------------------------------------------------
   _calculateRoomBounds() {
     let minX = Infinity, maxX = -Infinity;
-    let minY = 0, maxY = -Infinity; // floor = 0
     let minZ = Infinity, maxZ = -Infinity;
+    let maxY = -Infinity;
 
-    // Include props
+    // Props
     Object.values(this.props).forEach((p) => {
       const sx = p.size.x / 2;
       const sy = p.size.y;
       const sz = p.size.z / 2;
+
       minX = Math.min(minX, p.position.x - sx);
       maxX = Math.max(maxX, p.position.x + sx);
-      minY = Math.max(maxY, p.position.y + sy); // track highest object
+      maxY = Math.max(maxY, p.position.y + sy);
       minZ = Math.min(minZ, p.position.z - sz);
       maxZ = Math.max(maxZ, p.position.z + sz);
     });
 
-    // Include enemies (assume 1 unit tall if size unknown)
+    // Enemies
     Object.values(this.enemies).forEach((e) => {
       const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
       minX = Math.min(minX, pos.x);
       maxX = Math.max(maxX, pos.x);
-      maxY = Math.max(maxY, pos.y + 1); // assume 1 unit height
+      maxY = Math.max(maxY, pos.y + 1);
       minZ = Math.min(minZ, pos.z);
       maxZ = Math.max(maxZ, pos.z);
     });
 
-    // Apply padding
+    // Padding
     minX -= this.padding;
     maxX += this.padding;
     maxY += this.padding;
@@ -130,78 +217,82 @@ export class SceneLoader {
       (minZ + maxZ) / 2
     );
 
-    // Move props and enemies relative to center
-    Object.values(this.props).forEach((p) => {
-      p.mesh.position.sub(this.roomCenterOffset);
-    });
+    // Shift props/enemies so room center is 0,0,0
+    Object.values(this.props).forEach((p) => p.mesh.position.sub(this.roomCenterOffset));
     Object.values(this.enemies).forEach((e) => {
       if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
     });
   }
 
+  // -------------------------------------------------------------
+  // Create Room
+  // -------------------------------------------------------------
   _createRoom() {
-  const w = this.roomWidth;
-  const h = this.roomHeight;
-  const d = this.roomDepth;
+    const w = this.roomWidth;
+    const h = this.roomHeight;
+    const d = this.roomDepth;
 
-  // Load textures from scene definition if available
-  const texLoader = new THREE.TextureLoader();
-  const roomTex = this.sceneDef.roomTextures || {};
-  
-  const floorMat = roomTex.floor
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
-    : new THREE.MeshStandardMaterial({ color: 0x444444 });
+    const texLoader = new THREE.TextureLoader();
+    const roomTex = this.sceneDef.roomTextures || {};
 
-  const ceilingMat = roomTex.ceiling
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
-    : new THREE.MeshStandardMaterial({ color: 0x666666 });
+    const floorMat = roomTex.floor
+      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
+      : new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-  const wallMat = roomTex.wall
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
-    : new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
+    const ceilingMat = roomTex.ceiling
+      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
+      : new THREE.MeshStandardMaterial({ color: 0x666666 });
 
-  // Floor
-  const floorGeo = new THREE.PlaneGeometry(w, d);
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(0, 0, 0);
-  this.scene.add(floor);
-  this.roomMeshes.push(floor);
+    const wallMat = roomTex.wall
+      ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
+      : new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
 
-  // Ceiling
-  const ceilingGeo = new THREE.PlaneGeometry(w, d);
-  const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(0, h, 0);
-  this.scene.add(ceiling);
-  this.roomMeshes.push(ceiling);
+    // Floor
+    const floorGeo = new THREE.PlaneGeometry(w, d);
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, 0, 0);
+    this.scene.add(floor);
+    this.roomMeshes.push(floor);
 
-  // Back wall
-  const backWallGeo = new THREE.PlaneGeometry(w, h);
-  const backWall = new THREE.Mesh(backWallGeo, wallMat);
-  backWall.position.set(0, h / 2, -d / 2);
-  this.scene.add(backWall);
-  this.roomMeshes.push(backWall);
+    // Ceiling
+    const ceilingGeo = new THREE.PlaneGeometry(w, d);
+    const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.set(0, h, 0);
+    this.scene.add(ceiling);
+    this.roomMeshes.push(ceiling);
 
-  // Left wall
-  const sideWallGeo = new THREE.PlaneGeometry(d, h);
-  const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
-  leftWall.rotation.y = Math.PI / 2;
-  leftWall.position.set(-w / 2, h / 2, -d / 2);
-  this.scene.add(leftWall);
-  this.roomMeshes.push(leftWall);
+    // Back wall
+    const backWallGeo = new THREE.PlaneGeometry(w, h);
+    const backWall = new THREE.Mesh(backWallGeo, wallMat);
+    backWall.position.set(0, h / 2, -d / 2);
+    this.scene.add(backWall);
+    this.roomMeshes.push(backWall);
 
-  // Right wall
-  const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
-  rightWall.rotation.y = -Math.PI / 2;
-  rightWall.position.set(w / 2, h / 2, -d / 2);
-  this.scene.add(rightWall);
-  this.roomMeshes.push(rightWall);
-}
+    // Left wall
+    const sideWallGeo = new THREE.PlaneGeometry(d, h);
+    const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
+    leftWall.rotation.y = Math.PI / 2;
+    leftWall.position.set(-w / 2, h / 2, -d / 2);
+    this.scene.add(leftWall);
+    this.roomMeshes.push(leftWall);
 
+    // Right wall
+    const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
+    rightWall.rotation.y = -Math.PI / 2;
+    rightWall.position.set(w / 2, h / 2, -d / 2);
+    this.scene.add(rightWall);
+    this.roomMeshes.push(rightWall);
+  }
+
+  // -------------------------------------------------------------
+  // Projectiles
+  // -------------------------------------------------------------
   spawnProjectile(startPos, targetPos, speed = 1) {
     const id = "proj_" + (this.nextProjectileId++);
     const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
+
     const p = new Projectile({
       id,
       scene: this.scene,
@@ -215,8 +306,11 @@ export class SceneLoader {
     return p;
   }
 
+  // -------------------------------------------------------------
+  // Unload Scene
+  // -------------------------------------------------------------
   unloadScene() {
-    // Remove room meshes
+    // Clear room
     this.roomMeshes.forEach((m) => {
       this.scene.remove(m);
       if (m.geometry) m.geometry.dispose();
@@ -224,33 +318,34 @@ export class SceneLoader {
     });
     this.roomMeshes = [];
 
-    // Remove projectiles
-    Object.values(this.projectiles).forEach((p) => {
-      try { p.dispose(); } catch (e) {}
-    });
+    // Clear lights
+    this.sceneLights.forEach(light => this.scene.remove(light));
+    this.sceneLights = [];
+
+    // Projectiles
+    Object.values(this.projectiles).forEach((p) => { try { p.dispose(); } catch {} });
     this.projectiles = {};
     this.projectileMeshes = [];
 
-    // Remove enemies
-    Object.values(this.enemies).forEach((en) => {
-      try { en.dispose(); } catch (e) {}
-    });
+    // Enemies
+    Object.values(this.enemies).forEach((en) => { try { en.dispose(); } catch {} });
     this.enemies = {};
     this.enemyMeshes = [];
 
-    // Remove props
-    Object.values(this.props).forEach((pr) => {
-      try { pr.dispose(); } catch (e) {}
-    });
+    // Props
+    Object.values(this.props).forEach((pr) => { try { pr.dispose(); } catch {} });
     this.props = {};
     this.propMeshes = [];
   }
 
+  // -------------------------------------------------------------
+  // Update
+  // -------------------------------------------------------------
   update(deltaMs, nowMs) {
     this.frameCount++;
 
     Object.values(this.enemies).forEach((en) => {
-      try { en.update(deltaMs, nowMs, this.player); } catch (e) {}
+      try { en.update(deltaMs, nowMs, this.player); } catch {}
     });
 
     Object.entries(this.projectiles).forEach(([id, proj]) => {
@@ -262,36 +357,38 @@ export class SceneLoader {
     });
   }
 
+  // -------------------------------------------------------------
+  // Damage Handling
+  // -------------------------------------------------------------
   applyDamageToMesh(mesh, damage = 1) {
     if (!mesh) return false;
-    let obj = mesh;
 
+    let obj = mesh;
     while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId) {
       obj = obj.parent;
     }
 
-    if (!obj || !obj.userData) {
-      console.warn("[SceneLoader] Hit object has no enemyId or propId");
-      return false;
-    }
+    if (!obj || !obj.userData) return false;
 
+    // Enemy
     if (obj.userData.enemyId) {
-      const id = obj.userData.enemyId;
-      const en = this.enemies[id];
+      const en = this.enemies[obj.userData.enemyId];
       if (!en) return false;
-      if (en.lastHitFrame === this.frameCount) return true;
+
+      if (en.lastHitFrame === this.frameCount) return true; // prevent multi-hit
       en.lastHitFrame = this.frameCount;
+
       en.takeDamage(damage);
       this._checkObjectiveAfterHit();
       return true;
     }
 
+    // Prop
     if (obj.userData.propId) {
-      const id = obj.userData.propId;
-      const pr = this.props[id];
+      const pr = this.props[obj.userData.propId];
       if (pr) {
         const died = pr.takeDamage(damage);
-        if (died) delete this.props[id];
+        if (died) delete this.props[obj.userData.propId];
       }
       return true;
     }
@@ -299,21 +396,37 @@ export class SceneLoader {
     return false;
   }
 
+  // -------------------------------------------------------------
+  // Objective Check
+  // -------------------------------------------------------------
   _checkObjectiveAfterHit() {
     if (!this.objective) return;
+
     if (this.objective.type === "eliminateAllEnemies") {
       const remaining = Object.values(this.enemies).filter(e => !e._isDead);
       if (remaining.length === 0) {
         if (typeof window.onSceneComplete === "function") {
           window.onSceneComplete(this.sceneDef);
         } else {
-          window.dispatchEvent(new CustomEvent("sceneComplete", { detail: { scene: this.sceneDef } }));
+          window.dispatchEvent(new CustomEvent("sceneComplete", {
+            detail: { scene: this.sceneDef }
+          }));
         }
       }
     }
   }
 
+  // -------------------------------------------------------------
+  // Raycasting Mesh List
+  // -------------------------------------------------------------
   getIntersectableMeshes() {
     return [...this.enemyMeshes, ...this.propMeshes];
+  }
+
+  // -------------------------------------------------------------
+  _notifyLoaded() {
+    if (typeof window.onSceneLoaded === "function") {
+      window.onSceneLoaded(this.sceneDef);
+    }
   }
 }
