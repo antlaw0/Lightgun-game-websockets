@@ -8,6 +8,13 @@ export const Scene_W1_1 = {
     position: { x: 0, y: 0, z: 0 } // behind everything
   },
 
+roomTextures: {
+  floor: "assets/textures/warehouse_floor.png",
+  ceiling: "assets/textures/warehouse_ceiling.png",
+  wall: "assets/textures/warehouse_wall.png"
+},
+
+
   environment: {
     staticObjects: [
       {
