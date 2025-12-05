@@ -2,7 +2,7 @@
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
   background: {
-    texture: "assets/backgrounds/black_bg.png",
+    texture: "assets/backgrounds/warehouse_bg.png",
     width: 40,     // world units
     height: 20, // 20 / (16/9)
     position: { x: 0, y: 0, z: 0 } // behind everything

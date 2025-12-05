@@ -20,7 +20,6 @@ export class SceneLoader {
     this.nextProjectileId = 1;
 
     this.sceneDef = null;
-    this.bgMesh = null; // store background plane
 
     // Used to avoid multi-hit bug
     this.frameCount = 0;
@@ -32,20 +31,12 @@ export class SceneLoader {
 
     console.log(`[SceneLoader] loading scene: ${sceneDef.name}`);
 
-    // Add background image if defined
+    // ------------------ Static background ------------------
     if (sceneDef.background?.texture) {
       const texLoader = new THREE.TextureLoader();
       const tex = texLoader.load(sceneDef.background.texture);
-      const width = sceneDef.background.width ?? 20;
-      const height = sceneDef.background.height ?? 10;
-
-      const geo = new THREE.PlaneGeometry(width, height);
-      const mat = new THREE.MeshBasicMaterial({ map: tex });
-      const mesh = new THREE.Mesh(geo, mat);
-
-      mesh.position.set(0, height / 2, -10); // push back a bit
-      this.scene.add(mesh);
-      this.bgMesh = mesh;
+      tex.encoding = THREE.sRGBEncoding; // correct gamma/brightness
+      this.scene.background = tex;
     }
 
     // Load static objects
@@ -120,11 +111,8 @@ export class SceneLoader {
 
   unloadScene() {
     // Remove background
-    if (this.bgMesh) {
-      this.scene.remove(this.bgMesh);
-      this.bgMesh.geometry.dispose();
-      this.bgMesh.material.dispose();
-      this.bgMesh = null;
+    if (this.sceneDef?.background) {
+      this.scene.background = null;
     }
 
     // Remove projectiles
