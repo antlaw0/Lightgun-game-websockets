@@ -253,7 +253,7 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 // ------------------ Scene / Level management ------------------
-const sceneLoader = new SceneLoader(scene, camera, player);
+window.sceneLoader = new SceneLoader(scene, camera, player);
 let currentLevel = Level_Warehouse;
 let currentSceneIndex = 0;
 

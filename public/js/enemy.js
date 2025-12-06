@@ -16,7 +16,6 @@ export class Weapon {
     this.ammoReserve = def.ammoReserve || 0;
     this.lastFireTimestamp = -Infinity;
     this.isReloading = false;
-
   }
 
   canFire(nowMs) {
@@ -82,8 +81,9 @@ export class Enemy {
     this.deathSounds = def.deathSounds || [];
     this.accuracy = def.accuracy || 0.5;
     this.reactionTimeMs = def.reactionTimeMs || 300;
-	// Register this enemy globally for debugging / mass actions
-ENEMY_INSTANCES.push(this);
+
+    // Register this enemy globally for debugging / mass actions
+    ENEMY_INSTANCES.push(this);
 
     this.player = player;
     this.fireCallback = fireCallback;
@@ -162,6 +162,9 @@ ENEMY_INSTANCES.push(this);
     this._targetOffset = new THREE.Vector3(0, 0, 0);
     this._currentOffset = new THREE.Vector3(0, 0, 0);
 
+    // knockback vector applied on top of other offsets (decays over time)
+    this._knockback = new THREE.Vector3();
+
     // For firing cadence while popped
     this._lastFireWhilePopped = 0;
 
@@ -183,13 +186,43 @@ ENEMY_INSTANCES.push(this);
     s.play().catch(() => {});
   }
 
-  takeDamage(amount) {
+  //
+  // Generic damage entrypoint (used by projectiles, bullets, explosions)
+  // Accepts optional damageType
+  //
+  takeDamage(amount, damageType = "normal") {
     if (this._isDead) return;
     this.hp -= amount;
 
     this._playRandom(this.hitSounds);
 
     if (this.hp <= 0) this.die();
+  }
+
+  //
+  // Explosion-specific damage entrypoint.
+  // explosionPos is optional (THREE.Vector3) and used to compute knockback direction.
+  // This exists so Explosion class can call takeExplosionDamage(...) if it wants to include knockback.
+  //
+  takeExplosionDamage(amount, damageType = "normal", explosionPos = null) {
+    if (this._isDead) return;
+
+    // apply HP damage
+    this.takeDamage(amount, damageType);
+
+    // apply knockback impulse away from explosion center
+    if (explosionPos && this.mesh) {
+      const dir = this.mesh.position.clone().sub(explosionPos);
+      const dist = dir.length();
+      if (dist > 0) {
+        dir.normalize();
+        // scale knockback by damage and inverse distance attenuation (clamped)
+        const falloff = Math.max(0.15, 1 - (dist / Math.max(1, (dist + 0.0001))));
+        // tweak multiplier to taste; smaller values to avoid flying sprites too far
+        const impulse = (amount / Math.max(1, this.maxHp)) * 0.25 * falloff;
+        this._knockback.add(dir.multiplyScalar(impulse));
+      }
+    }
   }
 
   die() {
@@ -386,10 +419,10 @@ ENEMY_INSTANCES.push(this);
       this._targetScale = this.baseScale.clone();
       this._targetPosition = this.basePosition.clone();
       this._targetPosition.x = this.basePosition.x + lean;
-	  
-	    // Optional small forward nudge for visual depth
-  this._targetPosition.x = this.basePosition.x;
-  this._targetPosition.y = this.basePosition.y;
+
+      // Optional small forward nudge for visual depth
+      this._targetPosition.x = this.basePosition.x;
+      this._targetPosition.y = this.basePosition.y;
     } else {
       // default: simple pop up
       this._targetOffset.set(0, 0.06, 0);
@@ -448,6 +481,15 @@ ENEMY_INSTANCES.push(this);
     const desiredPos = this._targetPosition.clone().add(this._targetOffset);
     this.mesh.position.lerp(desiredPos, t);
 
+    // Apply knockback offset on top of smooth pose
+    // Decay the knockback each frame (exponential-ish)
+    const decayFactor = Math.pow(0.9, Math.max(1, deltaMs / 16)); // smaller deltaMs -> slower decay steps
+    this.mesh.position.add(this._knockback);
+    this._knockback.multiplyScalar(decayFactor);
+    if (this._knockback.lengthSq() < 1e-6) {
+      this._knockback.set(0, 0, 0);
+    }
+
     // rotation Y lerp (use simple interpolation)
     const currentY = this.mesh.rotation.y;
     const targetY = this._targetRotationY;
@@ -475,4 +517,3 @@ export function killAllEnemies() {
     if (!enemy._isDead) enemy.die();
   });
 }
-  

@@ -2,10 +2,16 @@ export class Prop {
   constructor(def) {
     this.id = def.id;
     this.type = def.type || "prop";
-	this.indestructible = def.indestructible ?? false;
 
+    // Explosion interaction flags
+    this.coverType = def.coverType || "none"; 
+    // "none" | "low" | "full"
+    this.indestructible = def.indestructible ?? false;
+
+    // Position & size (essential for LOS and bounding box hit tests)
     this.position = def.position ?? { x: 0, y: 0, z: 0 };
     this.size = def.size ?? { x: 1, y: 1, z: 1 };
+
     this.texture = def.texture || null;
     this.hp = def.hp ?? 1;
     this.maxHp = def.maxHp ?? this.hp;
@@ -28,13 +34,16 @@ export class Prop {
     this.mesh = this._createMesh();
   }
 
+  //
+  // DAMAGE FROM NORMAL SOURCES
+  //
   takeDamage(amount) {
     console.log("Hit prop");
 
     // Play hit sounds (preloaded)
     this._playRandom(this.hitSounds);
 
-    // For indestructible props, skip hp logic
+    // Indestructible: ignore HP changes
     if (this.indestructible) return false;
 
     this.hp -= amount;
@@ -45,6 +54,106 @@ export class Prop {
     }
 
     return false;
+  }
+
+  //
+  // EXPLOSION-SPECIFIC DAMAGE HANDLING
+  //
+  // explosionDamage: number
+  // Returns an object:
+  // { absorbed: number, passedThrough: number, destroyed: boolean }
+  //
+  applyExplosionDamage(explosionDamage) {
+    // If it blocks but is indestructible → absorbs all damage, passes 0
+    if (this.indestructible) {
+      this._playRandom(this.hitSounds);
+      return {
+        absorbed: explosionDamage,
+        passedThrough: 0,
+        destroyed: false
+      };
+    }
+
+    this._playRandom(this.hitSounds);
+
+    const before = this.hp;
+    this.hp -= explosionDamage;
+
+    // If destroyed, return leftover damage
+    if (this.hp <= 0) {
+      const absorbed = before;
+      const passed = explosionDamage - before;
+
+      this._die();
+
+      return {
+        absorbed: absorbed,
+        passedThrough: passed,
+        destroyed: true
+      };
+    }
+
+    // Survived → absorbed everything
+    return {
+      absorbed: explosionDamage,
+      passedThrough: 0,
+      destroyed: false
+    };
+  }
+
+  //
+  // Explosion LOS collision test
+  // Used by Explosion.js to determine whether this prop blocks the path
+  //
+  intersectsLine(start, end) {
+    // Create AABB for prop
+    const half = {
+      x: this.size.x * 0.5,
+      y: this.size.y * 0.5,
+      z: this.size.z * 0.5,
+    };
+
+    const min = {
+      x: this.position.x - half.x,
+      y: this.position.y - half.y,
+      z: this.position.z - half.z,
+    };
+
+    const max = {
+      x: this.position.x + half.x,
+      y: this.position.y + half.y,
+      z: this.position.z + half.z,
+    };
+
+    // Ray-box intersection test
+    // Using parametric line t in [0,1]
+    let tmin = 0;
+    let tmax = 1;
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dz = end.z - start.z;
+
+    const testAxis = (startCoord, d, minB, maxB) => {
+      if (Math.abs(d) < 1e-6) {
+        // Parallel: if start outside slab → no hit
+        if (startCoord < minB || startCoord > maxB) return false;
+        return true; // continue
+      }
+      const ood = 1 / d;
+      let t1 = (minB - startCoord) * ood;
+      let t2 = (maxB - startCoord) * ood;
+      if (t1 > t2) [t1, t2] = [t2, t1]; // swap
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
+      return tmin <= tmax;
+    };
+
+    if (!testAxis(start.x, dx, min.x, max.x)) return false;
+    if (!testAxis(start.y, dy, min.y, max.y)) return false;
+    if (!testAxis(start.z, dz, min.z, max.z)) return false;
+
+    return true;
   }
 
   _playRandom(arr) {

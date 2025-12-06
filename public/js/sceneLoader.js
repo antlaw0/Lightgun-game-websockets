@@ -1,3 +1,5 @@
+import { Explosion, PointsParticlePool } from './explosion.js';
+
 import { Enemy } from "./enemy.js";
 import { Prop as PropClass } from "./prop.js";
 import { ENEMY_DEFS } from "./scenes.js";
@@ -9,13 +11,25 @@ export class SceneLoader {
     this.camera = camera;
     this.player = player;
 
-    this.enemies = {};
-    this.props = {};
+    // --- NOTE: changed from object maps to arrays for runtime lists ---
+    // Arrays are authoritative for iteration; maps exist for O(1) lookup by id.
+    this.enemies = [];         // array of Enemy instances
+    this.enemiesById = {};     // map id -> Enemy
+
+    this.props = [];           // array of Prop instances
+    this.propsById = {};       // map id -> Prop
+
+    // meshes lists used for raycasting / intersectables (kept in sync by helpers)
     this.enemyMeshes = [];
     this.propMeshes = [];
+
+    // projectiles (kept as map like before)
     this.projectiles = {};
     this.projectileMeshes = [];
     this.nextProjectileId = 1;
+
+    // explosions tracked by SceneLoader (Explosion instances pushed via addExplosion)
+    this.explosions = [];      // array of explosion instances (any object with update/destroy/dispose)
 
     this.sceneDef = null;
     this.roomMeshes = [];
@@ -31,23 +45,52 @@ export class SceneLoader {
     this.sceneLights = [];
   }
 
-  // -------------------------------------------------------------
-  // Lights
-  // -------------------------------------------------------------
+  // -------------------------
+  // Registration helpers
+  // -------------------------
+  addProp(propInstance) {
+    if (!propInstance || !propInstance.mesh) return;
+    // push into array and map
+    this.props.push(propInstance);
+    if (propInstance.id) this.propsById[propInstance.id] = propInstance;
+
+    // scene + mesh tracking
+    this.scene.add(propInstance.mesh);
+    this.propMeshes.push(propInstance.mesh);
+  }
+
+  addEnemy(enemyInstance) {
+    if (!enemyInstance || !enemyInstance.mesh) return;
+    this.enemies.push(enemyInstance);
+    if (enemyInstance.id) this.enemiesById[enemyInstance.id] = enemyInstance;
+
+    this.scene.add(enemyInstance.mesh);
+    this.enemyMeshes.push(enemyInstance.mesh);
+  }
+
+  addExplosion(explosionInstance) {
+    if (!explosionInstance) return;
+    this.explosions.push(explosionInstance);
+    // If the explosion has a mesh or points object, SceneLoader won't assume the property name.
+    // Explosion author should add its mesh to scene themselves or expose `mesh` property for us to add.
+    if (explosionInstance.mesh) this.scene.add(explosionInstance.mesh);
+    // If explosion exposes `addToScene(scene)` use it (optional)
+    if (typeof explosionInstance.addToScene === "function") explosionInstance.addToScene(this.scene);
+  }
+
+  // -----------------------------
+  // Lights (unchanged)
+  // -----------------------------
   _createLights() {
-    // nothing to do if no lights array
     if (!this.sceneDef || !Array.isArray(this.sceneDef.lights) || this.sceneDef.lights.length === 0) {
-      // ensure any previous lights are removed
       this.sceneLights.forEach(light => this.scene.remove(light));
       this.sceneLights = [];
       return;
     }
 
-    // Clear old lights
     this.sceneLights.forEach(light => this.scene.remove(light));
     this.sceneLights = [];
 
-    // Create new lights from definition
     this.sceneDef.lights.forEach((lightDef) => {
       let light = null;
 
@@ -112,10 +155,10 @@ export class SceneLoader {
       }
     });
   }
-  
-  // -------------------------------------------------------------
-  // Load Scene
-  // -------------------------------------------------------------
+
+  // -----------------------------
+  // Load Scene (adjusted)
+  // -----------------------------
   loadScene(sceneDef) {
     this.unloadScene();
     this.sceneDef = sceneDef;
@@ -123,33 +166,28 @@ export class SceneLoader {
     console.log(`SceneLoader loading scene: ${sceneDef.name}`);
 
     // Props (including full-cover walls)
-const staticObjs = sceneDef.environment?.staticObjects ?? [];
-staticObjs.forEach((pdef, idx) => {
-  // Ensure ID
-if (!pdef.id) pdef.id = `prop_${idx}`;
-  
-  // Create PropClass with full wall support
-  // Pass the full definition to PropClass
-const p = new PropClass({
-    ...pdef,
-    id: pdef.id,
-    coverType: pdef.coverType ?? "none"
-});
+    const staticObjs = sceneDef.environment?.staticObjects ?? [];
+    staticObjs.forEach((pdef, idx) => {
+      if (!pdef.id) pdef.id = `prop_${idx}`;
 
-  this.props[pdef.id] = p;
+      const p = new PropClass({
+        ...pdef,
+        id: pdef.id,
+        coverType: pdef.coverType ?? "none"
+      });
 
-  // Let enemies / raycast know what this object is
-  p.mesh.userData = {
-    propId: pdef.id,
-    coverType: pdef.coverType ?? "none",
-    size: pdef.size
-  };
+      // ensure mesh userData has propId, keep compatibility
+      p.mesh.userData = Object.assign(p.mesh.userData || {}, {
+        propId: pdef.id,
+        coverType: pdef.coverType ?? "none",
+        size: pdef.size
+      });
 
-  this.scene.add(p.mesh);
-  this.propMeshes.push(p.mesh);
-});
+      // register via helper
+      this.addProp(p);
+    });
 
-// Enemies
+    // Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;
@@ -158,13 +196,14 @@ const p = new PropClass({
 
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;
-      this.enemies[e.id] = e;
-      if (e.mesh) this.enemyMeshes.push(e.mesh);
+
+      // register via helper
+      this.addEnemy(e);
     });
 
     // Construct room around enemies/props
     this._calculateRoomBounds();
-    this._createRoom();
+    //this._createRoom();
 
     // Lights must be created AFTER room and AFTER sceneDef exists
     this._createLights();
@@ -178,8 +217,9 @@ const p = new PropClass({
       );
     };
 
+    // assign callbacks to enemies we created
     enemyDefs.forEach((edef) => {
-      const e = this.enemies[edef.id];
+      const e = this.enemiesById[edef.id];
       if (e) e.fireCallback = fireCallback;
     });
 
@@ -188,37 +228,37 @@ const p = new PropClass({
     this._notifyLoaded();
   }
 
-  // -------------------------------------------------------------
-  // Calculate Room Bounds
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Calculate Room Bounds (adjusted to arrays)
+  // -----------------------------
   _calculateRoomBounds() {
     let minX = Infinity, maxX = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
     let minY = Infinity, maxY = -Infinity;
 
-    // Props
-    Object.values(this.props).forEach(p => {
-        const sx = p.size.x / 2;
-        const sy = p.size.y;
-        const sz = p.size.z / 2;
+    // Props: iterate array
+    this.props.forEach(p => {
+      const sx = p.size.x / 2;
+      const sy = p.size.y;
+      const sz = p.size.z / 2;
 
-        minX = Math.min(minX, p.position.x - sx);
-        maxX = Math.max(maxX, p.position.x + sx);
-        minY = Math.min(minY, p.position.y);
-        maxY = Math.max(maxY, p.position.y + sy);
-        minZ = Math.min(minZ, p.position.z - sz);
-        maxZ = Math.max(maxZ, p.position.z + sz);
+      minX = Math.min(minX, p.position.x - sx);
+      maxX = Math.max(maxX, p.position.x + sx);
+      minY = Math.min(minY, p.position.y);
+      maxY = Math.max(maxY, p.position.y + sy);
+      minZ = Math.min(minZ, p.position.z - sz);
+      maxZ = Math.max(maxZ, p.position.z + sz);
     });
 
-    // Enemies
-    Object.values(this.enemies).forEach(e => {
-        const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
-        minX = Math.min(minX, pos.x);
-        maxX = Math.max(maxX, pos.x);
-        minY = Math.min(minY, pos.y);
-        maxY = Math.max(maxY, pos.y + 1);
-        minZ = Math.min(minZ, pos.z);
-        maxZ = Math.max(maxZ, pos.z);
+    // Enemies: iterate array
+    this.enemies.forEach(e => {
+      const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
+      minX = Math.min(minX, pos.x);
+      maxX = Math.max(maxX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxY = Math.max(maxY, pos.y + 1);
+      minZ = Math.min(minZ, pos.z);
+      maxZ = Math.max(maxZ, pos.z);
     });
 
     // Padding
@@ -236,23 +276,30 @@ const p = new PropClass({
 
     // Room center offset
     this.roomCenterOffset = new THREE.Vector3(
-        (minX + maxX) / 2,
-        (minY + maxY) / 2,
-        (minZ + maxZ) / 2
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2
     );
 
     // Shift props and enemies so room center is at origin
-    Object.values(this.props).forEach(p => {
-        p.mesh.position.sub(this.roomCenterOffset);
+    this.props.forEach(p => {
+      p.mesh.position.sub(this.roomCenterOffset);
+      // keep prop logical position in sync too
+      if (p.position && p.position.x !== undefined) {
+        p.position.x -= this.roomCenterOffset.x;
+        p.position.y -= this.roomCenterOffset.y;
+        p.position.z -= this.roomCenterOffset.z;
+      }
     });
-    Object.values(this.enemies).forEach(e => {
-        if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
+    this.enemies.forEach(e => {
+      if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
+      if (e.basePosition) e.basePosition.sub(this.roomCenterOffset);
     });
-}
+  }
 
-  // -------------------------------------------------------------
-  // Create Room
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Create Room (unchanged)
+  // -----------------------------
   _createRoom() {
     const w = this.roomWidth;
     const h = this.roomHeight;
@@ -261,7 +308,6 @@ const p = new PropClass({
     const texLoader = new THREE.TextureLoader();
     const roomTex = this.sceneDef.roomTextures || {};
 
-    // Materials
     const floorMat = roomTex.floor
       ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.floor) })
       : new THREE.MeshBasicMaterial({ color: 0x444444 });
@@ -274,16 +320,14 @@ const p = new PropClass({
       ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
       : new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide });
 
-    // Floor
     const floorGeo = new THREE.PlaneGeometry(w, d);
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, 0, 0);
-    floor.position.sub(this.roomCenterOffset); // <-- align with shifted props
+    floor.position.sub(this.roomCenterOffset);
     this.scene.add(floor);
     this.roomMeshes.push(floor);
 
-    // Ceiling
     const ceilingGeo = new THREE.PlaneGeometry(w, d);
     const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
     ceiling.rotation.x = Math.PI / 2;
@@ -292,7 +336,6 @@ const p = new PropClass({
     this.scene.add(ceiling);
     this.roomMeshes.push(ceiling);
 
-    // Back wall
     const backWallGeo = new THREE.PlaneGeometry(w, h);
     const backWall = new THREE.Mesh(backWallGeo, wallMat);
     backWall.position.set(0, h / 2, -d / 2);
@@ -300,7 +343,6 @@ const p = new PropClass({
     this.scene.add(backWall);
     this.roomMeshes.push(backWall);
 
-    // Left wall
     const sideWallGeo = new THREE.PlaneGeometry(d, h);
     const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
     leftWall.rotation.y = Math.PI / 2;
@@ -309,18 +351,17 @@ const p = new PropClass({
     this.scene.add(leftWall);
     this.roomMeshes.push(leftWall);
 
-    // Right wall
     const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
     rightWall.rotation.y = -Math.PI / 2;
     rightWall.position.set(w / 2, h / 2, -d / 2);
     rightWall.position.sub(this.roomCenterOffset);
     this.scene.add(rightWall);
     this.roomMeshes.push(rightWall);
-}
+  }
 
-  // -------------------------------------------------------------
-  // Projectiles
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Projectiles (unchanged)
+  // -----------------------------
   spawnProjectile(startPos, targetPos, speed = 1) {
     const id = "proj_" + (this.nextProjectileId++);
     const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
@@ -338,9 +379,9 @@ const p = new PropClass({
     return p;
   }
 
-  // -------------------------------------------------------------
-  // Unload Scene
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Unload Scene (adjusted to arrays)
+  // -----------------------------
   unloadScene() {
     // Clear room
     this.roomMeshes.forEach((m) => {
@@ -360,26 +401,34 @@ const p = new PropClass({
     this.projectileMeshes = [];
 
     // Enemies
-    Object.values(this.enemies).forEach((en) => { try { en.dispose(); } catch {} });
-    this.enemies = {};
+    this.enemies.forEach((en) => { try { en.dispose(); } catch {} });
+    this.enemies = [];
+    this.enemiesById = {};
     this.enemyMeshes = [];
 
     // Props
-    Object.values(this.props).forEach((pr) => { try { pr.dispose(); } catch {} });
-    this.props = {};
+    this.props.forEach((pr) => { try { pr.dispose(); } catch {} });
+    this.props = [];
+    this.propsById = {};
     this.propMeshes = [];
+
+    // Explosions
+    this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
+    this.explosions = [];
   }
 
-  // -------------------------------------------------------------
-  // Update
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Update (enemies, projectiles, explosions)
+  // -----------------------------
   update(deltaMs, nowMs) {
     this.frameCount++;
 
-    Object.values(this.enemies).forEach((en) => {
-      try { en.update(deltaMs, nowMs, this.player); } catch {}
+    // Enemies (iterate array)
+    this.enemies.forEach((en) => {
+      try { en.update(deltaMs, nowMs, this.player); } catch (e) { console.warn("Enemy update error", e); }
     });
 
+    // Projectiles
     Object.entries(this.projectiles).forEach(([id, proj]) => {
       proj.update(deltaMs);
       if (proj.isExpired(nowMs)) {
@@ -387,11 +436,45 @@ const p = new PropClass({
         delete this.projectiles[id];
       }
     });
+
+    // Explosions: call update on each; remove and cleanup when finished.
+    for (let i = this.explosions.length - 1; i >= 0; i--) {
+      const ex = this.explosions[i];
+      try {
+        if (typeof ex.update === "function") {
+          ex.update(deltaMs);
+        }
+        // Remove if the explosion exposes an isExpired/isDone function
+        let expired = false;
+        if (typeof ex.isExpired === "function") expired = ex.isExpired();
+        else if (typeof ex.isDone === "boolean") expired = ex.isDone;
+        else if (typeof ex.age === "number" && typeof ex.lifespan === "number") {
+          if (ex.age >= ex.lifespan) expired = true;
+        }
+
+        if (expired) {
+          if (typeof ex.destroy === "function") ex.destroy();
+          if (typeof ex.dispose === "function") ex.dispose();
+          // remove from scene if it has a mesh/points
+          if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
+          this.explosions.splice(i, 1);
+        }
+      } catch (e) {
+        console.warn("Explosion update error", e);
+        // best-effort remove if it throws repeatedly
+        try {
+          if (typeof ex.destroy === "function") ex.destroy();
+          if (typeof ex.dispose === "function") ex.dispose();
+          if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
+        } catch (e2) {}
+        this.explosions.splice(i, 1);
+      }
+    }
   }
 
-  // -------------------------------------------------------------
-  // Damage Handling
-  // -------------------------------------------------------------
+  // -----------------------------
+  // Damage Handling (adapted to arrays/maps)
+  // -----------------------------
   applyDamageToMesh(mesh, damage = 1) {
     if (!mesh) return false;
 
@@ -404,7 +487,7 @@ const p = new PropClass({
 
     // Enemy
     if (obj.userData.enemyId) {
-      const en = this.enemies[obj.userData.enemyId];
+      const en = this.enemiesById[obj.userData.enemyId];
       if (!en) return false;
 
       if (en.lastHitFrame === this.frameCount) return true; // prevent multi-hit
@@ -417,10 +500,19 @@ const p = new PropClass({
 
     // Prop
     if (obj.userData.propId) {
-      const pr = this.props[obj.userData.propId];
+      const pr = this.propsById[obj.userData.propId];
       if (pr) {
         const died = pr.takeDamage(damage);
-        if (died) delete this.props[obj.userData.propId];
+        if (died) {
+          // remove from arrays/maps
+          // Note: Prop.takeDamage / _die should already remove mesh from scene; we still cleanup references
+          const idx = this.props.indexOf(pr);
+          if (idx >= 0) this.props.splice(idx, 1);
+          delete this.propsById[obj.userData.propId];
+          // remove mesh from propMeshes
+          const pmIdx = this.propMeshes.findIndex(m => m.userData && m.userData.propId === obj.userData.propId);
+          if (pmIdx >= 0) this.propMeshes.splice(pmIdx, 1);
+        }
       }
       return true;
     }
@@ -428,14 +520,14 @@ const p = new PropClass({
     return false;
   }
 
-  // -------------------------------------------------------------
+  // -----------------------------
   // Objective Check
-  // -------------------------------------------------------------
+  // -----------------------------
   _checkObjectiveAfterHit() {
     if (!this.objective) return;
 
     if (this.objective.type === "eliminateAllEnemies") {
-      const remaining = Object.values(this.enemies).filter(e => !e._isDead);
+      const remaining = this.enemies.filter(e => !e._isDead);
       if (remaining.length === 0) {
         if (typeof window.onSceneComplete === "function") {
           window.onSceneComplete(this.sceneDef);
@@ -448,17 +540,84 @@ const p = new PropClass({
     }
   }
 
-  // -------------------------------------------------------------
+  // -----------------------------
   // Raycasting Mesh List
-  // -------------------------------------------------------------
+  // -----------------------------
   getIntersectableMeshes() {
+    // Return a shallow copy of the arrays to avoid accidental mutation by callers
     return [...this.enemyMeshes, ...this.propMeshes];
   }
 
-  // -------------------------------------------------------------
+  // -----------------------------
+  _notifyLoaded
+  // -----------------------------
   _notifyLoaded() {
     if (typeof window.onSceneLoaded === "function") {
       window.onSceneLoaded(this.sceneDef);
     }
   }
+
+  // -----------------------------
+  // Scene / resource cleanup helper
+  // -----------------------------
+  clearScene() {
+    // Remove props
+    for (const p of this.props) {
+      if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
+      try { p.dispose?.(); } catch {}
+    }
+    this.props.length = 0;
+    this.propsById = {};
+    this.propMeshes = [];
+
+    // Remove enemies
+    for (const e of this.enemies) {
+      if (e.mesh && e.mesh.parent) e.mesh.parent.remove(e.mesh);
+      try { e.dispose?.(); } catch {}
+    }
+    this.enemies.length = 0;
+    this.enemiesById = {};
+    this.enemyMeshes = [];
+
+    // Explosions
+    for (const ex of this.explosions) {
+      try {
+        if (typeof ex.destroy === "function") ex.destroy();
+        if (typeof ex.dispose === "function") ex.dispose();
+      } catch {}
+      if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
+    }
+    this.explosions.length = 0;
+  }
 }
+window.spawnTestExplosion = function({
+    x = 0, 
+    y = 1, 
+    z = 0, 
+    blastRadius = 4, 
+    damage = 50,
+    particleQuality = 'high',
+    sounds = ['sounds/explosion_big_1.ogg']
+} = {}) {
+    if (!window.sceneLoader) {
+        console.warn("sceneLoader not found!");
+        return;
+    }
+    if (!window.Explosion) {
+        console.warn("Explosion class not found. Make sure explosion.js is loaded.");
+        return;
+    }
+
+    const pos = new THREE.Vector3(x, y, z);
+
+    new window.Explosion({
+        sceneLoader: window.sceneLoader,
+        position: pos,
+        blastRadius,
+        damage,
+        particleQuality,
+        sounds
+    });
+
+    console.log(`Spawned explosion at (${x}, ${y}, ${z})`);
+};
