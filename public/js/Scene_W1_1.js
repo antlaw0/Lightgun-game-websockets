@@ -2,7 +2,7 @@
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
   background: {
-    texture: "assets/backgrounds/warehouse_bg.png",
+    texture: "assets/backgrounds/black_bg.png",
     width: 0,     // world units
     height: 0, // 20 / (16/9)
     position: { x: 0, y: 0, z: 0 } // behind everything
@@ -98,7 +98,7 @@ roomTextures: {
     {
       id: "gruntA",
       type: "Grunt",
-      hp: 3,
+      hp: 40,
       position: { x: -2, y: 0.9, z: -2 },
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateA",
@@ -118,7 +118,7 @@ roomTextures: {
     {
       id: "gruntB",
       type: "Grunt",
-      hp: 3,
+      hp: 40,
       position: { x: 1, y: 0.9, z: -2 },
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       
@@ -139,7 +139,7 @@ roomTextures: {
     {
       id: "gruntC",
       type: "Grunt",
-      hp: 3,
+      hp: 40,
       position: { x: 0, y: 2.7, z: -8 },
       behavior: "standInOpen",
       coverObject: null,

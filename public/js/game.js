@@ -26,6 +26,7 @@ export const player = new Player({
       ammoType: "bullets",
       clipSize: 12,
       ammoInClip: 12,
+	  damage: 10,
       totalAmmo: 48
     }
   ],
@@ -138,6 +139,12 @@ camera.lookAt(0, 1.7, 0);
 const camSpeed = 0.2;
 const camRotSpeed = 0.02;
 
+
+window.addEventListener("wheel", e => {
+  const direction = e.deltaY > 0 ? 1 : -1;
+  player.cycleWeapon(direction);
+});
+
 // =========================
 // Mouse Auto-Fire
 // =========================
@@ -236,6 +243,9 @@ window.cam = () => {
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(cw, ch);
+
+renderer.setClearColor(0x000000, 1);
+scene.background = new THREE.Color(0x000000);
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
@@ -336,7 +346,7 @@ window.addEventListener("keydown", (e) => {
     }
 });
 
-function spawnProjectile(origin, direction) {
+function spawnProjectile(origin, direction, damage = 1) {
     // Capsule geometry: radius, length, capSegments, radialSegments
     const geo = new THREE.CapsuleGeometry(0.02, 0.12, 4, 8); 
     geo.rotateX(Math.PI / 2); // point along +Z axis (matches forward direction)
@@ -353,7 +363,7 @@ function spawnProjectile(origin, direction) {
     bullet.userData = {
         direction: direction.clone().normalize(),
         bornTime: performance.now(),
-        damage: 1,
+        damage: damage,
         trail: null // placeholder for motion trail
     };
 
@@ -456,17 +466,50 @@ function updateAutoFire(nowMs) {
     const w = player.currentWeapon;
     if (!w) return;
 
-    // Auto mode: holds to fire
     if (w.fireMode === "auto") {
         if (!isFiring) return;
 
         const elapsed = nowMs - lastPlayerFireMs;
-        if (elapsed >= w.rateOfFireMs) {
+        if (elapsed >= w.rateOfFire) {
             triggerFire();
-            lastPlayerFireMs = nowMs;
         }
     }
 }
+
+// In your game loop or input handler
+let firingInterval = null;
+
+function startFiring(player) {
+  const weapon = player.currentWeapon;
+  if (!weapon) return;
+
+  // Only start if auto-fire
+  if (weapon.fireMode === "auto" && !firingInterval) {
+    firingInterval = setInterval(() => {
+      const now = performance.now();
+      if (now - weapon.lastShotTime >= weapon.rateOfFire) {
+        if (player.useAmmo(1)) {
+          weapon.lastShotTime = now;
+          // trigger firing effect, e.g., spawn bullets, play sound
+        } else {
+          stopFiring();
+        }
+      }
+    }, 10); // check every 10ms
+  } else if (weapon.fireMode === "semi-auto") {
+    // For semi-auto, just fire once
+    if (player.useAmmo(1)) {
+      weapon.lastShotTime = performance.now();
+      // trigger firing effect
+    }
+  }
+}
+
+function stopFiring() {
+  clearInterval(firingInterval);
+  firingInterval = null;
+}
+
 
 function triggerFire() {
     const w = player.currentWeapon;
@@ -504,16 +547,18 @@ function triggerFire() {
     const shootDir = retWorld.clone().sub(shootOrigin).normalize();
 
     // Spawn projectile
-    spawnProjectile(shootOrigin, shootDir);
+    spawnProjectile(shootOrigin, shootDir, w.damage);
 
-    // Play firing sound
-    try {
-        const fireSound = new Audio('sounds/fire.ogg');
-        fireSound.currentTime = 0;
-        fireSound.play().catch(()=>{});
-    } catch(e){}
-
-    logDebug("Projectile fired from bottom to reticle");
+        // Play weapon-specific firing sound
+    if (w.fireSound) {
+        try {
+            const fireSound = new Audio(w.fireSound);
+            fireSound.currentTime = 0;
+            fireSound.play().catch(()=>{});
+        } catch(e){}
+    }
+    
+	logDebug("Projectile fired from bottom to reticle");
 }
 
 function updateProjectiles(dt) {
@@ -543,14 +588,19 @@ function updateProjectiles(dt) {
         // Collision detection
         rayTemp.set(bullet.position, dir);
         const hits = rayTemp.intersectObjects(intersectables, false);
-        if (hits.length > 0) {
-            const mesh = hits[0].object;
-            sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
-            logDebug("Projectile hit target");
-            toRemove.push(bullet);
-        }
+if (hits.length > 0) {
+    const mesh = hits[0].object;
+    if (mesh.userData.enemy) {
+        mesh.userData.enemy.takeDamage(bullet.userData.damage);
+    } else {
+        // fallback for non-enemy objects
+        sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
     }
+    logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
+    toRemove.push(bullet);
+}
 
+	}
     for (const b of toRemove) {
         scene.remove(b);
         const idx = projectiles.indexOf(b);

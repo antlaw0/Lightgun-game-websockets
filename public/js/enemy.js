@@ -192,7 +192,8 @@ export class Enemy {
   //
   takeDamage(amount, damageType = "normal") {
     if (this._isDead) return;
-    this.hp -= amount;
+    console.log("current HP:  "+this.hp+", damage dealt is "+amount)
+	this.hp -= amount;
 
     this._playRandom(this.hitSounds);
 

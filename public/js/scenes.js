@@ -112,7 +112,7 @@ export const ENEMY_DEFS = {
   Grunt: {
     displayName: "Grunt Soldier",
     sprite: "assets/sprites/grunt.png",
-    hp: 3,
+    hp: 40,
 
     weapon: {
       name: "Pistol",
