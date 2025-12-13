@@ -562,6 +562,7 @@ function triggerFire() {
 }
 
 function updateProjectiles(dt) {
+
     const toRemove = [];
     const intersectables = sceneLoader.getIntersectableMeshes() || [];
     const rayTemp = new THREE.Raycaster();
@@ -573,14 +574,15 @@ function updateProjectiles(dt) {
         // Move the bullet
         bullet.position.addScaledVector(dir, moveDist);
 
-        // Move trail slightly behind bullet
-        if (bullet.userData.trail) {
-            bullet.userData.trail.position.set(0, 0, 0); // local position; stays attached
-        }
-
         // Lifetime check
         const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
         if (aliveTime > PROJECTILE_LIFETIME) {
+
+            bullet.updateMatrixWorld(true);
+            const worldPos = new THREE.Vector3();
+            bullet.getWorldPosition(worldPos);
+            bullet.userData.explosionPos = worldPos;
+
             toRemove.push(bullet);
             continue;
         }
@@ -588,20 +590,31 @@ function updateProjectiles(dt) {
         // Collision detection
         rayTemp.set(bullet.position, dir);
         const hits = rayTemp.intersectObjects(intersectables, false);
-if (hits.length > 0) {
-    const mesh = hits[0].object;
-    if (mesh.userData.enemy) {
-        mesh.userData.enemy.takeDamage(bullet.userData.damage);
-    } else {
-        // fallback for non-enemy objects
-        sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
-    }
-    logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
-    toRemove.push(bullet);
-}
 
-	}
+        if (hits.length > 0) {
+            const mesh = hits[0].object;
+
+            if (mesh.userData.enemy) {
+                mesh.userData.enemy.takeDamage(bullet.userData.damage);
+            } else {
+                sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+            }
+
+            logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
+bullet.userData.explosionPos = hits[0].point.clone();
+
+            
+            toRemove.push(bullet);
+        }
+    }
+
+    // Removal + explosion
     for (const b of toRemove) {
+        const pos = b.userData.explosionPos;
+        if (pos) {
+            window.spawnTestExplosion(pos.x, pos.y, pos.z);
+        }
+
         scene.remove(b);
         const idx = projectiles.indexOf(b);
         if (idx !== -1) projectiles.splice(idx, 1);

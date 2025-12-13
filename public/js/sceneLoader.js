@@ -590,7 +590,8 @@ export class SceneLoader {
     this.explosions.length = 0;
   }
 }
-window.spawnTestExplosion = function({
+
+window.spawnTestExplosion = function(
     x = 0, 
     y = 1, 
     z = 0, 
@@ -598,7 +599,7 @@ window.spawnTestExplosion = function({
     damage = 50,
     particleQuality = 'high',
     sounds = ['sounds/explosion_big_1.ogg']
-} = {}) {
+) {
     if (!window.sceneLoader) {
         console.warn("sceneLoader not found!");
         return;
