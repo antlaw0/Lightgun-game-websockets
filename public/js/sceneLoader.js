@@ -1,4 +1,4 @@
-import { Explosion, PointsParticlePool } from './explosion.js';
+import { Explosion } from './explosion.js';
 
 import { Enemy } from "./enemy.js";
 import { Prop as PropClass } from "./prop.js";
@@ -10,7 +10,6 @@ export class SceneLoader {
     this.scene = scene;
     this.camera = camera;
     this.player = player;
-
     // --- NOTE: changed from object maps to arrays for runtime lists ---
     // Arrays are authoritative for iteration; maps exist for O(1) lookup by id.
     this.enemies = [];         // array of Enemy instances
@@ -422,7 +421,7 @@ export class SceneLoader {
   // -----------------------------
   update(deltaMs, nowMs) {
     this.frameCount++;
-
+// SceneLoader.update(deltaMs)
     // Enemies (iterate array)
     this.enemies.forEach((en) => {
       try { en.update(deltaMs, nowMs, this.player); } catch (e) { console.warn("Enemy update error", e); }
@@ -442,7 +441,7 @@ export class SceneLoader {
       const ex = this.explosions[i];
       try {
         if (typeof ex.update === "function") {
-          ex.update(deltaMs);
+          ex.update(deltaMs / 1000);
         }
         // Remove if the explosion exposes an isExpired/isDone function
         let expired = false;
@@ -592,33 +591,28 @@ export class SceneLoader {
 }
 
 window.spawnTestExplosion = function(
-    x = 0, 
-    y = 1, 
-    z = 0, 
-    blastRadius = 4, 
-    damage = 50,
-    particleQuality = 'high',
-    sounds = ['sounds/explosion_big_1.ogg']
+  x = 0,
+  y = 1,
+  z = 0,
+  blastRadius = 4
 ) {
-    if (!window.sceneLoader) {
-        console.warn("sceneLoader not found!");
-        return;
+  if (!window.sceneLoader) {
+    console.warn("sceneLoader not found!");
+    return;
+  }
+
+  const pos = new THREE.Vector3(x, y, z);
+
+  const explosion = new Explosion(
+    window.sceneLoader.scene,
+    pos,
+    {
+      blastRadius,
+      floorY: y - 0.1 // catwalk-safe
     }
-    if (!window.Explosion) {
-        console.warn("Explosion class not found. Make sure explosion.js is loaded.");
-        return;
-    }
+  );
 
-    const pos = new THREE.Vector3(x, y, z);
+  window.sceneLoader.addExplosion(explosion);
 
-    new window.Explosion({
-        sceneLoader: window.sceneLoader,
-        position: pos,
-        blastRadius,
-        damage,
-        particleQuality,
-        sounds
-    });
-
-    console.log(`Spawned explosion at (${x}, ${y}, ${z})`);
+  console.log(`Spawned explosion at (${x}, ${y}, ${z})`);
 };

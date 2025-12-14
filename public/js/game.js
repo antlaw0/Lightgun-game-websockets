@@ -612,7 +612,9 @@ bullet.userData.explosionPos = hits[0].point.clone();
     for (const b of toRemove) {
         const pos = b.userData.explosionPos;
         if (pos) {
-            window.spawnTestExplosion(pos.x, pos.y, pos.z);
+            if (player.currentWeapon.explosive == true) {
+			window.spawnTestExplosion(pos.x, pos.y, pos.z);
+			}
         }
 
         scene.remove(b);
