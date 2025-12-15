@@ -7,34 +7,50 @@ export const Scene_W1_1 = {
     height: 0, // 20 / (16/9)
     position: { x: 0, y: 0, z: 0 } // behind everything
   },
-lights: [
+
+
+
+room: {
+  width: 20,
+  height: 8,
+  depth: 30
+},
+
+
+  lights: [
   {
     type: "ambient",
-    color: 0xffffff,
-    intensity: 1
+    color: 0x8899aa,
+    intensity: 0.4
   },
   {
-    type: "directional",
-    color: 0xffffff,
-    intensity: 0.7,
-    position: { x: 5, y: 10, z: 7 },
-    target: { x: 0, y: 0, z: 0 }  // optional
-  },
-  {
-    type: "point",
-    color: 0xffaa00,
-    intensity: 1,
-    position: { x: -3, y: 2, z: -4 },
-    distance: 30,  // optional
-    decay: 2       // optional
+  type: "spot",
+  color: 0xffffff,
+  intensity: 3,
+  distance: 28,
+  angle: Math.PI / 5,
+  penumbra: 0.0,
+  decay: 2,
+  position: { x: 0, y: 7.8, z: 0 },
+  target: { x: 0, y: 0, z: 0 },
+  castShadow: true,
+  shadow: {
+    mapSize: { width: 4096, height: 4096 },
+        bias: -0.00008,near: 1,
+    far: 30
   }
+}
 ],
+
+
+
 
 
 roomTextures: {
   floor: "assets/textures/warehouse_floor.png",
   ceiling: "assets/textures/warehouse_ceiling.png",
-  wall: "assets/textures/warehouse_wall.png"
+  wall: "assets/textures/warehouse_wall.png",
+    backWall: "assets/textures/warehouse_back.png"   // back wall
 },
 
 

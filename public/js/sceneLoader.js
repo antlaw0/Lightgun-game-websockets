@@ -81,79 +81,106 @@ export class SceneLoader {
   // Lights (unchanged)
   // -----------------------------
   _createLights() {
-    if (!this.sceneDef || !Array.isArray(this.sceneDef.lights) || this.sceneDef.lights.length === 0) {
-      this.sceneLights.forEach(light => this.scene.remove(light));
-      this.sceneLights = [];
-      return;
+  // Clear previous lights
+  this.sceneLights.forEach(l => this.scene.remove(l));
+  this.sceneLights = [];
+
+  const defs = this.sceneDef?.lights;
+  if (!Array.isArray(defs)) return;
+
+  defs.forEach(def => {
+    let light;
+
+    switch (def.type) {
+      case "ambient":
+        light = new THREE.AmbientLight(
+          def.color ?? 0xffffff,
+          def.intensity ?? 1
+        );
+        break;
+
+      case "directional":
+        light = new THREE.DirectionalLight(
+          def.color ?? 0xffffff,
+          def.intensity ?? 1
+        );
+        break;
+
+      case "point":
+        light = new THREE.PointLight(
+          def.color ?? 0xffffff,
+          def.intensity ?? 1,
+          def.distance ?? 0,
+          def.decay ?? 1
+        );
+        break;
+
+      case "spot":
+        light = new THREE.SpotLight(
+          def.color ?? 0xffffff,
+          def.intensity ?? 1,
+          def.distance ?? 0,
+          def.angle ?? Math.PI / 4,
+          def.penumbra ?? 0,
+          def.decay ?? 1
+        );
+        break;
+
+      default:
+        console.warn("Unknown light type:", def.type);
+        return;
     }
 
-    this.sceneLights.forEach(light => this.scene.remove(light));
-    this.sceneLights = [];
+    
+	
+	// Position
+    if (def.position) {
+      light.position.set(
+        def.position.x ?? 0,
+        def.position.y ?? 0,
+        def.position.z ?? 0
+      );
+    }
 
-    this.sceneDef.lights.forEach((lightDef) => {
-      let light = null;
+    // Target (directional / spot)
+    if (def.target && light.target) {
+      const t = new THREE.Object3D();
+      t.position.set(def.target.x, def.target.y, def.target.z);
+      this.scene.add(t);
+      light.target = t;
+    }
 
-      switch (lightDef.type) {
-        case "ambient":
-          light = new THREE.AmbientLight(lightDef.color ?? 0xffffff, lightDef.intensity ?? 1);
-          break;
+    // Shadows
+    if (def.castShadow) {
+      light.castShadow = true;
 
-        case "directional":
-          light = new THREE.DirectionalLight(lightDef.color ?? 0xffffff, lightDef.intensity ?? 1);
-          if (lightDef.position) {
-            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
-          }
-          if (lightDef.target) {
-            const target = new THREE.Object3D();
-            target.position.set(lightDef.target.x, lightDef.target.y, lightDef.target.z);
-            this.scene.add(target);
-            light.target = target;
-          }
-          break;
-
-        case "point":
-          light = new THREE.PointLight(
-            lightDef.color ?? 0xffffff,
-            lightDef.intensity ?? 1,
-            lightDef.distance ?? 0,
-            lightDef.decay ?? 1
-          );
-          if (lightDef.position) {
-            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
-          }
-          break;
-
-        case "spot":
-          light = new THREE.SpotLight(
-            lightDef.color ?? 0xffffff,
-            lightDef.intensity ?? 1,
-            lightDef.distance ?? 0,
-            lightDef.angle ?? Math.PI / 4,
-            lightDef.penumbra ?? 0,
-            lightDef.decay ?? 1
-          );
-          if (lightDef.position) {
-            light.position.set(lightDef.position.x, lightDef.position.y, lightDef.position.z);
-          }
-          if (lightDef.target) {
-            const target = new THREE.Object3D();
-            target.position.set(lightDef.target.x, lightDef.target.y, lightDef.target.z);
-            this.scene.add(target);
-            light.target = target;
-          }
-          break;
-
-        default:
-          console.warn("Unknown light type:", lightDef.type);
-          break;
+      const s = def.shadow ?? {};
+      if (s.mapSize) {
+        light.shadow.mapSize.set(
+          s.mapSize.width ?? 1024,
+          s.mapSize.height ?? 1024
+        );
+      }
+      if (typeof s.bias === "number") {
+        light.shadow.bias = s.bias;
+      }
+      if (typeof s.radius === "number") {
+        light.shadow.radius = s.radius;
       }
 
-      if (light) {
-        this.scene.add(light);
-        this.sceneLights.push(light);
+      if (light.shadow.camera) {
+        light.shadow.camera.near = s.near ?? 0.1;
+        light.shadow.camera.far  = s.far ?? def.distance ?? 50;
       }
-    });
-  }
+    }
+
+    this.scene.add(light);
+
+    this.sceneLights.push(light);
+  });
+
+}
+
 
   // -----------------------------
   // Load Scene (adjusted)
@@ -201,8 +228,15 @@ export class SceneLoader {
     });
 
     // Construct room around enemies/props
-    this._calculateRoomBounds();
+    //this._calculateRoomBounds();
     //this._createRoom();
+if (sceneDef.room) {
+  this._useDefinedRoom(sceneDef.room);
+} else {
+  this._calculateRoomBounds();
+}
+
+this._createRoom();
 
     // Lights must be created AFTER room and AFTER sceneDef exists
     this._createLights();
@@ -224,7 +258,7 @@ export class SceneLoader {
 
     this.objective = sceneDef.objective ?? null;
 
-    this._notifyLoaded();
+    //this._notifyLoaded();
   }
 
   // -----------------------------
@@ -296,10 +330,30 @@ export class SceneLoader {
     });
   }
 
+
+_useDefinedRoom(roomDef) {
+  this.roomWidth  = roomDef.width;
+  this.roomHeight = roomDef.height;
+  this.roomDepth  = roomDef.depth;
+
+  // Default center is origin
+  this.roomCenterOffset = new THREE.Vector3(0, 0, 0);
+
+  // Optional center override
+  if (roomDef.center) {
+    this.roomCenterOffset.set(
+      roomDef.center.x ?? 0,
+      roomDef.center.y ?? 0,
+      roomDef.center.z ?? 0
+    );
+  }
+}
+
+
   // -----------------------------
   // Create Room (unchanged)
   // -----------------------------
-  _createRoom() {
+_createRoom() {
     const w = this.roomWidth;
     const h = this.roomHeight;
     const d = this.roomDepth;
@@ -307,46 +361,64 @@ export class SceneLoader {
     const texLoader = new THREE.TextureLoader();
     const roomTex = this.sceneDef.roomTextures || {};
 
+    // --- Materials ---
     const floorMat = roomTex.floor
-      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.floor) })
-      : new THREE.MeshBasicMaterial({ color: 0x444444 });
+        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
+        : new THREE.MeshStandardMaterial({ color: 0x444444 });
 
     const ceilingMat = roomTex.ceiling
-      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.ceiling) })
-      : new THREE.MeshBasicMaterial({ color: 0x666666 });
+        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
+        : new THREE.MeshStandardMaterial({ color: 0x666666 });
 
     const wallMat = roomTex.wall
-      ? new THREE.MeshBasicMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
-      : new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide });
+        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
+        : new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
 
+    const backWallMat = roomTex.backWall
+        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.backWall), side: THREE.DoubleSide })
+        : wallMat;
+
+    // --- Floor ---
     const floorGeo = new THREE.PlaneGeometry(w, d);
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, 0, 0);
     floor.position.sub(this.roomCenterOffset);
+    floor.receiveShadow = true;
+    floor.castShadow = false;
     this.scene.add(floor);
     this.roomMeshes.push(floor);
 
+    // --- Ceiling ---
     const ceilingGeo = new THREE.PlaneGeometry(w, d);
     const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.set(0, h, 0);
     ceiling.position.sub(this.roomCenterOffset);
+    ceiling.receiveShadow = true;
+    ceiling.castShadow = false;
     this.scene.add(ceiling);
     this.roomMeshes.push(ceiling);
 
+    // --- Back Wall ---
     const backWallGeo = new THREE.PlaneGeometry(w, h);
-    const backWall = new THREE.Mesh(backWallGeo, wallMat);
+    const backWall = new THREE.Mesh(backWallGeo, backWallMat);
     backWall.position.set(0, h / 2, -d / 2);
     backWall.position.sub(this.roomCenterOffset);
+    backWall.castShadow = true;
+    backWall.receiveShadow = true;
     this.scene.add(backWall);
     this.roomMeshes.push(backWall);
 
+    // --- Side Walls ---
     const sideWallGeo = new THREE.PlaneGeometry(d, h);
+
     const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
     leftWall.rotation.y = Math.PI / 2;
     leftWall.position.set(-w / 2, h / 2, -d / 2);
     leftWall.position.sub(this.roomCenterOffset);
+    leftWall.castShadow = true;
+    leftWall.receiveShadow = true;
     this.scene.add(leftWall);
     this.roomMeshes.push(leftWall);
 
@@ -354,10 +426,16 @@ export class SceneLoader {
     rightWall.rotation.y = -Math.PI / 2;
     rightWall.position.set(w / 2, h / 2, -d / 2);
     rightWall.position.sub(this.roomCenterOffset);
+    rightWall.castShadow = true;
+    rightWall.receiveShadow = true;
     this.scene.add(rightWall);
     this.roomMeshes.push(rightWall);
-  }
 
+    // --- Enable shadows on props and enemies ---
+    this.props.forEach(p => { if(p.mesh){ p.mesh.castShadow = true; p.mesh.receiveShadow = true; } });
+    this.enemies.forEach(e => { if(e.mesh){ e.mesh.castShadow = true; e.mesh.receiveShadow = true; } });
+}
+  
   // -----------------------------
   // Projectiles (unchanged)
   // -----------------------------

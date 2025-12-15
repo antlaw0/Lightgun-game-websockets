@@ -243,15 +243,16 @@ window.cam = () => {
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(cw, ch);
+renderer.physicallyCorrectLights = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
 
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
 
-// Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(5, 10, 5);
-scene.add(dirLight);
 
 // ------------------ Reticle Tracking ------------------
 let ret = { x: cw/2, y: ch/2 };         // target position from controller (pixels)
