@@ -613,7 +613,18 @@ bullet.userData.explosionPos = hits[0].point.clone();
         const pos = b.userData.explosionPos;
         if (pos) {
             if (player.currentWeapon.explosive == true) {
-			window.spawnTestExplosion(pos.x, pos.y, pos.z);
+		
+	
+			window.spawnTestExplosion({
+  x: pos.x,
+  y: pos.y,
+  z: pos.z,
+  blastRadius: player.currentWeapon.explosionRadius,
+  maxDamage: player.currentWeapon.explosionDamage,
+  explosionSounds: player.currentWeapon.explosionSounds
+});
+
+			
 			}
         }
 

@@ -26,7 +26,7 @@ function baseWeapon(def) {
     explosive: def.explosive || false,
     explosionRadius: def.explosionRadius || 0,
     explosionDamage: def.explosionDamage || 0,
-
+explosionSounds:  def.explosionSounds,
     weaponIcon: def.weaponIcon,
     clipSize: def.clipSize,
     totalAmmo: def.totalAmmo
@@ -123,7 +123,7 @@ export const WEAPON_DEFS = {
     explosive: true,
     explosionRadius: 6,
     explosionDamage: 150,
-
+explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosions/explosion_1B.ogg"],
     weaponIcon: "assets/images/weapons/rocket_launcher.png",
     clipSize: 1,
     totalAmmo: 5

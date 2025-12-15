@@ -590,12 +590,14 @@ export class SceneLoader {
   }
 }
 
-window.spawnTestExplosion = function(
+window.spawnTestExplosion = function({
   x = 0,
   y = 1,
   z = 0,
-  blastRadius = 4
-) {
+  blastRadius = 4,
+  maxDamage = 10,
+  explosionSounds = []  // array of audio file paths
+} = {}) {
   if (!window.sceneLoader) {
     console.warn("sceneLoader not found!");
     return;
@@ -608,11 +610,13 @@ window.spawnTestExplosion = function(
     pos,
     {
       blastRadius,
-      floorY: y - 0.1 // catwalk-safe
+      maxDamage,
+      explosionSounds,
+      floorY: y - 0.1  // catwalk-safe
     }
   );
 
   window.sceneLoader.addExplosion(explosion);
 
-  console.log(`Spawned explosion at (${x}, ${y}, ${z})`);
+  console.log(`Spawned explosion at (${x}, ${y}, ${z}), radius ${blastRadius}, damage ${maxDamage}`);
 };

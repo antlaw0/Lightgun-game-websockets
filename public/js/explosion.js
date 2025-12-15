@@ -1,209 +1,212 @@
-// js/explosion.js
-// Complete, stable explosion + particle system
-// Fixes particles freezing midair on catwalks by enforcing gravity, floor collision,
-// lifetime decay, and proper cleanup.
-
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
-
-// =====================================================
-// PointsParticlePool
-// =====================================================
-
-class PointsParticlePool {
-  constructor(scene, {
-    maxParticles = 300,
-    gravity = -18,
-    drag = 2.5,
-    floorY = 0.0
-  } = {}) {
-    this.scene = scene;
-    this.maxParticles = maxParticles;
-    this.gravity = gravity;
-    this.drag = drag;
-    this.floorY = floorY;
-
-    this.count = 0;
-
-    this.positions = new Float32Array(maxParticles * 3);
-    this.velocities = new Float32Array(maxParticles * 3);
-    this.lifetimes = new Float32Array(maxParticles);
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
-
-    const material = new THREE.PointsMaterial({
-      color: 0xffaa44,
-      size: 0.12,
-      transparent: true,
-      opacity: 1.0,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    this.points = new THREE.Points(geometry, material);
-    this.scene.add(this.points);
-  }
-
-  emit(position, velocity, lifetime) {
-    if (this.count >= this.maxParticles) return;
-
-    const i = this.count;
-    const pi = i * 3;
-
-    this.positions[pi]     = position.x;
-    this.positions[pi + 1] = position.y;
-    this.positions[pi + 2] = position.z;
-
-    this.velocities[pi]     = velocity.x;
-    this.velocities[pi + 1] = velocity.y;
-    this.velocities[pi + 2] = velocity.z;
-
-    this.lifetimes[i] = lifetime;
-    this.count++;
-  }
-
-  update(dt) {
-    if (this.count === 0) return;
-
-    let write = 0;
-
-    for (let i = 0; i < this.count; i++) {
-      const pi = i * 3;
-
-      let life = this.lifetimes[i] - dt;
-      if (life <= 0) continue;
-
-      let vx = this.velocities[pi];
-      let vy = this.velocities[pi + 1];
-      let vz = this.velocities[pi + 2];
-
-      // gravity
-      vy += this.gravity * dt;
-
-      // drag
-      const dragFactor = Math.max(0, 1 - this.drag * dt);
-      vx *= dragFactor;
-      vy *= dragFactor;
-      vz *= dragFactor;
-
-      let x = this.positions[pi]     + vx * dt;
-      let y = this.positions[pi + 1] + vy * dt;
-      let z = this.positions[pi + 2] + vz * dt;
-
-      // floor collision clamp
-      if (y < this.floorY) {
-        y = this.floorY;
-        vy = 0; // stick instead of float or bounce
-      }
-
-      const wpi = write * 3;
-
-      this.positions[wpi]     = x;
-      this.positions[wpi + 1] = y;
-      this.positions[wpi + 2] = z;
-
-      this.velocities[wpi]     = vx;
-      this.velocities[wpi + 1] = vy;
-      this.velocities[wpi + 2] = vz;
-
-      this.lifetimes[write] = life;
-      write++;
-    }
-
-    this.count = write;
-    this.points.geometry.attributes.position.needsUpdate = true;
-  }
-
-  isEmpty() {
-    return this.count === 0;
-  }
-
-  dispose() {
-    this.scene.remove(this.points);
-    this.points.geometry.dispose();
-    this.points.material.dispose();
-  }
-}
-
-// =====================================================
-// Explosion
-// =====================================================
-
+// explosion.js
 export class Explosion {
-  constructor(scene, position, {
-    particleCount = 120,
-    blastRadius = 2.5,
-    lifespan = 900,
-    floorY = 0.0
-  } = {}) {
+  constructor(scene, position, options = {}) {
     this.scene = scene;
     this.position = position.clone();
-    this.lifespan = lifespan;
-    this.ageMs = 0;
-    this.done = false;
 
-    // flash sphere
-    const geo = new THREE.SphereGeometry(0.2, 16, 16);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffeeaa,
-      transparent: true,
-      opacity: 1.0
+    this.blastRadius = options.blastRadius ?? 4;
+    this.maxDamage = options.maxDamage ?? 10;
+    this.floorY = options.floorY ?? 0;
+    this.explosionSounds = options.explosionSounds ?? [];
+    this.age = 0;
+    this.lifespan = options.lifespan ?? 0.3;
+    this.isDone = false;
+// --- Explosion particles ---
+this.particleCount = options.particleCount ?? 60;
+this.particles = null;
+this.particleVelocities = [];
+
+this._createParticles();
+
+
+    const geo = new THREE.SphereGeometry(0.1, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffaa33 });
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.position.copy(this.position);
+    this.scene.add(this.mesh);
+
+    this._appliedDamage = false;
+	
+	    this._playExplosionSound();
+  }
+  _playExplosionSound() {
+    if (!this.explosionSounds || this.explosionSounds.length === 0) return;
+
+    const i = Math.floor(Math.random() * this.explosionSounds.length);
+    const src = this.explosionSounds[i];
+
+    const audio = new Audio(src);
+    audio.currentTime = 0;
+    audio.play().catch(err => {
+      console.warn("Explosion sound failed:", err);
     });
-
-    this.flash = new THREE.Mesh(geo, mat);
-    this.flash.position.copy(this.position);
-    this.scene.add(this.flash);
-
-    // particles
-    this.pool = new PointsParticlePool(scene, { floorY });
-
-    for (let i = 0; i < particleCount; i++) {
-      const dir = new THREE.Vector3(
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1
-      ).normalize();
-
-      const speed = (0.8 + Math.random() * 1.6) * blastRadius * 3;
-      const vel = dir.multiplyScalar(speed);
-
-      const spawn = this.position.clone();
-      spawn.y += 0.25; // lift off catwalk
-
-      this.pool.emit(spawn, vel, 0.4 + Math.random() * 0.7);
-    }
   }
 
-  update(dt) {
-    if (this.done) return;
+  
+  _createParticles() {
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(this.particleCount * 3);
 
-    this.ageMs += dt * 1000;
+  this.particleVelocities.length = 0;
 
-    // flash fade & expand
-    if (this.flash) {
-      const t = Math.min(this.ageMs / this.lifespan, 1);
-      this.flash.scale.setScalar(1 + t * 4);
-      this.flash.material.opacity = (1 - t) * 0.9;
+  for (let i = 0; i < this.particleCount; i++) {
+    const i3 = i * 3;
+
+    // Start at explosion center
+    positions[i3] = this.position.x;
+    positions[i3 + 1] = this.position.y;
+    positions[i3 + 2] = this.position.z;
+
+    // Random outward velocity
+    const dir = new THREE.Vector3(
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ).normalize();
+
+    const speed = THREE.MathUtils.lerp(2, 6, Math.random());
+    this.particleVelocities.push(dir.multiplyScalar(speed));
+  }
+
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3)
+  );
+
+  const material = new THREE.PointsMaterial({
+    color: 0xffaa33,
+    size: 0.15,
+    transparent: true,
+    opacity: 1,
+    depthWrite: false
+  });
+
+  this.particles = new THREE.Points(geometry, material);
+  this.scene.add(this.particles);
+}
+
+
+
+_updateParticles(deltaSeconds) {
+  if (!this.particles) return;
+
+  const positions = this.particles.geometry.attributes.position.array;
+
+  for (let i = 0; i < this.particleCount; i++) {
+    const i3 = i * 3;
+    const vel = this.particleVelocities[i];
+
+    positions[i3]     += vel.x * deltaSeconds;
+    positions[i3 + 1] += vel.y * deltaSeconds;
+    positions[i3 + 2] += vel.z * deltaSeconds;
+  }
+
+  this.particles.geometry.attributes.position.needsUpdate = true;
+
+  // Fade out
+  this.particles.material.opacity =
+    1 - Math.min(this.age / this.lifespan, 1);
+}
+
+  
+  update(deltaSeconds) {
+    if (this.isDone) return;
+    this.age += deltaSeconds;
+
+    const scale = Math.min(this.age / this.lifespan, 1) * this.blastRadius;
+    if (this.mesh) this.mesh.scale.set(scale, scale, scale);
+this._updateParticles(deltaSeconds);
+
+    if (!this._appliedDamage) {
+      this._applyExplosionDamage();
+      this._appliedDamage = true;
     }
 
-    this.pool.update(dt);
-
-    if (this.ageMs >= this.lifespan && this.pool.isEmpty()) {
-      this.destroy();
-    }
+    if (this.age >= this.lifespan) this.isDone = true;
   }
 
   destroy() {
-    if (this.done) return;
-    this.done = true;
+  if (this.mesh && this.mesh.parent) {
+    this.mesh.parent.remove(this.mesh);
+  }
 
-    if (this.flash) {
-      this.scene.remove(this.flash);
-      this.flash.geometry.dispose();
-      this.flash.material.dispose();
-      this.flash = null;
+  if (this.particles && this.particles.parent) {
+    this.particles.parent.remove(this.particles);
+  }
+}
+
+dispose() {
+  if (this.mesh) {
+    this.mesh.geometry?.dispose();
+    this.mesh.material?.dispose();
+  }
+
+  if (this.particles) {
+    this.particles.geometry?.dispose();
+    this.particles.material?.dispose();
+  }
+}
+
+  _applyExplosionDamage() {
+  if (!window.sceneLoader) return;
+  const loader = window.sceneLoader;
+
+  const targets = [
+    ...loader.props.map(p => ({ obj: p, type: "prop", pos: p.mesh.position })),
+    ...loader.enemies.map(e => ({ obj: e, type: "enemy", pos: e.mesh.position }))
+  ];
+
+  targets.sort((a, b) => a.pos.distanceTo(this.position) - b.pos.distanceTo(this.position));
+
+  const computeDamage = (dist) => {
+    if (dist > this.blastRadius) return 0;
+    return this.maxDamage * (1 - dist / this.blastRadius);
+  };
+
+  for (const target of targets) {
+    const toTarget = new THREE.Vector3().subVectors(target.pos, this.position);
+    const dist = toTarget.length();
+    if (dist > this.blastRadius) continue;
+
+    let damage = computeDamage(dist);
+    if (damage <= 0) continue;
+
+    console.log(`Explosion: Target ${target.obj.id || target.obj.mesh?.userData.propId || 'unknown'} type=${target.type}, dist=${dist.toFixed(2)}, damage=${damage.toFixed(2)}`);
+
+    // Check LOS blocked by props
+    let blocked = false;
+    for (const prop of loader.props) {
+      if (prop.coverType === "none") continue;
+      if (prop.intersectsLine(this.position, target.pos)) {
+        console.log(`Explosion: LOS hit prop ${prop.id}, coverType=${prop.coverType}`);
+        if (target.obj === prop && target.type === "prop") {
+          const result = prop.applyExplosionDamage(damage);
+          console.log(`Explosion: Prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
+          damage = result.passedThrough;
+          if (result.destroyed && prop.coverType === "full") blocked = true;
+          break;
+        } else {
+          const result = prop.applyExplosionDamage(damage);
+          console.log(`Explosion: Blocking prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
+          damage = result.passedThrough;
+          if (prop.coverType === "full" && damage <= 0) {
+            blocked = true;
+            break;
+          }
+        }
+      }
     }
 
-    this.pool.dispose();
+    if (damage <= 0 || blocked) continue;
+
+    if (target.type === "prop") {
+      console.log(`Explosion: Applying ${damage.toFixed(2)} damage to prop ${target.obj.id}`);
+      const died = target.obj.takeDamage(damage);
+      if (died) console.log(`Explosion: Prop ${target.obj.id} died!`);
+    } else if (target.type === "enemy") {
+      console.log(`Explosion: Applying ${damage.toFixed(2)} damage to enemy ${target.obj.id}`);
+      target.obj.takeDamage(damage);
+    }
   }
+}
 }

@@ -179,11 +179,19 @@ export class Prop {
     return mesh;
   }
 
-  _die() {
-    this._playRandom(this.deathSounds);
-    if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-  }
+_die() {
+  this._playRandom(this.deathSounds);
 
+  // Remove mesh from scene
+  if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+
+  // Remove from sceneLoader.props so it stops being processed/rendered
+  if (window.sceneLoader) {
+    const index = window.sceneLoader.props.indexOf(this);
+    if (index !== -1) window.sceneLoader.props.splice(index, 1);
+  }
+}
+  
   dispose() {
     if (!this.mesh) return;
     try {

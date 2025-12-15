@@ -227,18 +227,45 @@ export class Enemy {
   }
 
   die() {
-    if (this._isDead) return;
-    this._isDead = true;
+  if (this._isDead) return;
+  this._isDead = true;
+
+  // Play death sounds
+  this._playRandom(this.deathSounds);
+
+  // Hide and remove mesh from scene
+  if (this.mesh) {
     this.mesh.visible = false;
 
-    this._playRandom(this.deathSounds);
+    if (this.sceneGroup && this.mesh.parent) {
+      this.sceneGroup.remove(this.mesh);
+    }
 
-    window.dispatchEvent(new CustomEvent("enemyDied", {
-      detail: { id: this.id }
-    }));
+    // Dispose of geometry/material to free memory
+    if (this.mesh.geometry) this.mesh.geometry.dispose();
+    if (this.mesh.material) {
+      if (this.mesh.material.map) this.mesh.material.map.dispose();
+      this.mesh.material.dispose();
+    }
   }
 
-  update(deltaMs, nowMs, player) {
+  // Remove from global enemy array
+  const idx = ENEMY_INSTANCES.indexOf(this);
+  if (idx !== -1) ENEMY_INSTANCES.splice(idx, 1);
+
+  // Remove from sceneLoader.enemies if it exists
+  if (window.sceneLoader && Array.isArray(window.sceneLoader.enemies)) {
+    const sceneIdx = window.sceneLoader.enemies.indexOf(this);
+    if (sceneIdx !== -1) window.sceneLoader.enemies.splice(sceneIdx, 1);
+  }
+
+  // Dispatch event for any other game logic
+  window.dispatchEvent(new CustomEvent("enemyDied", {
+    detail: { id: this.id }
+  }));
+}
+
+update(deltaMs, nowMs, player) {
     if (this._isDead) return;
 
     const pattern = this.behavior.pattern;
