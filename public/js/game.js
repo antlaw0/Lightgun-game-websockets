@@ -563,70 +563,68 @@ function triggerFire() {
 }
 
 function updateProjectiles(dt) {
-
     const toRemove = [];
     const intersectables = sceneLoader.getIntersectableMeshes() || [];
     const rayTemp = new THREE.Raycaster();
 
     for (const bullet of projectiles) {
+        // --- SAVE PREVIOUS POSITION ---
+        const prevPos = bullet.position.clone();
+
+        // --- MOVE BULLET ---
         const dir = bullet.userData.direction;
         const moveDist = PROJECTILE_SPEED * (dt / 1000);
-
-        // Move the bullet
         bullet.position.addScaledVector(dir, moveDist);
 
-        // Lifetime check
+        // --- LIFETIME CHECK ---
         const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
         if (aliveTime > PROJECTILE_LIFETIME) {
-
             bullet.updateMatrixWorld(true);
             const worldPos = new THREE.Vector3();
             bullet.getWorldPosition(worldPos);
             bullet.userData.explosionPos = worldPos;
-
             toRemove.push(bullet);
             continue;
         }
 
-        // Collision detection
-        rayTemp.set(bullet.position, dir);
-        const hits = rayTemp.intersectObjects(intersectables, false);
+        // --- COLLISION CHECK ---
+        const travelVec = new THREE.Vector3().subVectors(bullet.position, prevPos);
+        const travelDist = travelVec.length();
+        if (travelDist > 0) {
+            rayTemp.set(prevPos, travelVec.normalize());
+            rayTemp.far = travelDist;
 
-        if (hits.length > 0) {
-            const mesh = hits[0].object;
+            const hits = rayTemp.intersectObjects(intersectables, true);
+            if (hits.length > 0) {
+                const hit = hits[0];
+                const mesh = hit.object;
 
-            if (mesh.userData.enemy) {
-                mesh.userData.enemy.takeDamage(bullet.userData.damage);
-            } else {
-                sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+                bullet.userData.explosionPos = hit.point.clone();
+
+                if (mesh.userData.enemy) {
+                    mesh.userData.enemy.takeDamage(bullet.userData.damage);
+                } else {
+                    sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+                }
+
+                logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
+                toRemove.push(bullet);
             }
-
-            logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
-bullet.userData.explosionPos = hits[0].point.clone();
-
-            
-            toRemove.push(bullet);
         }
     }
 
-    // Removal + explosion
+    // --- REMOVE EXPIRED BULLETS ---
     for (const b of toRemove) {
         const pos = b.userData.explosionPos;
-        if (pos) {
-            if (player.currentWeapon.explosive == true) {
-		
-	
-			window.spawnTestExplosion({
-  x: pos.x,
-  y: pos.y,
-  z: pos.z,
-  blastRadius: player.currentWeapon.explosionRadius,
-  maxDamage: player.currentWeapon.explosionDamage,
-  explosionSounds: player.currentWeapon.explosionSounds
-});
-
-			
-			}
+        if (pos && player.currentWeapon.explosive) {
+            window.spawnTestExplosion({
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                blastRadius: player.currentWeapon.explosionRadius,
+                maxDamage: player.currentWeapon.explosionDamage,
+                explosionSounds: player.currentWeapon.explosionSounds
+            });
         }
 
         scene.remove(b);

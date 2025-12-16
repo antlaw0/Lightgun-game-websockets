@@ -69,13 +69,41 @@ export class Projectile {
   // Update position each frame
   //------------------------------------------------------------
   update(deltaMs) {
-    const dt = deltaMs / 1000;
-    this.mesh.position.addScaledVector(this.dir, this.speed * dt);
+  const dt = deltaMs / 1000;
 
-    if (this.type === "enemy") {
-      this._checkHitPlayer();
-    }
+  // store previous position for swept collision
+  this.prevPosition = this.mesh.position.clone();
+
+  // move projectile
+  this.mesh.position.addScaledVector(this.dir, this.speed * dt);
+
+  if (this.type === "enemy") {
+    this._checkHitPlayer();
   }
+}
+
+//------------------------------------------------------------
+// Check collision against world geometry using swept ray
+//------------------------------------------------------------
+checkCollision(intersectables) {
+  if (!this.prevPosition || !this.mesh) return null;
+
+  const travelVec = new THREE.Vector3()
+    .subVectors(this.mesh.position, this.prevPosition);
+
+  const travelDist = travelVec.length();
+  if (travelDist === 0) return null;
+
+  const raycaster = new THREE.Raycaster(
+    this.prevPosition,
+    travelVec.normalize(),
+    0,
+    travelDist
+  );
+
+  const hits = raycaster.intersectObjects(intersectables, true);
+  return hits.length > 0 ? hits[0] : null;
+}
 
   //------------------------------------------------------------
   // Check collision against player's camera hit sphere

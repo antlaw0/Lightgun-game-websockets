@@ -73,7 +73,7 @@ export const Scene_W1_1 = {
         hp: 10,
         maxHp: 200,
         position: { x: -5.5, y: 2.5, z: -6 }, // wall centered along X
-        size: { x: 9, y: 5, z: 2 },           // extends from x=-10 to x≈-1
+        size: { x: 9, y: 5, z: 0.2 },           // extends from x=-10 to x≈-1
         rotation: { x: 0, y: 0, z: 0 },
         texture: "assets/props/yellow.png",
         coverType: "full",

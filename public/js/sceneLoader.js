@@ -55,7 +55,13 @@ export class SceneLoader {
 
     // scene + mesh tracking
     this.scene.add(propInstance.mesh);
-    this.propMeshes.push(propInstance.mesh);
+    propInstance.mesh.traverse(obj => {
+  if (obj.isMesh) {
+    this.propMeshes.push(obj);
+  }
+});
+
+	
   }
 
   addEnemy(enemyInstance) {
@@ -64,7 +70,13 @@ export class SceneLoader {
     if (enemyInstance.id) this.enemiesById[enemyInstance.id] = enemyInstance;
 
     this.scene.add(enemyInstance.mesh);
-    this.enemyMeshes.push(enemyInstance.mesh);
+    enemyInstance.mesh.traverse(obj => {
+  if (obj.isMesh) {
+    this.enemyMeshes.push(obj);
+  }
+});
+
+	
   }
 
   addExplosion(explosionInstance) {
@@ -197,21 +209,25 @@ export class SceneLoader {
       if (!pdef.id) pdef.id = `prop_${idx}`;
 
       const p = new PropClass({
-        ...pdef,
-        id: pdef.id,
-        coverType: pdef.coverType ?? "none"
-      });
+  ...pdef,
+  id: pdef.id,
+  coverType: pdef.coverType ?? "none"
+});
 
-      // ensure mesh userData has propId, keep compatibility
-      p.mesh.userData = Object.assign(p.mesh.userData || {}, {
-        propId: pdef.id,
-        coverType: pdef.coverType ?? "none",
-        size: pdef.size
-      });
-
-      // register via helper
-      this.addProp(p);
+// Tag ALL meshes inside the prop so raycasts work correctly
+p.mesh.traverse(obj => {
+  if (obj.isMesh) {
+    obj.userData = Object.assign(obj.userData || {}, {
+      propId: pdef.id,
+      coverType: pdef.coverType ?? "none",
+      size: pdef.size
     });
+  }
+});
+
+// register via helper
+this.addProp(p);
+});
 
     // Enemies
     const enemyDefs = sceneDef.enemies ?? [];
@@ -452,7 +468,6 @@ _createRoom() {
     });
 
     this.projectiles[id] = p;
-    this.projectileMeshes.push(p.mesh);
     return p;
   }
 
@@ -499,21 +514,31 @@ _createRoom() {
   // -----------------------------
   update(deltaMs, nowMs) {
     this.frameCount++;
+
+Object.entries(this.projectiles).forEach(([id, proj]) => {
+  proj.update(deltaMs);
+
+  const hit = proj.checkCollision(this.getIntersectableMeshes());
+  if (hit) {
+    this.applyDamageToMesh(hit.object, proj.damage);
+    proj.dispose();
+    delete this.projectiles[id];
+    return;
+  }
+
+  if (proj.isExpired(nowMs)) {
+    proj.dispose();
+    delete this.projectiles[id];
+  }
+});
+
 // SceneLoader.update(deltaMs)
     // Enemies (iterate array)
     this.enemies.forEach((en) => {
       try { en.update(deltaMs, nowMs, this.player); } catch (e) { console.warn("Enemy update error", e); }
     });
 
-    // Projectiles
-    Object.entries(this.projectiles).forEach(([id, proj]) => {
-      proj.update(deltaMs);
-      if (proj.isExpired(nowMs)) {
-        proj.dispose();
-        delete this.projectiles[id];
-      }
-    });
-
+    
     // Explosions: call update on each; remove and cleanup when finished.
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       const ex = this.explosions[i];
