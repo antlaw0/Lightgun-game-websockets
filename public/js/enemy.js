@@ -71,6 +71,34 @@ export class Enemy {
    * @param {object} player Player reference
    * @param {function} fireCallback Function(originVec3, targetVec3, speed) => Projectile
    */
+  
+  
+  _hasClearShot(muzzle, targetPos) {
+  if (!window.sceneLoader || !window.sceneLoader.staticObjects) return true;
+
+  const rayDir = targetPos.clone().sub(muzzle).normalize();
+  const raycaster = new THREE.Raycaster(muzzle, rayDir, 0.01, muzzle.distanceTo(targetPos));
+
+  // Only test against full-cover objects
+  const blockers = window.sceneLoader.staticObjects
+    .filter(o => o.coverType === "full" && o.mesh)
+    .map(o => o.mesh);
+
+  if (blockers.length === 0) return true;
+
+  const hits = raycaster.intersectObjects(blockers, false);
+  return hits.length === 0;
+}
+
+  
+  _resolveCoverObject() {
+  if (!this.coverObjectId) return null;
+  if (!window.sceneLoader || !window.sceneLoader.staticObjects) return null;
+
+  return window.sceneLoader.staticObjects.find(o => o.id === this.coverObjectId) || null;
+}
+
+  
   constructor(sceneGroup, def, instanceConfig, player, fireCallback) {
     this.id = instanceConfig.id || `enemy_${Date.now()}`;
     this.type = def.displayName || "Enemy";
@@ -96,6 +124,7 @@ export class Enemy {
 
     this.facing = instanceConfig.facing || 0;
     this.coverIndex = instanceConfig.coverIndex ?? null;
+this.coverObjectId = instanceConfig.coverObject || null;
 
     // Behavior: default to standing, or use provided behavior
     this.behavior = instanceConfig.behavior || (def.behavior ? def.behavior : { pattern: "standInOpen", params: {} });
@@ -131,6 +160,7 @@ export class Enemy {
     // animation/pop state variables
     this._lastUpdateMs = performance.now();
     this._isDead = false;
+this._isFullyPoppedTarget = false;
 
     // Pop/out timing configuration with jitter
     const p = this.behavior.params || {};
@@ -158,9 +188,29 @@ export class Enemy {
     };
 
     // offsets used for animation targets (computed per enemy; lean side chosen randomly)
-    this._leanSide = (Math.random() < 0.5) ? -1 : 1; // -1 = left, 1 = right
-    this._targetOffset = new THREE.Vector3(0, 0, 0);
-    this._currentOffset = new THREE.Vector3(0, 0, 0);
+this._targetOffset = new THREE.Vector3(0, 0, 0);
+    
+this._leanSide = 1; // default right
+
+// Explicit override from behavior params
+if (this.behavior?.params?.leanSide) {
+  this._leanSide = (this.behavior.params.leanSide === "left") ? -1 : 1;
+} else if (this.coverType === "full") {
+  const cover = this._resolveCoverObject();
+  if (cover && cover.position && cover.size) {
+    const wallCenterX = cover.position.x;
+    const wallHalfX = cover.size.x * 0.5;
+
+    const leftEdgeX  = wallCenterX - wallHalfX;
+    const rightEdgeX = wallCenterX + wallHalfX;
+
+    const distToLeft  = Math.abs(this.basePosition.x - leftEdgeX);
+    const distToRight = Math.abs(this.basePosition.x - rightEdgeX);
+
+    // Lean out from the nearest edge
+    this._leanSide = (distToLeft < distToRight) ? -1 : 1;
+  }
+}
 
     // knockback vector applied on top of other offsets (decays over time)
     this._knockback = new THREE.Vector3();
@@ -287,40 +337,56 @@ update(deltaMs, nowMs, player) {
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
-    if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
+  if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
-    this.weapon.recordFire(nowMs);
+  const muzzle = this.mesh.position.clone();
+  muzzle.y += 0.9;
 
-    const muzzle = this.mesh.position.clone();
-    muzzle.y += 0.9;
-    const targetPos = this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
+  const targetPos =
+    this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
 
-    // Compute direction with accuracy deviation
-    const idealDir = targetPos.clone().sub(muzzle).normalize();
-    const deviatedDir = idealDir.clone();
-    if (this.accuracy < 1.0) {
-      const maxAngle = (1 - this.accuracy) * (Math.PI / 6);
-      const randAxis = new THREE.Vector3(
-        Math.random() - 0.5,
-        Math.random() - 0.5,
-        Math.random() - 0.5
-      ).normalize();
-      const angle = (Math.random() - 0.5) * maxAngle;
-      deviatedDir.applyAxisAngle(randAxis, angle).normalize();
-    }
-
-    // Call SceneLoader spawnProjectile
-    this.fireCallback(muzzle, muzzle.clone().add(deviatedDir.multiplyScalar(28)), 28);
-
-    // Optional: hit player immediately for testing
-    const angleBetween = idealDir.angleTo(deviatedDir);
-    const hitThreshold = 0.03;
-    if (angleBetween <= hitThreshold) {
-      window.dispatchEvent(new CustomEvent("enemyFiredHitPlayer", {
-        detail: { id: this.id, damage: this.weapon.damage }
-      }));
-    }
+  // HARD BLOCK: do not fire if wall is between muzzle and player
+  if (!this._hasClearShot(muzzle, targetPos)) {
+    return;
   }
+
+  // Fire is now physically valid
+  this.weapon.recordFire(nowMs);
+
+  // Compute direction with accuracy deviation
+  const idealDir = targetPos.clone().sub(muzzle).normalize();
+  const deviatedDir = idealDir.clone();
+
+  if (this.accuracy < 1.0) {
+    const maxAngle = (1 - this.accuracy) * (Math.PI / 6);
+    const randAxis = new THREE.Vector3(
+      Math.random() - 0.5,
+      Math.random() - 0.5,
+      Math.random() - 0.5
+    ).normalize();
+    const angle = (Math.random() - 0.5) * maxAngle;
+    deviatedDir.applyAxisAngle(randAxis, angle).normalize();
+  }
+
+  // Spawn projectile
+  this.fireCallback(
+    muzzle,
+    muzzle.clone().add(deviatedDir.multiplyScalar(28)),
+    28
+  );
+
+  // Optional immediate-hit logic
+  const angleBetween = idealDir.angleTo(deviatedDir);
+  const hitThreshold = 0.03;
+
+  if (angleBetween <= hitThreshold) {
+    window.dispatchEvent(
+      new CustomEvent("enemyFiredHitPlayer", {
+        detail: { id: this.id, damage: this.weapon.damage }
+      })
+    );
+  }
+}
 
   //
   // Behaviors
@@ -374,7 +440,7 @@ update(deltaMs, nowMs, player) {
         s.nextHiddenDuration = this._randInterval(cp.hideDurationMs, cp.maxIntervalMs);
       }
       // Make sure mesh is set to "behind cover" pose
-      this._setTargetForCoverHidden();
+      this._setTargetForCoverHidden(cp);
 
       if (elapsed >= s.nextHiddenDuration) {
         // begin popping
@@ -388,7 +454,7 @@ update(deltaMs, nowMs, player) {
       }
     } else if (s.phase === "popping") {
       // transition toward popped pose
-      this._setTargetForCoverPopped();
+      this._setTargetForCoverPopped(cp);
 
       if (elapsed >= (s.transitionMs || cp.popTransitionMs)) {
         s.phase = "firing";
@@ -398,11 +464,12 @@ update(deltaMs, nowMs, player) {
       }
     } else if (s.phase === "firing") {
       // hold popped pose and periodically fire
-      this._setTargetForCoverPopped();
-      if (nowMs - this._lastFireWhilePopped > cp.fireIntervalMs) {
-        this._attemptFire(nowMs);
-        this._lastFireWhilePopped = nowMs;
-      }
+      this._setTargetForCoverPopped(cp);
+if (this._isFullyPoppedTarget &&
+    nowMs - this._lastFireWhilePopped > cp.fireIntervalMs) {
+  this._attemptFire(nowMs);
+  this._lastFireWhilePopped = nowMs;
+}
 
       if (elapsed >= (s.firingDuration || cp.firingDurationMs)) {
         // start retreating
@@ -412,7 +479,7 @@ update(deltaMs, nowMs, player) {
       }
     } else if (s.phase === "retreating") {
       // move back into hidden pose smoothly
-      this._setTargetForCoverHidden();
+      this._setTargetForCoverHidden(cp);
 
       if (elapsed >= (s.transitionMs || cp.retreatTransitionMs)) {
         // go hidden; pick next random wait
@@ -426,65 +493,47 @@ update(deltaMs, nowMs, player) {
   }
 
   // compute pose target when fully popped (shooting)
-  _setTargetForCoverPopped() {
-    const cp = this._coverParams;
-    if (this.coverType === "low") {
-      // stand up slightly above basePosition
-      this._targetOffset.set(0, Math.abs(cp.crouchOffsetY) * -1 * 0.0, 0); // no big y move for popped (player sees full torso)
-      // keep scale normal
-      this._targetScale = this.baseScale.clone();
-      this._targetRotationY = this.baseRotationY;
-      this._targetPosition = this.basePosition.clone();
-      // For aesthetics, nudge slightly forward so they look like leaning out
-      this._targetPosition.x = this.basePosition.x;
-      this._targetPosition.y = this.basePosition.y;
-    } else if (this.coverType === "full") {
-      // Slight lean out left or right + rotate head/torso slightly
-      const lean = this._leanSide * this._coverParams.leanOffset;
-      this._targetOffset.set(lean, 0.02, 0);
-      // rotate on Y a little to simulate turning out from cover
-      this._targetRotationY = this.baseRotationY + (this._leanSide * -this._coverParams.leanRotationRad);
-      this._targetScale = this.baseScale.clone();
-      this._targetPosition = this.basePosition.clone();
-      this._targetPosition.x = this.basePosition.x + lean;
+  _setTargetForCoverPopped(cp) {
+  // Mark intent, not visual completion (Issue 3 fix)
+  this._isFullyPoppedTarget = true;
 
-      // Optional small forward nudge for visual depth
-      this._targetPosition.x = this.basePosition.x;
-      this._targetPosition.y = this.basePosition.y;
-    } else {
-      // default: simple pop up
-      this._targetOffset.set(0, 0.06, 0);
-      this._targetRotationY = this.baseRotationY;
-      this._targetScale = this.baseScale.clone();
-      this._targetPosition = this.basePosition.clone();
-    }
+  // Base position clone
+  this._targetPosition = this.basePosition.clone();
+
+  if (this.coverType === "full") {
+    const lean = this._leanSide * cp.leanOffset;
+
+    // Lean out from cover edge
+    this._targetPosition.x += lean;
+
+    // Slight vertical nudge for visual clarity
+    this._targetPosition.y += 0.02;
+  } else {
+    // Low cover: vertical pop
+    this._targetPosition.y = this.basePosition.y - cp.crouchOffsetY;
+
   }
+
+  // No positional offset accumulation here
+  this._targetOffset.set(0, 0, 0);
+}
 
   // compute pose target when hidden (behind cover)
-  _setTargetForCoverHidden() {
-    const cp = this._coverParams;
-    if (this.coverType === "low") {
-      // crouch: lower and slightly shrink
-      this._targetOffset.set(0, cp.crouchOffsetY, 0);
-      this._targetScale = new THREE.Vector3(this.baseScale.x * cp.crouchScale, this.baseScale.y * cp.crouchScale, this.baseScale.z * cp.crouchScale);
-      this._targetRotationY = this.baseRotationY;
-      this._targetPosition = this.basePosition.clone();
-    } else if (this.coverType === "full") {
-      // tuck back behind full cover: offset laterally away from pop side and keep mostly hidden
-      const tuck = -this._leanSide * Math.abs(cp.leanOffset);
-      this._targetOffset.set(tuck, -0.03, 0);
-      this._targetScale = new THREE.Vector3(this.baseScale.x * 0.98, this.baseScale.y * 0.98, this.baseScale.z * 0.98);
-      this._targetRotationY = this.baseRotationY + (this._leanSide * cp.leanRotationRad * 0.5);
-      this._targetPosition = this.basePosition.clone();
-      this._targetPosition.x = this.basePosition.x + tuck;
-    } else {
-      // default hidden slightly crouched
-      this._targetOffset.set(0, cp.crouchOffsetY * 0.6, 0);
-      this._targetScale = new THREE.Vector3(this.baseScale.x * 0.96, this.baseScale.y * 0.96, this.baseScale.z * 0.96);
-      this._targetRotationY = this.baseRotationY;
-      this._targetPosition = this.basePosition.clone();
-    }
+  _setTargetForCoverHidden(cp) {
+  // Clear intent flag (Issue 3 fix)
+  this._isFullyPoppedTarget = false;
+
+  this._targetPosition = this.basePosition.clone();
+
+  if (this.coverType === "full") {
+    // Tuck slightly deeper than lean to avoid edge clipping
+    const tuck = -this._leanSide * (cp.leanOffset + 0.05);
+    this._targetPosition.x += tuck;
   }
+
+  // Reset offsets cleanly
+  this._targetOffset.set(0, 0, 0);
+}
 
   // Smoothly lerp actual mesh transform toward target transforms each frame
   _applyAnimationSmoothing(deltaMs) {

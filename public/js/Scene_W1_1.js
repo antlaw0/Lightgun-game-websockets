@@ -1,70 +1,54 @@
-// js/Scene_W1_1.js
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
   background: {
     texture: "assets/backgrounds/black_bg.png",
-    width: 0,     // world units
-    height: 0, // 20 / (16/9)
-    position: { x: 0, y: 0, z: 0 } // behind everything
+    width: 0,
+    height: 0,
+    position: { x: 0, y: 0, z: 0 }
   },
 
-
-
-room: {
-  width: 20,
-  height: 8,
-  depth: 30
-},
-
+  room: {
+    width: 20,
+    height: 8,
+    depth: 30
+  },
 
   lights: [
-  {
-    type: "ambient",
-    color: 0x8899aa,
-    intensity: 0.4
+    { type: "ambient", color: 0x8899aa, intensity: 0.4 },
+    {
+      type: "spot",
+      color: 0xffffff,
+      intensity: 3,
+      distance: 28,
+      angle: Math.PI / 5,
+      penumbra: 0.0,
+      decay: 2,
+      position: { x: 0, y: 7.8, z: 0 },
+      target: { x: 0, y: 0, z: 0 },
+      castShadow: true,
+      shadow: { mapSize: { width: 4096, height: 4096 }, bias: -0.00008, near: 1, far: 30 }
+    }
+  ],
+
+  roomTextures: {
+    floor: "assets/textures/warehouse_floor.png",
+    ceiling: "assets/textures/warehouse_ceiling.png",
+    wall: "assets/textures/warehouse_wall.png",
+    backWall: "assets/textures/warehouse_back.png"
   },
-  {
-  type: "spot",
-  color: 0xffffff,
-  intensity: 3,
-  distance: 28,
-  angle: Math.PI / 5,
-  penumbra: 0.0,
-  decay: 2,
-  position: { x: 0, y: 7.8, z: 0 },
-  target: { x: 0, y: 0, z: 0 },
-  castShadow: true,
-  shadow: {
-    mapSize: { width: 4096, height: 4096 },
-        bias: -0.00008,near: 1,
-    far: 30
-  }
-}
-],
-
-
-
-
-
-roomTextures: {
-  floor: "assets/textures/warehouse_floor.png",
-  ceiling: "assets/textures/warehouse_ceiling.png",
-  wall: "assets/textures/warehouse_wall.png",
-    backWall: "assets/textures/warehouse_back.png"   // back wall
-},
-
 
   environment: {
     staticObjects: [
+      // Crates for low cover
       {
         id: "crateA",
         type: "crate",
-        position: { x: -5, y: 0.5, z: -6 },
+        position: { x: 0, y: 0.5, z: -6 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
         maxHp: 8,
-		coverType: "low",
+        coverType: "low",
         hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
@@ -72,29 +56,31 @@ roomTextures: {
       {
         id: "crateB",
         type: "crate",
-        position: { x: 1, y: 0.5, z: -6 },
+        position: { x: 4, y: 0.5, z: -6 },
         size: { x: 1, y: 1, z: 1 },
         texture: "assets/props/crate.png",
         hp: 8,
         maxHp: 8,
-		coverType: "low",
+        coverType: "low",
         hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
-	  {
-  id: "wall1",
-  type: "wall",
-  hp:  10,
-  maxHp:  200,
-  position: { x: -4, y: 2, z: 6 },
-  size: { x: 1, y: 4, z: 1 },
-  rotation: { x: 0, y: 0, z: 0 },
-  texture: "assets/props/blue.png",
-  coverType: "full",
-  indestructible: true,
-  hitSounds: ["sounds/ric1.ogg"]
-},
+      // Full wall along left
+      {
+        id: "wall1",
+        type: "wall",
+        hp: 10,
+        maxHp: 200,
+        position: { x: -5.5, y: 2.5, z: -6 }, // wall centered along X
+        size: { x: 9, y: 5, z: 2 },           // extends from x=-10 to x≈-1
+        rotation: { x: 0, y: 0, z: 0 },
+        texture: "assets/props/yellow.png",
+        coverType: "full",
+        indestructible: true,
+        hitSounds: ["sounds/ric1.ogg"]
+      },
+      // Catwalk
       {
         id: "catwalk",
         type: "catwalk",
@@ -111,47 +97,42 @@ roomTextures: {
   },
 
   enemies: [
+    // Enemies behind crates
     {
       id: "gruntA",
       type: "Grunt",
       hp: 40,
-      position: { x: -2, y: 0.9, z: -2 },
+      position: { x: 0, y: 0.9, z: -7 },
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateA",
       pattern: "popOutShootThenHide",
-      weapon: {
-        type: "pistol",
-        damage: 1,
-        fireSound: "assets/sfx/grunt/pistol_fire.ogg",
-        hitSound: ["assets/sfx/grunt/hit1.ogg"],
-        deathSound: ["assets/sfx/grunt/death1.ogg"],
-        reloadSound: "assets/sfx/grunt/reload.ogg",
-        clipSize: 6,
-        reloadTime: 1400
-      },
+      weapon: { type: "pistol", damage: 1, fireSound: "assets/sfx/grunt/pistol_fire.ogg", hitSound: ["assets/sfx/grunt/hit1.ogg"], deathSound: ["assets/sfx/grunt/death1.ogg"], reloadSound: "assets/sfx/grunt/reload.ogg", clipSize: 6, reloadTime: 1400 },
       sprite: "assets/sprites/grunt.png"
     },
     {
       id: "gruntB",
       type: "Grunt",
       hp: 40,
-      position: { x: 1, y: 0.9, z: -2 },
+      position: { x: 4, y: 0.9, z: -7 }, // behind crateB
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
-      
       coverObject: "crateB",
       pattern: "popOutShootThenHide",
-      weapon: {
-        type: "pistol",
-        damage: 1,
-        fireSound: "assets/sfx/grunt/pistol_fire.ogg",
-        hitSound: ["assets/sfx/grunt/hit1.ogg"],
-        deathSound: ["assets/sfx/grunt/death1.ogg"],
-        reloadSound: "assets/sfx/grunt/reload.ogg",
-        clipSize: 6,
-        reloadTime: 1400
-      },
+      weapon: { type: "pistol", damage: 1, fireSound: "assets/sfx/grunt/pistol_fire.ogg", hitSound: ["assets/sfx/grunt/hit1.ogg"], deathSound: ["assets/sfx/grunt/death1.ogg"], reloadSound: "assets/sfx/grunt/reload.ogg", clipSize: 6, reloadTime: 1400 },
       sprite: "assets/sprites/grunt.png"
     },
+    // Enemy behind full wall
+    {
+      id: "gruntD",
+      type: "Grunt",
+      hp: 40,
+      position: { x: -1.4, y: 0.9, z: -6.8 }, // directly behind wall1
+      behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
+      coverObject: "wall1",
+      pattern: "popOutShootThenHide",
+      weapon: { type: "rifle", damage: 2, fireSound: "assets/sfx/grunt/rifle_fire.ogg", hitSound: ["assets/sfx/grunt/hit1.ogg"], deathSound: ["assets/sfx/grunt/death1.ogg"], reloadSound: "assets/sfx/grunt/reload.ogg", clipSize: 5, reloadTime: 2000 },
+      sprite: "assets/sprites/grunt.png"
+    },
+    // Enemy on catwalk, standing in open
     {
       id: "gruntC",
       type: "Grunt",
@@ -160,16 +141,7 @@ roomTextures: {
       behavior: "standInOpen",
       coverObject: null,
       pattern: "standInOpen",
-      weapon: {
-        type: "pistol",
-        damage: 1,
-        fireSound: "assets/sfx/grunt/pistol_fire.ogg",
-        hitSound: ["assets/sfx/grunt/hit1.ogg"],
-        deathSound: ["assets/sfx/grunt/death1.ogg"],
-        reloadSound: "assets/sfx/grunt/reload.ogg",
-        clipSize: 6,
-        reloadTime: 1400
-      },
+      weapon: { type: "pistol", damage: 1, fireSound: "assets/sfx/grunt/pistol_fire.ogg", hitSound: ["assets/sfx/grunt/hit1.ogg"], deathSound: ["assets/sfx/grunt/death1.ogg"], reloadSound: "assets/sfx/grunt/reload.ogg", clipSize: 6, reloadTime: 1400 },
       sprite: "assets/sprites/grunt.png"
     }
   ],
