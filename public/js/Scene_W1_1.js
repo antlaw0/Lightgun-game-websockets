@@ -37,64 +37,85 @@ export const Scene_W1_1 = {
     backWall: "assets/textures/warehouse_back.png"
   },
 
-  environment: {
-    staticObjects: [
-      // Crates for low cover
-      {
-        id: "crateA",
-        type: "crate",
-        position: { x: 0, y: 0.5, z: -6 },
-        size: { x: 1, y: 1, z: 1 },
-        texture: "assets/props/crate.png",
-        hp: 8,
-        maxHp: 8,
-        coverType: "low",
-        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
-        deathSounds: ["assets/sfx/props/crate_break.ogg"],
-        deathAction: "break"
+environment: {
+  staticObjects: [
+    // Crates for low cover (WOOD)
+    {
+      id: "crateA",
+      type: "crate",
+      position: { x: 0, y: 0.5, z: -6 },
+      size: { x: 1, y: 1, z: 1 },
+      hp: 8,
+      maxHp: 8,
+      coverType: "low",
+      material: {
+        map: "assets/props/crate.png",
+        color: 0xffffff,
+        roughness: 0.75,
+        metalness: 0.0
       },
-      {
-        id: "crateB",
-        type: "crate",
-        position: { x: 4, y: 0.5, z: -6 },
-        size: { x: 1, y: 1, z: 1 },
-        texture: "assets/props/crate.png",
-        hp: 8,
-        maxHp: 8,
-        coverType: "low",
-        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
-        deathSounds: ["assets/sfx/props/crate_break.ogg"],
-        deathAction: "break"
+      hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
+      deathSounds: ["assets/sfx/props/crate_break.ogg"],
+      deathAction: "break"
+    },
+    {
+      id: "crateB",
+      type: "crate",
+      position: { x: 4, y: 0.5, z: -6 },
+      size: { x: 1, y: 1, z: 1 },
+      hp: 8,
+      maxHp: 8,
+      coverType: "low",
+      material: {
+        map: "assets/props/crate.png",
+        color: 0xffffff,
+        roughness: 0.75,
+        metalness: 0.0
       },
-      // Full wall along left
-      {
-        id: "wall1",
-        type: "wall",
-        hp: 10,
-        maxHp: 200,
-        position: { x: -5.5, y: 2.5, z: -6 }, // wall centered along X
-        size: { x: 9, y: 5, z: 0.2 },           // extends from x=-10 to x≈-1
-        rotation: { x: 0, y: 0, z: 0 },
-        texture: "assets/props/yellow.png",
-        coverType: "full",
-        indestructible: true,
-        hitSounds: ["sounds/ric1.ogg"]
+      hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
+      deathSounds: ["assets/sfx/props/crate_break.ogg"],
+      deathAction: "break"
+    },
+
+    // Full wall along left (ROUGH CEMENT)
+    {
+      id: "wall1",
+      type: "wall",
+      hp: 200,
+      maxHp: 200,
+      position: { x: -2.5, y: 0, z: -6 },
+      size: { x: 6, y: 2.5, z: 0.2 },
+      rotation: { x: 0, y: 0, z: 0 },
+      coverType: "full",
+      indestructible: true,
+      material: {
+        map: "assets/props/yellow.png",
+        color: 0xffff00,   
+        roughness: 0.95,
+        metalness: 0.0
       },
-      // Catwalk
-      {
-        id: "catwalk",
-        type: "catwalk",
-        position: { x: 0, y: 2.7, z: -8 },
-        size: { x: 4, y: 0.2, z: 1 },
-        texture: null,
-        hp: 9999,
-        maxHp: 9999,
-        hitSounds: [],
-        deathSounds: [],
-        deathAction: "none"
-      }
-    ]
-  },
+      hitSounds: ["sounds/ric1.ogg"]
+    },
+
+    // Catwalk (METAL)
+    {
+      id: "catwalk",
+      type: "catwalk",
+      position: { x: 0, y: 2.7, z: -8 },
+      size: { x: 4, y: 0.2, z: 1 },
+      hp: 9999,
+      maxHp: 9999,
+      material: {
+        color: 0x777777,
+        roughness: 0.25,
+        metalness: 0.9
+      },
+      hitSounds: [],
+      deathSounds: [],
+      deathAction: "none"
+    }
+  ]
+},
 
   enemies: [
     // Enemies behind crates
@@ -125,7 +146,7 @@ export const Scene_W1_1 = {
       id: "gruntD",
       type: "Grunt",
       hp: 40,
-      position: { x: -1.4, y: 0.9, z: -6.8 }, // directly behind wall1
+      position: { x: -1.9, y: 0.9, z: -6 }, // directly behind wall1
       behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
       coverObject: "wall1",
       pattern: "popOutShootThenHide",

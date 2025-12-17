@@ -1,3 +1,4 @@
+
 export class Prop {
   constructor(def) {
     this.id = def.id;
@@ -12,9 +13,13 @@ export class Prop {
     this.position = def.position ?? { x: 0, y: 0, z: 0 };
     this.size = def.size ?? { x: 1, y: 1, z: 1 };
 
-    this.texture = def.texture || null;
+    // Health
     this.hp = def.hp ?? 1;
     this.maxHp = def.maxHp ?? this.hp;
+
+    // Visuals
+    this.texture = def.texture || null; // legacy support
+    this.materialDef = def.material ?? {};
 
     // Preload sounds
     this.hitSounds = (def.hitSounds ?? []).map(path => {
@@ -40,10 +45,8 @@ export class Prop {
   takeDamage(amount) {
     console.log("Hit prop");
 
-    // Play hit sounds (preloaded)
     this._playRandom(this.hitSounds);
 
-    // Indestructible: ignore HP changes
     if (this.indestructible) return false;
 
     this.hp -= amount;
@@ -59,12 +62,7 @@ export class Prop {
   //
   // EXPLOSION-SPECIFIC DAMAGE HANDLING
   //
-  // explosionDamage: number
-  // Returns an object:
-  // { absorbed: number, passedThrough: number, destroyed: boolean }
-  //
   applyExplosionDamage(explosionDamage) {
-    // If it blocks but is indestructible → absorbs all damage, passes 0
     if (this.indestructible) {
       this._playRandom(this.hitSounds);
       return {
@@ -79,7 +77,6 @@ export class Prop {
     const before = this.hp;
     this.hp -= explosionDamage;
 
-    // If destroyed, return leftover damage
     if (this.hp <= 0) {
       const absorbed = before;
       const passed = explosionDamage - before;
@@ -87,13 +84,12 @@ export class Prop {
       this._die();
 
       return {
-        absorbed: absorbed,
+        absorbed,
         passedThrough: passed,
         destroyed: true
       };
     }
 
-    // Survived → absorbed everything
     return {
       absorbed: explosionDamage,
       passedThrough: 0,
@@ -103,30 +99,26 @@ export class Prop {
 
   //
   // Explosion LOS collision test
-  // Used by Explosion.js to determine whether this prop blocks the path
   //
   intersectsLine(start, end) {
-    // Create AABB for prop
     const half = {
       x: this.size.x * 0.5,
       y: this.size.y * 0.5,
-      z: this.size.z * 0.5,
+      z: this.size.z * 0.5
     };
 
     const min = {
       x: this.position.x - half.x,
       y: this.position.y - half.y,
-      z: this.position.z - half.z,
+      z: this.position.z - half.z
     };
 
     const max = {
       x: this.position.x + half.x,
       y: this.position.y + half.y,
-      z: this.position.z + half.z,
+      z: this.position.z + half.z
     };
 
-    // Ray-box intersection test
-    // Using parametric line t in [0,1]
     let tmin = 0;
     let tmax = 1;
 
@@ -136,14 +128,13 @@ export class Prop {
 
     const testAxis = (startCoord, d, minB, maxB) => {
       if (Math.abs(d) < 1e-6) {
-        // Parallel: if start outside slab → no hit
         if (startCoord < minB || startCoord > maxB) return false;
-        return true; // continue
+        return true;
       }
       const ood = 1 / d;
       let t1 = (minB - startCoord) * ood;
       let t2 = (maxB - startCoord) * ood;
-      if (t1 > t2) [t1, t2] = [t2, t1]; // swap
+      if (t1 > t2) [t1, t2] = [t2, t1];
       tmin = Math.max(tmin, t1);
       tmax = Math.min(tmax, t2);
       return tmin <= tmax;
@@ -164,42 +155,82 @@ export class Prop {
     s.play().catch(err => console.warn("Audio play failed:", err));
   }
 
+  //
+  // MESH / MATERIAL CREATION (UPDATED)
+  //
   _createMesh() {
     const geo = new THREE.BoxGeometry(this.size.x, this.size.y, this.size.z);
-    const matOptions = { color: 0x8b5a2b };
+    const texLoader = new THREE.TextureLoader();
+
+    const matParams = {
+      color: this.materialDef.color ?? 0x8b5a2b,
+      roughness: this.materialDef.roughness ?? 0.8,
+      metalness: this.materialDef.metalness ?? 0.0,
+      emissive: this.materialDef.emissive ?? 0x000000,
+      transparent: this.materialDef.transparent ?? false,
+      opacity: this.materialDef.opacity ?? 1
+    };
+
+    // Legacy texture support
     if (this.texture) {
-      const loader = new THREE.TextureLoader();
-      const tex = loader.load(this.texture);
-      matOptions.map = tex;
+      matParams.map = texLoader.load(this.texture);
     }
-    const mat = new THREE.MeshStandardMaterial(matOptions);
+
+    // PBR maps
+    if (this.materialDef.map) {
+      matParams.map = texLoader.load(this.materialDef.map);
+    }
+    if (this.materialDef.normalMap) {
+      matParams.normalMap = texLoader.load(this.materialDef.normalMap);
+    }
+    if (this.materialDef.roughnessMap) {
+      matParams.roughnessMap = texLoader.load(this.materialDef.roughnessMap);
+    }
+    if (this.materialDef.metalnessMap) {
+      matParams.metalnessMap = texLoader.load(this.materialDef.metalnessMap);
+    }
+
+    const mat = new THREE.MeshStandardMaterial(matParams);
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(this.position.x, this.position.y, this.position.z);
+
+    mesh.position.set(
+      this.position.x,
+      this.position.y + this.size.y / 2,
+      this.position.z
+    );
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
     mesh.userData.propId = this.id;
+    mesh.userData.coverType = this.coverType;
+    mesh.userData.size = this.size;
+
     return mesh;
   }
 
-_die() {
-  this._playRandom(this.deathSounds);
+  _die() {
+    this._playRandom(this.deathSounds);
 
-  // Remove mesh from scene
-  if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
 
-  // Remove from sceneLoader.props so it stops being processed/rendered
-  if (window.sceneLoader) {
-    const index = window.sceneLoader.props.indexOf(this);
-    if (index !== -1) window.sceneLoader.props.splice(index, 1);
+    if (window.sceneLoader) {
+      const index = window.sceneLoader.props.indexOf(this);
+      if (index !== -1) window.sceneLoader.props.splice(index, 1);
+    }
   }
-}
-  
+
   dispose() {
     if (!this.mesh) return;
     try {
-      if (this.mesh.geometry) this.mesh.geometry.dispose();
+      this.mesh.geometry?.dispose();
       if (this.mesh.material) {
-        if (this.mesh.material.map) this.mesh.material.map.dispose();
+        this.mesh.material.map?.dispose();
+        this.mesh.material.normalMap?.dispose();
+        this.mesh.material.roughnessMap?.dispose();
+        this.mesh.material.metalnessMap?.dispose();
         this.mesh.material.dispose();
       }
-    } catch (e) {}
+    } catch {}
   }
 }

@@ -548,7 +548,13 @@ function triggerFire() {
     const shootDir = retWorld.clone().sub(shootOrigin).normalize();
 
     // Spawn projectile
-    spawnProjectile(shootOrigin, shootDir, w.damage);
+    // old: spawnProjectile(shootOrigin, shootDir, w.damage);
+spawnProjectileUnified(shootOrigin, shootDir, {
+    damage: w.damage,
+    color: 0xffff00,
+    explosive: w.explosive ?? false,
+});
+
 
         // Play weapon-specific firing sound
     if (w.fireSound) {
@@ -562,6 +568,77 @@ function triggerFire() {
 	logDebug("Projectile fired from bottom to reticle");
 }
 
+
+
+/**
+ * Spawn a projectile (player or enemy)
+ * @param {THREE.Vector3} origin - start position
+ * @param {THREE.Vector3} direction - normalized travel direction
+ * @param {Object} options - extra options
+ *   - damage: number
+ *   - color: hex color
+ *   - speed: units/sec
+ *   - isEnemy: boolean
+ *   - size: bullet size (radius)
+ *   - lifetime: seconds
+ *   - explosive: boolean
+ *   - trail: boolean
+ */
+function spawnProjectileUnified(origin, direction, options = {}) {
+    const {
+        damage = 1,
+        color = 0xffff00,
+        speed = PROJECTILE_SPEED,
+        isEnemy = false,
+        size = 0.02,
+        lifetime = PROJECTILE_LIFETIME,
+        explosive = false,
+        trail = true
+    } = options;
+
+    // Geometry & material
+    const geo = new THREE.CapsuleGeometry(size, size*4, 4, 8);
+    geo.rotateX(Math.PI / 2); // point along +Z
+    const mat = new THREE.MeshBasicMaterial({ color });
+
+    const bullet = new THREE.Mesh(geo, mat);
+    bullet.position.copy(origin);
+
+    // Orient to travel direction
+    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
+
+    bullet.userData = {
+        direction: direction.clone().normalize(),
+        bornTime: performance.now(),
+        damage,
+        isEnemy,
+        explosive,
+        speed,
+        trail: null
+    };
+
+    // Optional motion trail
+    if (trail) {
+        const trailLength = size*5;
+        const trailGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0,0,0),
+            new THREE.Vector3(0,0,-trailLength)
+        ]);
+        const trailMat = new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.7 });
+        const line = new THREE.Line(trailGeo, trailMat);
+        bullet.add(line);
+        bullet.userData.trail = line;
+    }
+
+    scene.add(bullet);
+
+    if (isEnemy) enemyProjectiles.push(bullet);
+    else projectiles.push(bullet);
+
+    return bullet;
+}
+
+
 function updateProjectiles(dt) {
     const toRemove = [];
     const intersectables = sceneLoader.getIntersectableMeshes() || [];
@@ -573,7 +650,8 @@ function updateProjectiles(dt) {
 
         // --- MOVE BULLET ---
         const dir = bullet.userData.direction;
-        const moveDist = PROJECTILE_SPEED * (dt / 1000);
+const moveDist = bullet.userData.speed * (dt / 1000);
+		
         bullet.position.addScaledVector(dir, moveDist);
 
         // --- LIFETIME CHECK ---
@@ -616,7 +694,7 @@ function updateProjectiles(dt) {
     // --- REMOVE EXPIRED BULLETS ---
     for (const b of toRemove) {
         const pos = b.userData.explosionPos;
-        if (pos && player.currentWeapon.explosive) {
+if (pos && b.userData.explosive) {			
             window.spawnTestExplosion({
                 x: pos.x,
                 y: pos.y,

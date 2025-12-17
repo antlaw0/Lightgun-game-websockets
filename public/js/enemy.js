@@ -89,6 +89,42 @@ export class Enemy {
   const hits = raycaster.intersectObjects(blockers, false);
   return hits.length === 0;
 }
+_snapBasePositionToCoverEdge() {
+  if (this.coverType !== "full") return;
+
+  const cover = this._resolveCoverObject();
+  if (!cover || !cover.position || !cover.size) return;
+
+  const wallCenterX = cover.position.x;
+  const wallHalfX = cover.size.x * 0.5;
+
+  const leftEdgeX  = wallCenterX - wallHalfX;
+  const rightEdgeX = wallCenterX + wallHalfX;
+
+  // Determine nearest edge
+  const distToLeft  = Math.abs(this.basePosition.x - leftEdgeX);
+  const distToRight = Math.abs(this.basePosition.x - rightEdgeX);
+
+  this._leanSide = (distToLeft < distToRight) ? -1 : 1;
+
+  // Safety inset so sprite is fully hidden
+  const inset = 0.25;
+
+  // Snap base position
+  this.basePosition.x =
+    this._leanSide === -1
+      ? leftEdgeX + inset
+      : rightEdgeX - inset;
+
+  // Align to wall plane (important)
+  this.basePosition.z = cover.position.z;
+
+  // Apply immediately
+  this.mesh.position.copy(this.basePosition);
+
+
+
+}
 
   
   _resolveCoverObject() {
@@ -210,6 +246,9 @@ if (this.behavior?.params?.leanSide) {
     // Lean out from the nearest edge
     this._leanSide = (distToLeft < distToRight) ? -1 : 1;
   }
+}
+if (this.coverType === "full") {
+  this._snapBasePositionToCoverEdge();
 }
 
     // knockback vector applied on top of other offsets (decays over time)

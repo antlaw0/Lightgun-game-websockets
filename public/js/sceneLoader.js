@@ -17,6 +17,8 @@ export class SceneLoader {
 
     this.props = [];           // array of Prop instances
     this.propsById = {};       // map id -> Prop
+this.staticObjects = [];
+window.sceneLoader = this;
 
     // meshes lists used for raycasting / intersectables (kept in sync by helpers)
     this.enemyMeshes = [];
@@ -204,29 +206,35 @@ export class SceneLoader {
     console.log(`SceneLoader loading scene: ${sceneDef.name}`);
 
     // Props (including full-cover walls)
-    const staticObjs = sceneDef.environment?.staticObjects ?? [];
-    staticObjs.forEach((pdef, idx) => {
-      if (!pdef.id) pdef.id = `prop_${idx}`;
+const staticObjs = sceneDef.environment?.staticObjects ?? [];
+staticObjs.forEach((pdef, idx) => {
+  if (!pdef.id) pdef.id = `prop_${idx}`;
 
-      const p = new PropClass({
-  ...pdef,
+  const p = new PropClass({
+    ...pdef,
+    id: pdef.id,
+    coverType: pdef.coverType ?? "none",
+    materialParams: pdef.materialParams ?? {}
+  });
+this.staticObjects.push({
   id: pdef.id,
+  mesh: p.mesh,
+  position: p.mesh.position,
+  size: pdef.size,
   coverType: pdef.coverType ?? "none"
 });
 
-// Tag ALL meshes inside the prop so raycasts work correctly
-p.mesh.traverse(obj => {
-  if (obj.isMesh) {
-    obj.userData = Object.assign(obj.userData || {}, {
-      propId: pdef.id,
-      coverType: pdef.coverType ?? "none",
-      size: pdef.size
-    });
-  }
-});
+  p.mesh.traverse(obj => {
+    if (obj.isMesh) {
+      obj.userData = Object.assign(obj.userData || {}, {
+        propId: pdef.id,
+        coverType: pdef.coverType ?? "none",
+        size: pdef.size
+      });
+    }
+  });
 
-// register via helper
-this.addProp(p);
+  this.addProp(p);
 });
 
     // Enemies
@@ -298,6 +306,9 @@ this._createRoom();
       minZ = Math.min(minZ, p.position.z - sz);
       maxZ = Math.max(maxZ, p.position.z + sz);
     });
+this.staticObjects.forEach(o => {
+  o.position = o.mesh.position;
+});
 
     // Enemies: iterate array
     this.enemies.forEach(e => {
@@ -503,6 +514,7 @@ _createRoom() {
     this.props = [];
     this.propsById = {};
     this.propMeshes = [];
+this.staticObjects = [];
 
     // Explosions
     this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
@@ -671,6 +683,7 @@ Object.entries(this.projectiles).forEach(([id, proj]) => {
     this.props.length = 0;
     this.propsById = {};
     this.propMeshes = [];
+this.staticObjects = [];
 
     // Remove enemies
     for (const e of this.enemies) {
