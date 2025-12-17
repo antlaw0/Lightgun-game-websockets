@@ -1,3 +1,7 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+
 import { Explosion } from './explosion.js';
 
 import { Enemy } from "./enemy.js";
@@ -10,7 +14,7 @@ export class SceneLoader {
     this.scene = scene;
     this.camera = camera;
     this.player = player;
-    // --- NOTE: changed from object maps to arrays for runtime lists ---
+	// --- NOTE: changed from object maps to arrays for runtime lists ---
     // Arrays are authoritative for iteration; maps exist for O(1) lookup by id.
     this.enemies = [];         // array of Enemy instances
     this.enemiesById = {};     // map id -> Enemy
@@ -206,38 +210,74 @@ window.sceneLoader = this;
     console.log(`SceneLoader loading scene: ${sceneDef.name}`);
 
     // Props (including full-cover walls)
-const staticObjs = sceneDef.environment?.staticObjects ?? [];
-staticObjs.forEach((pdef, idx) => {
+const staticObjects = sceneDef.environment?.staticObjects ?? [];
+staticObjects.forEach((pdef, idx) => {
   if (!pdef.id) pdef.id = `prop_${idx}`;
 
-  const p = new PropClass({
-    ...pdef,
-    id: pdef.id,
-    coverType: pdef.coverType ?? "none",
-    materialParams: pdef.materialParams ?? {}
-  });
-this.staticObjects.push({
-  id: pdef.id,
-  mesh: p.mesh,
-  position: p.mesh.position,
-  size: pdef.size,
-  coverType: pdef.coverType ?? "none"
-});
+  if (pdef.type === "glb" && pdef.file) {
+    // Load a GLB via Three.js loader
+const loader = new GLTFLoader();    
+	loader.load(pdef.file, (gltf) => {
+      const model = gltf.scene;
 
-  p.mesh.traverse(obj => {
-    if (obj.isMesh) {
-      obj.userData = Object.assign(obj.userData || {}, {
-        propId: pdef.id,
-        coverType: pdef.coverType ?? "none",
-        size: pdef.size
+      // Apply position, scale, rotation
+      model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
+      if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
+      if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
+
+      // Add userData for interaction/damage
+      model.traverse(obj => {
+        if (obj.isMesh) {
+          obj.userData = Object.assign(obj.userData || {}, {
+            propId: pdef.id,
+            coverType: pdef.coverType ?? "none",
+            size: pdef.size ?? { x: 1, y: 1, z: 1 }
+          });
+          this.propMeshes.push(obj);
+        }
       });
-    }
-  });
 
-  this.addProp(p);
+      this.staticObjects.push({
+        id: pdef.id,
+        mesh: model,
+        position: model.position,
+        size: pdef.size ?? { x: 1, y: 1, z: 1 },
+        coverType: pdef.coverType ?? "none"
+      });
+
+      this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
+    });
+  } else {
+    // Existing PropClass path
+    const p = new PropClass({
+      ...pdef,
+      id: pdef.id,
+      coverType: pdef.coverType ?? "none",
+      materialParams: pdef.materialParams ?? {}
+    });
+    this.staticObjects.push({
+      id: pdef.id,
+      mesh: p.mesh,
+      position: p.mesh.position,
+      size: pdef.size,
+      coverType: pdef.coverType ?? "none"
+    });
+
+    p.mesh.traverse(obj => {
+      if (obj.isMesh) {
+        obj.userData = Object.assign(obj.userData || {}, {
+          propId: pdef.id,
+          coverType: pdef.coverType ?? "none",
+          size: pdef.size
+        });
+      }
+    });
+
+    this.addProp(p);
+  }
 });
-
-    // Enemies
+    
+	// Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;

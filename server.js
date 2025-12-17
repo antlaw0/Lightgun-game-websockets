@@ -24,7 +24,13 @@ const options = {
 };
 
 const app = express();
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'text/javascript');
+    }
+  }
+}));
 
 const server = https.createServer(options, app);
 

@@ -2,7 +2,7 @@
 // This file is written as an ES module. Include it as:
 // <script type="module" src="js/game.js"></script>
 
-//import * as THREE from './lib/three.module.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 

@@ -1,5 +1,4 @@
 // js/levelManager.js
-//import * as THREE from './lib/three.module.js';
 
 import { LEVELS, ENEMY_DEFS } from "./scenes.js";
 import { Enemy } from "./enemy.js";

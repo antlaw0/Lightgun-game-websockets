@@ -215,15 +215,17 @@ canvas {
   <div id="hud-announce" role="alert" aria-live="assertive"></div>
 </div>
 
-
-
-<!-- Three.js global -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-<script>
-  window.THREE = THREE; // ensure modules can access it
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js"
+  }
+}
 </script>
+
+
 <!-- Your game code (game.js is ES module if it uses imports) -->
-<script type="module" src="js/game.js"></script>
+<script type="module" src="./js/game.js"></script>
 
 
 </body>

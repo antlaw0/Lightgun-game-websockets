@@ -39,6 +39,16 @@ export const Scene_W1_1 = {
 
 environment: {
   staticObjects: [
+  {
+  id: "explosiveBarrel1",
+  type: "glb",
+  file: "assets/models/explosive_barrel.glb",
+  position: { x: 2, y: 0, z: -5 },
+  scale: { x: 1, y: 1, z: 1 },
+  rotation: { x: 0, y: 0, z: 0 },
+  coverType: "low"
+},
+
     // Crates for low cover (WOOD)
     {
       id: "crateA",

@@ -1,3 +1,5 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+
 // explosion.js
 export class Explosion {
   constructor(scene, position, options = {}) {
@@ -146,6 +148,18 @@ dispose() {
     this.particles.material?.dispose();
   }
 }
+_lineIntersectsMesh(start, end, mesh) {
+  if (!mesh || !mesh.isMesh) return false;
+
+  const dir = new THREE.Vector3().subVectors(end, start);
+  const distance = dir.length();
+  dir.normalize();
+
+  const raycaster = new THREE.Raycaster(start, dir);
+  const hits = raycaster.intersectObject(mesh, true);
+
+  return hits.length > 0 && hits[0].distance <= distance;
+}
 
   _applyExplosionDamage() {
   if (!window.sceneLoader) return;
@@ -177,8 +191,13 @@ dispose() {
     let blocked = false;
     for (const prop of loader.props) {
       if (prop.coverType === "none") continue;
-      if (prop.intersectsLine(this.position, target.pos)) {
-        console.log(`Explosion: LOS hit prop ${prop.id}, coverType=${prop.coverType}`);
+        const mesh =
+    prop.mesh && prop.mesh.isMesh ? prop.mesh : null;
+
+  if (!mesh) continue;
+
+  if (this._lineIntersectsMesh(this.position, target.pos, mesh)) {
+	    console.log(`Explosion: LOS hit prop ${prop.id}, coverType=${prop.coverType}`);
         if (target.obj === prop && target.type === "prop") {
           const result = prop.applyExplosionDamage(damage);
           console.log(`Explosion: Prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
