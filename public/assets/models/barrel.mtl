@@ -1,0 +1,11 @@
+# Material for explosive barrel
+newmtl BarrelMaterial
+Ka 1.000 1.000 1.000      # ambient color (ignored by Three.js)
+Kd 1.000 1.000 1.000      # diffuse color multiplier
+Ks 0.000 0.000 0.000      # specular color
+d 1.0                     # transparency (1 = opaque)
+Ns 10.0                   # specular exponent
+illum 2                   # illumination model (1 = flat, 2 = phong)
+
+# Texture map
+map_Kd barrel_diffuse.png

@@ -1,0 +1,44 @@
+# Explosive Barrel - Low Poly
+# Units: meters
+# Origin at base center (sits flush on floor)
+mtllib barrel.mtl
+usemtl BarrelMaterial
+
+o ExplosiveBarrel
+
+v 0.00 0.00 0.00
+v 0.35 0.00 0.00
+v 0.25 0.00 0.25
+v 0.00 0.00 0.35
+v -0.25 0.00 0.25
+v -0.35 0.00 0.00
+v -0.25 0.00 -0.25
+v 0.00 0.00 -0.35
+v 0.25 0.00 -0.25
+
+v 0.00 0.90 0.00
+v 0.35 0.90 0.00
+v 0.25 0.90 0.25
+v 0.00 0.90 0.35
+v -0.25 0.90 0.25
+v -0.35 0.90 0.00
+v -0.25 0.90 -0.25
+v 0.00 0.90 -0.35
+v 0.25 0.90 -0.25
+
+# Bottom face
+f 1 2 3 4 5 6 7 8 9
+
+# Top face
+f 18 17 16 15 14 13 12 11 10
+
+# Side faces
+f 1 2 11 10
+f 2 3 12 11
+f 3 4 13 12
+f 4 5 14 13
+f 5 6 15 14
+f 6 7 16 15
+f 7 8 17 16
+f 8 9 18 17
+f 9 1 10 18

@@ -218,35 +218,33 @@ staticObjects.forEach((pdef, idx) => {
     // Load a GLB via Three.js loader
 const loader = new GLTFLoader();    
 	loader.load(pdef.file, (gltf) => {
-      const model = gltf.scene;
+    const model = gltf.scene;
 
-      // Apply position, scale, rotation
-      model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
-      if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
-      if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
+    // Apply position, scale, rotation
+    model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
+    if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
+    if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
 
-      // Add userData for interaction/damage
-      model.traverse(obj => {
-        if (obj.isMesh) {
-          obj.userData = Object.assign(obj.userData || {}, {
-            propId: pdef.id,
-            coverType: pdef.coverType ?? "none",
-            size: pdef.size ?? { x: 1, y: 1, z: 1 }
-          });
-          this.propMeshes.push(obj);
-        }
-      });
+    // Apply material if specified
+    if (pdef.material) {
+        const texLoader = new THREE.TextureLoader();
+        model.traverse(obj => {
+            if (obj.isMesh) {
+                if (pdef.material.map) {
+                    obj.material.map = texLoader.load(pdef.material.map);
+                    obj.material.map.colorSpace = THREE.SRGBColorSpace;
+                }
+                if (pdef.material.color !== undefined) obj.material.color.set(pdef.material.color);
+                if (pdef.material.roughness !== undefined) obj.material.roughness = pdef.material.roughness;
+                if (pdef.material.metalness !== undefined) obj.material.metalness = pdef.material.metalness;
+                obj.castShadow = true;
+                obj.receiveShadow = true;
+            }
+        });
+    }
 
-      this.staticObjects.push({
-        id: pdef.id,
-        mesh: model,
-        position: model.position,
-        size: pdef.size ?? { x: 1, y: 1, z: 1 },
-        coverType: pdef.coverType ?? "none"
-      });
-
-      this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
-    });
+    this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
+});
   } else {
     // Existing PropClass path
     const p = new PropClass({
@@ -421,86 +419,126 @@ _useDefinedRoom(roomDef) {
   // Create Room (unchanged)
   // -----------------------------
 _createRoom() {
-    const w = this.roomWidth;
-    const h = this.roomHeight;
-    const d = this.roomDepth;
+  const w = this.roomWidth;
+  const h = this.roomHeight;
+  const d = this.roomDepth;
 
-    const texLoader = new THREE.TextureLoader();
-    const roomTex = this.sceneDef.roomTextures || {};
+  const thickness = 0.25; // collision thickness for all room surfaces
 
-    // --- Materials ---
-    const floorMat = roomTex.floor
-        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
-        : new THREE.MeshStandardMaterial({ color: 0x444444 });
+  const texLoader = new THREE.TextureLoader();
+  const roomTex = this.sceneDef.roomTextures || {};
 
-    const ceilingMat = roomTex.ceiling
-        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
-        : new THREE.MeshStandardMaterial({ color: 0x666666 });
+  // --- Materials ---
+  const floorMat = roomTex.floor
+    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
+    : new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-    const wallMat = roomTex.wall
-        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall), side: THREE.DoubleSide })
-        : new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
+  const ceilingMat = roomTex.ceiling
+    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
+    : new THREE.MeshStandardMaterial({ color: 0x666666 });
 
-    const backWallMat = roomTex.backWall
-        ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.backWall), side: THREE.DoubleSide })
-        : wallMat;
+  const wallMat = roomTex.wall
+    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall) })
+    : new THREE.MeshStandardMaterial({ color: 0x888888 });
 
-    // --- Floor ---
-    const floorGeo = new THREE.PlaneGeometry(w, d);
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(0, 0, 0);
-    floor.position.sub(this.roomCenterOffset);
-    floor.receiveShadow = true;
-    floor.castShadow = false;
-    this.scene.add(floor);
-    this.roomMeshes.push(floor);
+  const backWallMat = roomTex.backWall
+    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.backWall) })
+    : wallMat;
 
-    // --- Ceiling ---
-    const ceilingGeo = new THREE.PlaneGeometry(w, d);
-    const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.set(0, h, 0);
-    ceiling.position.sub(this.roomCenterOffset);
-    ceiling.receiveShadow = true;
-    ceiling.castShadow = false;
-    this.scene.add(ceiling);
-    this.roomMeshes.push(ceiling);
+  // -----------------
+  // Floor
+  // -----------------
+  const floorGeo = new THREE.BoxGeometry(w, thickness, d);
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.position.set(0, -thickness / 2, 0);
+  floor.position.sub(this.roomCenterOffset);
+  floor.receiveShadow = true;
+  floor.castShadow = false;
+  floor.userData = { type: "room", solid: true, 
+    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
+  };
+  this.scene.add(floor);
+  this.roomMeshes.push(floor);
 
-    // --- Back Wall ---
-    const backWallGeo = new THREE.PlaneGeometry(w, h);
-    const backWall = new THREE.Mesh(backWallGeo, backWallMat);
-    backWall.position.set(0, h / 2, -d / 2);
-    backWall.position.sub(this.roomCenterOffset);
-    backWall.castShadow = true;
-    backWall.receiveShadow = true;
-    this.scene.add(backWall);
-    this.roomMeshes.push(backWall);
+  // -----------------
+  // Ceiling
+  // -----------------
+  const ceilingGeo = new THREE.BoxGeometry(w, thickness, d);
+  const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
+  ceiling.position.set(0, h + thickness / 2, 0);
+  ceiling.position.sub(this.roomCenterOffset);
+  ceiling.receiveShadow = true;
+  ceiling.castShadow = false;
+  ceiling.userData = { type: "room", solid: true, 
+      hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
-    // --- Side Walls ---
-    const sideWallGeo = new THREE.PlaneGeometry(d, h);
+  };
+  this.scene.add(ceiling);
+  this.roomMeshes.push(ceiling);
 
-    const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-w / 2, h / 2, -d / 2);
-    leftWall.position.sub(this.roomCenterOffset);
-    leftWall.castShadow = true;
-    leftWall.receiveShadow = true;
-    this.scene.add(leftWall);
-    this.roomMeshes.push(leftWall);
+  // -----------------
+  // Back Wall
+  // -----------------
+  const backWallGeo = new THREE.BoxGeometry(w, h, thickness);
+  const backWall = new THREE.Mesh(backWallGeo, backWallMat);
+  backWall.position.set(0, h / 2, -d / 2 - thickness / 2);
+  backWall.position.sub(this.roomCenterOffset);
+  backWall.castShadow = true;
+  backWall.receiveShadow = true;
+  backWall.userData = { type: "room", solid: true,
+    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
-    const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position.set(w / 2, h / 2, -d / 2);
-    rightWall.position.sub(this.roomCenterOffset);
-    rightWall.castShadow = true;
-    rightWall.receiveShadow = true;
-    this.scene.add(rightWall);
-    this.roomMeshes.push(rightWall);
+  };
+  this.scene.add(backWall);
+  this.roomMeshes.push(backWall);
 
-    // --- Enable shadows on props and enemies ---
-    this.props.forEach(p => { if(p.mesh){ p.mesh.castShadow = true; p.mesh.receiveShadow = true; } });
-    this.enemies.forEach(e => { if(e.mesh){ e.mesh.castShadow = true; e.mesh.receiveShadow = true; } });
+  // -----------------
+  // Left Wall
+  // -----------------
+  const sideWallGeo = new THREE.BoxGeometry(thickness, h, d);
+  const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
+  leftWall.position.set(-w / 2 - thickness / 2, h / 2, 0);
+  leftWall.position.sub(this.roomCenterOffset);
+  leftWall.castShadow = true;
+  leftWall.receiveShadow = true;
+  leftWall.userData = { type: "room", solid: true,
+    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
+
+  };
+  this.scene.add(leftWall);
+  this.roomMeshes.push(leftWall);
+
+  // -----------------
+  // Right Wall
+  // -----------------
+  const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
+  rightWall.position.set(w / 2 + thickness / 2, h / 2, 0);
+  rightWall.position.sub(this.roomCenterOffset);
+  rightWall.castShadow = true;
+  rightWall.receiveShadow = true;
+  rightWall.userData = { type: "room", solid: true, 
+      hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
+
+  };
+  this.scene.add(rightWall);
+  this.roomMeshes.push(rightWall);
+
+  // -----------------
+  // Enable shadows on props and enemies
+  // -----------------
+  this.props.forEach(p => {
+    if (p.mesh) {
+      p.mesh.castShadow = true;
+      p.mesh.receiveShadow = true;
+    }
+  });
+
+  this.enemies.forEach(e => {
+    if (e.mesh) {
+      e.mesh.castShadow = true;
+      e.mesh.receiveShadow = true;
+    }
+  });
 }
   
   // -----------------------------
@@ -570,20 +608,27 @@ this.staticObjects = [];
 Object.entries(this.projectiles).forEach(([id, proj]) => {
   proj.update(deltaMs);
 
-  const hit = proj.checkCollision(this.getIntersectableMeshes());
-  if (hit) {
-    this.applyDamageToMesh(hit.object, proj.damage);
-    proj.dispose();
-    delete this.projectiles[id];
-    return;
+const hit = proj.checkCollision(this.getIntersectableMeshes());
+if (hit) {
+  const hitObj = hit.object;
+  const hitPoint = hit.point ?? proj.position;
+
+  // Play a random impact sound if the object defines one
+  const sounds = hitObj.userData?.hitSounds;
+  if (Array.isArray(sounds) && sounds.length > 0) {
+    const sound =
+      sounds[Math.floor(Math.random() * sounds.length)];
+    this.playImpactSound(sound, hitPoint);
   }
 
-  if (proj.isExpired(nowMs)) {
-    proj.dispose();
-    delete this.projectiles[id];
-  }
+  // Apply damage to enemy or prop (room surfaces usually ignore damage)
+  this.applyDamageToMesh(hitObj, proj.damage);
+
+  proj.dispose();
+  delete this.projectiles[id];
+  return;
+}
 });
-
 // SceneLoader.update(deltaMs)
     // Enemies (iterate array)
     this.enemies.forEach((en) => {
@@ -626,53 +671,75 @@ Object.entries(this.projectiles).forEach(([id, proj]) => {
     }
   }
 
+playImpactSound(soundPath, position, volume = 0.7) {
+  if (!soundPath) return;
+
+  const audio = new Audio(soundPath);
+  audio.volume = volume;
+  audio.play().catch(() => {});
+
+  // Optional: if you later switch to THREE.PositionalAudio,
+  // this function becomes the single upgrade point.
+}
+
+
   // -----------------------------
   // Damage Handling (adapted to arrays/maps)
   // -----------------------------
-  applyDamageToMesh(mesh, damage = 1) {
-    if (!mesh) return false;
+applyDamageToMesh(mesh, damage = 1) {
+  if (!mesh) return false;
 
-    let obj = mesh;
-    while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId) {
-      obj = obj.parent;
-    }
+  let obj = mesh;
 
-    if (!obj || !obj.userData) return false;
-
-    // Enemy
-    if (obj.userData.enemyId) {
-      const en = this.enemiesById[obj.userData.enemyId];
-      if (!en) return false;
-
-      if (en.lastHitFrame === this.frameCount) return true; // prevent multi-hit
-      en.lastHitFrame = this.frameCount;
-
-      en.takeDamage(damage);
-      this._checkObjectiveAfterHit();
-      return true;
-    }
-
-    // Prop
-    if (obj.userData.propId) {
-      const pr = this.propsById[obj.userData.propId];
-      if (pr) {
-        const died = pr.takeDamage(damage);
-        if (died) {
-          // remove from arrays/maps
-          // Note: Prop.takeDamage / _die should already remove mesh from scene; we still cleanup references
-          const idx = this.props.indexOf(pr);
-          if (idx >= 0) this.props.splice(idx, 1);
-          delete this.propsById[obj.userData.propId];
-          // remove mesh from propMeshes
-          const pmIdx = this.propMeshes.findIndex(m => m.userData && m.userData.propId === obj.userData.propId);
-          if (pmIdx >= 0) this.propMeshes.splice(pmIdx, 1);
-        }
-      }
-      return true;
-    }
-
-    return false;
+  // climb until we find something with enemyId, propId, or type=room
+  while (obj && obj.userData &&
+        !obj.userData.enemyId &&
+        !obj.userData.propId &&
+        obj.userData.type !== "room") {
+    obj = obj.parent;
   }
+
+  if (!obj || !obj.userData) return false;
+
+  // Enemy
+  if (obj.userData.enemyId) {
+    const en = this.enemiesById[obj.userData.enemyId];
+    if (!en) return false;
+    if (en.lastHitFrame === this.frameCount) return true;
+    en.lastHitFrame = this.frameCount;
+    en.takeDamage(damage);
+    this._checkObjectiveAfterHit();
+    return true;
+  }
+
+  // Prop
+  if (obj.userData.propId) {
+    const pr = this.propsById[obj.userData.propId];
+    if (pr) {
+      const died = pr.takeDamage(damage);
+      if (died) {
+        const idx = this.props.indexOf(pr);
+        if (idx >= 0) this.props.splice(idx, 1);
+        delete this.propsById[obj.userData.propId];
+        const pmIdx = this.propMeshes.findIndex(m => m.userData && m.userData.propId === obj.userData.propId);
+        if (pmIdx >= 0) this.propMeshes.splice(pmIdx, 1);
+      }
+    }
+    return true;
+  }
+
+  // Room surfaces
+  if (obj.userData.type === "room") {
+    const sounds = obj.userData.hitSounds;
+    if (Array.isArray(sounds) && sounds.length > 0) {
+      const sound = sounds[Math.floor(Math.random() * sounds.length)];
+      this.playImpactSound(sound, mesh.position);
+    }
+    return true;
+  }
+
+  return false;
+}
 
   // -----------------------------
   // Objective Check
@@ -697,13 +764,15 @@ Object.entries(this.projectiles).forEach(([id, proj]) => {
   // -----------------------------
   // Raycasting Mesh List
   // -----------------------------
-  getIntersectableMeshes() {
-    // Return a shallow copy of the arrays to avoid accidental mutation by callers
-    return [...this.enemyMeshes, ...this.propMeshes];
-  }
+getIntersectableMeshes() {
+  return [
+    ...this.enemyMeshes,
+    ...this.propMeshes,
+    ...this.roomMeshes
+  ];
+}
 
   // -----------------------------
-  _notifyLoaded
   // -----------------------------
   _notifyLoaded() {
     if (typeof window.onSceneLoaded === "function") {
