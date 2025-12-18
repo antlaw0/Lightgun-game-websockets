@@ -14,7 +14,9 @@ export class Explosion {
     this.lifespan = options.lifespan ?? 0.3;
     this.isDone = false;
 // --- Explosion particles ---
-this.particleCount = options.particleCount ?? 60;
+this.particleCount =
+  options.particleCount ?? Math.floor(40 + this.blastRadius * 10);
+
 this.particles = null;
 this.particleVelocities = [];
 
@@ -66,7 +68,9 @@ this._createParticles();
       Math.random() * 2 - 1
     ).normalize();
 
-    const speed = THREE.MathUtils.lerp(2, 6, Math.random());
+    const baseSpeed = THREE.MathUtils.lerp(0.6, 1.2, Math.random());
+const speed = baseSpeed * this.blastRadius;
+
     this.particleVelocities.push(dir.multiplyScalar(speed));
   }
 
@@ -77,8 +81,9 @@ this._createParticles();
 
   const material = new THREE.PointsMaterial({
     color: 0xffaa33,
-    size: 0.15,
-    transparent: true,
+size: 0.08 + this.blastRadius * 0.02,
+    
+	transparent: true,
     opacity: 1,
     depthWrite: false
   });

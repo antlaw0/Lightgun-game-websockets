@@ -42,7 +42,7 @@ environment: {
   {
   id: "explosiveBarrel1",
   type: "glb",
-  file: "assets/models/explosive_barrel.glb",
+  file: "/assets/models/explosive_barrel.glb",
   position: { x: 0, y: 0, z: 2 },
   scale: { x: 1, y: 1, z: 1 },
   rotation: { x: 0, y: 0, z: 0 },
@@ -104,7 +104,7 @@ environment: {
       coverType: "full",
       indestructible: true,
       material: {
-        map: "assets/props/yellow.png",
+        map: "assets/props/brick_wall.png",
         color: 0xffff00,   
         roughness: 0.95,
         metalness: 0.0
