@@ -177,14 +177,14 @@ if (typeof mergedDef.weapon === "string") {
 if (!weaponDef) {
 console.warn(`Enemy ${instanceConfig.id} has invalid weapon`, mergedDef.weapon);
 
-console.log("Enemy weapon raw:", mergedDef.weapon);
+//console.log("Enemy weapon raw:", mergedDef.weapon);
   
   weaponDef = getWeapon("pistol");
 }
 // Final log
-console.log("Enemy weapon raw:", mergedDef.weapon);
+//console.log("Enemy weapon raw:", mergedDef.weapon);
 
-console.log("Weapon resolved:", weaponDef);
+//console.log("Weapon resolved:", weaponDef);
 // Finally construct the Weapon instance
 this.weapon = new Weapon(weaponDef);
     // Improved logging
@@ -195,9 +195,9 @@ const rawWeaponStr =
 
 const resolvedWeaponStr = JSON.stringify(weaponDef);
 
-console.log(`Enemy ${instanceConfig.id} weapon info:`);
-console.log("  Raw weapon:", rawWeaponStr);
-console.log("  Resolved weapon:", resolvedWeaponStr);
+//console.log(`Enemy ${instanceConfig.id} weapon info:`);
+//console.log("  Raw weapon:", rawWeaponStr);
+//console.log("  Resolved weapon:", resolvedWeaponStr);
 this.hitSounds = Array.isArray(mergedDef.hitSounds) ? mergedDef.hitSounds : [];
 this.deathSounds = Array.isArray(mergedDef.deathSounds) ? mergedDef.deathSounds : [];
 
@@ -241,7 +241,10 @@ this.coverObjectId = instanceConfig.coverObject || null;
     this.mesh.position.copy(this.position);
     this.basePosition = this.mesh.position.clone(); // used for lerping back
     this.baseRotationY = this.facing;
-
+// NOW path behavior can safely initialize
+if (this.behavior.pattern === "path") {
+  this._initPathBehavior(this.behavior.params || {});
+}
     // preserve initial scale
     this.baseScale = this.mesh.scale.clone();
 
@@ -340,7 +343,7 @@ if (this.coverType === "full") {
   //
   takeDamage(amount, damageType = "normal") {
     if (this._isDead) return;
-    console.log("current HP:  "+this.hp+", damage dealt is "+amount)
+    //console.log("current HP:  "+this.hp+", damage dealt is "+amount)
 	this.hp -= amount;
 
     this._playRandom(this.hitSounds);
@@ -423,6 +426,8 @@ update(deltaMs, nowMs, player) {
       this._updatePopOut(deltaMs, nowMs, p);
     } else if (pattern === "patrol") {
       this._updatePatrol(deltaMs, nowMs, p);
+	  } else if (pattern === "path") {
+  this._updatePath(deltaMs);
     } else {
       this._updateStand(deltaMs, nowMs, p);
     }
@@ -430,6 +435,80 @@ update(deltaMs, nowMs, player) {
     // always apply smoothing interpolation to the mesh transform toward target offset/rotation/scale
     this._applyAnimationSmoothing(deltaMs);
   }
+_updatePath(deltaMs) {
+  if (!this._path || !this._path.active) return;
+
+  const path = this._path;
+  const step = path.steps[path.stepIndex];
+  if (!step) return;
+
+  path.stepElapsedMs += deltaMs;
+
+  if (step.type === "pause") {
+    if (path.stepElapsedMs >= step.durationMs) {
+      this._advancePathStep();
+    }
+    return;
+  }
+
+  if (step.type === "move") {
+    const t = Math.min(1, path.stepElapsedMs / step.durationMs);
+
+    const delta = step.distance * t;
+    const prevDelta =
+      step.distance * Math.min(1, (path.stepElapsedMs - deltaMs) / step.durationMs);
+
+    const frameDelta = delta - prevDelta;
+
+    switch (step.axis) {
+      case "x": path.currentOffset.x += frameDelta; break;
+      case "y": path.currentOffset.y += frameDelta; break;
+      case "z": path.currentOffset.z += frameDelta; break;
+    }
+
+    // Apply authoritative position
+    this.basePosition.copy(path.origin).add(path.currentOffset);
+    this._targetPosition.copy(this.basePosition);
+
+    if (path.stepElapsedMs >= step.durationMs) {
+      this._advancePathStep();
+    }
+  }
+}
+_advancePathStep() {
+  const path = this._path;
+  path.stepElapsedMs = 0;
+  path.stepIndex++;
+
+  if (path.stepIndex >= path.steps.length) {
+    if (path.loop) {
+      path.stepIndex = 0;
+    } else {
+      path.active = false;
+    }
+  }
+}
+_initPathBehavior(params) {
+  const steps = Array.isArray(params.steps) ? params.steps : [];
+
+  this._path = {
+    active: true,
+    loop: params.loop !== false,
+    steps,
+    stepIndex: 0,
+    stepElapsedMs: 0,
+
+    // Path origin is the enemy's starting base position
+    origin: this.basePosition.clone(),
+
+    // Accumulated offset from origin
+    currentOffset: new THREE.Vector3()
+  };
+
+  // Ensure animation targets exist
+  this._targetPosition = this.basePosition.clone();
+  this._targetOffset = new THREE.Vector3(0, 0, 0);
+}
 
   //
   // Fire projectile using SceneLoader callback

@@ -223,7 +223,65 @@ export const Scene_W1_1 = {
       "assets/sfx/grunt/death2.ogg"
     ],
     sprite: "assets/sprites/grunt.png"
-  }
+  },
+  {
+  id: "gruntE",
+  type: "Grunt",
+  hp: 40,
+
+  // Starts centered in the room, slightly forward so it's easy to see
+  position: { x: 0, y: 0.9, z: 3 },
+
+  behavior: {
+    pattern: "path",
+    params: {
+      loop: true,
+      steps: [
+        // Move left 3 units over 3 seconds
+        { type: "move", axis: "x", distance: -3, durationMs: 3000 },
+
+        // Brief pause
+        { type: "pause", durationMs: 500 },
+
+        // Move forward (toward player) 2 units
+        { type: "move", axis: "z", distance: 2, durationMs: 2000 },
+
+        // Pause again
+        { type: "pause", durationMs: 500 },
+
+        // Move right 6 units (passes through origin to the other side)
+        { type: "move", axis: "x", distance: 6, durationMs: 6000 },
+
+        // Pause
+        { type: "pause", durationMs: 500 },
+
+        // Move backward to original Z
+        { type: "move", axis: "z", distance: -2, durationMs: 2000 },
+
+        // Pause
+        { type: "pause", durationMs: 500 },
+
+        // Move left back to original X
+        { type: "move", axis: "x", distance: -3, durationMs: 3000 }
+      ]
+    }
+  },
+
+  firePauseMs: 800,
+  weapon: "pistol",
+
+  hitSounds: [
+    "assets/sfx/grunt/hit1.ogg",
+    "assets/sfx/grunt/hit2.ogg"
+  ],
+  deathSounds: [
+    "assets/sfx/grunt/death1.ogg",
+    "assets/sfx/grunt/death2.ogg"
+  ],
+
+  sprite: "assets/sprites/grunt.png"
+}
+
 ],
 
 
