@@ -152,6 +152,7 @@ export const Scene_W1_1 = {
     position: { x: 2, y: 0.9, z: -7 },
     behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
     coverObject: "crateA",
+	firePauseMs:  50,
     weapon: "pistol",
     hitSounds: [
       "assets/sfx/grunt/hit1.ogg",
@@ -171,6 +172,7 @@ export const Scene_W1_1 = {
     position: { x: 4, y: 0.9, z: -7 },
     behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
     coverObject: "crateB",
+	firePauseMs:  50,
     weapon: "pistol",
     hitSounds: [
       "assets/sfx/grunt/hit1.ogg",
@@ -190,6 +192,7 @@ export const Scene_W1_1 = {
     position: { x: -1.9, y: 0.9, z: -6 },
     behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
     coverObject: "wall1",
+	firePauseMs:  50,
     weapon: "assaultRifle",
     hitSounds: [
       "assets/sfx/grunt/hit1.ogg",
@@ -209,6 +212,7 @@ export const Scene_W1_1 = {
     position: { x: 0, y: 3.9, z: -8 },
     behavior: { pattern: "standInOpen" },
     coverObject: null,
+	firePauseMs:  3000,
     weapon: "sniperRifle",
     hitSounds: [
       "assets/sfx/grunt/hit1.ogg",

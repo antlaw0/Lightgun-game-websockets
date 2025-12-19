@@ -12,6 +12,8 @@ export class Weapon {
     this.fireSound = def.fireSound || null;
     this.fireRateMs = def.fireRateMs || 500;
     this.damage = def.damage || 1;
+	this.reloadUntilMs = 0;
+
     this.clipSize = def.clipSize || 6;
     this.reloadTimeMs = def.reloadTimeMs || 1500;
     this.reloadSound = def.reloadSound || null;
@@ -26,11 +28,12 @@ export class Weapon {
   }
 
   canFire(nowMs) {
-    if (this.isReloading) return false;
-    if (nowMs - this.lastFireTimestamp < this.fireRateMs) return false;
-    if (this.ammoInClip <= 0) return false;
-    return true;
-  }
+  if (this.isReloading) return false;
+  if (nowMs < this.reloadUntilMs) return false;
+  if (nowMs - this.lastFireTimestamp < this.fireRateMs) return false;
+  if (this.ammoInClip <= 0) return false;
+  return true;
+}
 
   recordFire(nowMs) {
     this.lastFireTimestamp = nowMs;
@@ -48,25 +51,28 @@ export class Weapon {
   }
 
   startReload(nowMs) {
-    if (this.isReloading) return;
-    this.isReloading = true;
+  if (this.isReloading) return;
 
-    if (this.reloadSound) {
-      const s = new Audio(this.reloadSound);
-      s.currentTime = 0;
-      s.play().catch(() => {});
+  this.isReloading = true;
+  this.reloadUntilMs = nowMs + this.reloadTimeMs;
+
+  if (this.reloadSound) {
+    const s = new Audio(this.reloadSound);
+    s.currentTime = 0;
+    s.play().catch(() => {});
+  }
+
+  setTimeout(() => {
+    this.ammoInClip = this.clipSize;
+
+    if (this.ammoReserve !== Infinity) {
+      this.ammoReserve = Math.max(0, this.ammoReserve - this.clipSize);
     }
 
-    setTimeout(() => {
-      const needed = this.clipSize - this.ammoInClip;
-      const taken = Math.min(needed, this.ammoReserve);
-      this.ammoInClip += taken;
-      this.ammoReserve -= taken;
-      this.isReloading = false;
-    }, this.reloadTimeMs);
-  }
+    this.isReloading = false;
+  }, this.reloadTimeMs);
 }
-
+}
 //
 // Enemy class
 //
@@ -151,6 +157,9 @@ _snapBasePositionToCoverEdge() {
     };
 
 	this.id = instanceConfig.id || `enemy_${Date.now()}`;
+	this.firePauseMs = mergedDef.firePauseMs ?? 0;
+this._nextAllowedFireMs = 0;
+
 this.type = mergedDef.displayName || "Enemy";
 this.hp = mergedDef.hp || 1;
     
@@ -426,6 +435,7 @@ update(deltaMs, nowMs, player) {
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
+    if (nowMs < this._nextAllowedFireMs) return;
   if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
   const muzzle = this.mesh.position.clone();
@@ -441,7 +451,10 @@ update(deltaMs, nowMs, player) {
 
   // Fire is now physically valid
   this.weapon.recordFire(nowMs);
-
+  // Enemy-level pause before next firing sequence
+  if (this.firePauseMs > 0) {
+    this._nextAllowedFireMs = nowMs + this.firePauseMs;
+  }
   // Compute direction with accuracy deviation
   const idealDir = targetPos.clone().sub(muzzle).normalize();
   const deviatedDir = idealDir.clone();
