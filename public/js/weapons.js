@@ -38,7 +38,7 @@ export const WEAPON_DEFS = {
   pistol: baseWeapon({
     name: "Pistol",
     fireSound: "assets/sfx/weapons/pistol_fire.ogg",
-    reloadSound: "assets/sfx/pistol_reload.ogg",
+    reloadSound: "assets/sfx/weapons/pistol_reload.ogg",
     reloadTime: 1200,
 
     fireMode: "semi-auto",
@@ -132,7 +132,7 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
   sniperRifle: baseWeapon({
     name: "Sniper Rifle",
     fireSound: "assets/sfx/weapons/sniper_fire.ogg",
-    reloadSound: "assets/sfx/sniper_reload.ogg",
+    reloadSound: "assets/sfx/weapons/sniper_reload.ogg",
     reloadTime: 2200,
 
     fireMode: "semi-auto",

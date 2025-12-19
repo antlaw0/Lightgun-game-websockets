@@ -1,7 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { getWeapon } from "./weapons.js";
 
 export const ENEMY_INSTANCES = [];
-import { ENEMY_DEFS } from "./scenes.js";
+//import { ENEMY_DEFS } from "./scenes.js";
 //
 // Weapon class
 //
@@ -15,8 +16,12 @@ export class Weapon {
     this.reloadTimeMs = def.reloadTimeMs || 1500;
     this.reloadSound = def.reloadSound || null;
     this.ammoInClip = this.clipSize;
-    this.ammoReserve = def.ammoReserve || 0;
-    this.lastFireTimestamp = -Infinity;
+    this.ammoReserve =
+  (typeof def.ammoReserve === "number")
+    ? def.ammoReserve
+    : Infinity;
+
+	this.lastFireTimestamp = -Infinity;
     this.isReloading = false;
   }
 
@@ -138,15 +143,58 @@ _snapBasePositionToCoverEdge() {
 
   
   constructor(sceneGroup, def, instanceConfig, player, fireCallback) {
-    this.id = instanceConfig.id || `enemy_${Date.now()}`;
-    this.type = def.displayName || "Enemy";
-    this.hp = def.hp || 1;
-    this.maxHp = this.hp;
-    this.weapon = new Weapon(def.weapon || {});
-    this.hitSounds = def.hitSounds || [];
-    this.deathSounds = def.deathSounds || [];
-    this.accuracy = def.accuracy || 0.5;
-    this.reactionTimeMs = def.reactionTimeMs || 300;
+        // Merge base enemy def with instance config
+    // Instance config MUST override base def
+    const mergedDef = {
+      ...def,
+      ...instanceConfig
+    };
+
+	this.id = instanceConfig.id || `enemy_${Date.now()}`;
+this.type = mergedDef.displayName || "Enemy";
+this.hp = mergedDef.hp || 1;
+    
+	
+	this.maxHp = this.hp;
+    let weaponDef = null;
+
+if (typeof mergedDef.weapon === "string") {
+  weaponDef = getWeapon(mergedDef.weapon);
+} else if (mergedDef.weapon && typeof mergedDef.weapon === "object") {
+  weaponDef = mergedDef.weapon;
+}
+
+// Fallback to pistol if invalid
+if (!weaponDef) {
+console.warn(`Enemy ${instanceConfig.id} has invalid weapon`, mergedDef.weapon);
+
+console.log("Enemy weapon raw:", mergedDef.weapon);
+  
+  weaponDef = getWeapon("pistol");
+}
+// Final log
+console.log("Enemy weapon raw:", mergedDef.weapon);
+
+console.log("Weapon resolved:", weaponDef);
+// Finally construct the Weapon instance
+this.weapon = new Weapon(weaponDef);
+    // Improved logging
+const rawWeaponStr =
+  (typeof mergedDef.weapon === "string")
+    ? mergedDef.weapon
+    : JSON.stringify(mergedDef.weapon);
+
+const resolvedWeaponStr = JSON.stringify(weaponDef);
+
+console.log(`Enemy ${instanceConfig.id} weapon info:`);
+console.log("  Raw weapon:", rawWeaponStr);
+console.log("  Resolved weapon:", resolvedWeaponStr);
+this.hitSounds = Array.isArray(mergedDef.hitSounds) ? mergedDef.hitSounds : [];
+this.deathSounds = Array.isArray(mergedDef.deathSounds) ? mergedDef.deathSounds : [];
+
+	
+    this.accuracy = mergedDef.accuracy || 0.5;
+    this.reactionTimeMs = mergedDef.reactionTimeMs || 300;
 
     // Register this enemy globally for debugging / mass actions
     ENEMY_INSTANCES.push(this);
@@ -165,10 +213,10 @@ _snapBasePositionToCoverEdge() {
 this.coverObjectId = instanceConfig.coverObject || null;
 
     // Behavior: default to standing, or use provided behavior
-    this.behavior = instanceConfig.behavior || (def.behavior ? def.behavior : { pattern: "standInOpen", params: {} });
+    this.behavior = instanceConfig.behavior || (mergedDef.behavior ? mergedDef.behavior : { pattern: "standInOpen", params: {} });
 
     // Allow explicit coverType via instanceConfig or behavior.params
-    this.coverType = instanceConfig.coverType || (this.behavior.params && this.behavior.params.coverType) || def.coverType || null;
+    this.coverType = instanceConfig.coverType || (this.behavior.params && this.behavior.params.coverType) || mergedDef.coverType || null;
     // fallback inference: if coverIndex present assume low cover
     if (!this.coverType && this.coverIndex !== null) this.coverType = "low";
 
@@ -176,7 +224,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
     // Mesh (single-sprite)
     //
     const plane = new THREE.PlaneGeometry(1.2, 1.8);
-    const tex = new THREE.TextureLoader().load(def.sprite);
+    const tex = new THREE.TextureLoader().load(mergedDef.sprite);
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
     this.mesh = new THREE.Mesh(plane, mat);
 

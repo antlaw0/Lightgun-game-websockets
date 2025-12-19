@@ -95,6 +95,38 @@ window.sceneLoader = this;
     if (typeof explosionInstance.addToScene === "function") explosionInstance.addToScene(this.scene);
   }
 
+
+_applyCameraSettings() {
+  const camDef = this.sceneDef?.camera;
+  if (!camDef || !this.camera) return;
+
+  // Position
+  if (camDef.position) {
+    this.camera.position.set(
+      camDef.position.x ?? this.camera.position.x,
+      camDef.position.y ?? this.camera.position.y,
+      camDef.position.z ?? this.camera.position.z
+    );
+  }
+
+  // Look-at
+  if (camDef.lookAt) {
+    this.camera.lookAt(
+      camDef.lookAt.x ?? 0,
+      camDef.lookAt.y ?? 0,
+      camDef.lookAt.z ?? 0
+    );
+  }
+
+  // Projection params (PerspectiveCamera only)
+  if (this.camera.isPerspectiveCamera) {
+    if (typeof camDef.fov === "number") this.camera.fov = camDef.fov;
+    if (typeof camDef.near === "number") this.camera.near = camDef.near;
+    if (typeof camDef.far === "number") this.camera.far = camDef.far;
+    this.camera.updateProjectionMatrix();
+  }
+}
+
   // -----------------------------
   // Lights (unchanged)
   // -----------------------------
@@ -300,8 +332,11 @@ if (sceneDef.room) {
 
 this._createRoom();
 
+
     // Lights must be created AFTER room and AFTER sceneDef exists
     this._createLights();
+// After room + lights are ready
+this._applyCameraSettings();
 
     // Enemy firing callback
     const fireCallback = (origin, target, speed = 28) => {
