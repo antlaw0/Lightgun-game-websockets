@@ -27,6 +27,9 @@ export const player = new Player({
       clipSize: 12,
       ammoInClip: 12,
 	  damage: 10,
+	  projectilesPerShot: 8,
+	  projectileSpread:  10,
+	  spreadPattern:  "normal",
       totalAmmo: 48
     }
   ],
@@ -346,6 +349,28 @@ window.addEventListener("keydown", (e) => {
         killAllEnemies();
     }
 });
+function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 15) {
+    const directions = [];
+    if (numProjectiles <= 1) return [forwardDir.clone()];
+
+    const spreadRad = THREE.MathUtils.degToRad(spreadDeg);
+
+    for (let i = 0; i < numProjectiles; i++) {
+        // evenly distribute angles horizontally
+        const t = numProjectiles === 1 ? 0.5 : i / (numProjectiles - 1);
+        const angleH = (t - 0.5) * spreadRad;  // -halfSpread -> +halfSpread
+        const angleV = (Math.random() - 0.5) * spreadRad * 0.5; // slight random vertical offset
+
+        let dir = forwardDir.clone();
+        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), angleH); // horizontal rotation
+        dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), angleV); // vertical rotation
+        directions.push(dir.normalize());
+    }
+
+    return directions;
+}
+
+
 
 function spawnProjectile(origin, direction, damage = 1) {
     // Capsule geometry: radius, length, capSegments, radialSegments
@@ -454,6 +479,52 @@ function spawnProjectile(origin, direction, damage = 1) {
 
 })();   // <--- CORRECT CLOSING OF IIFE
 
+
+let lastFireMs = 0;
+
+function handleFire() {
+    const w = player.currentWeapon;
+    if (!w || !isFiring) return;
+
+    // initialize lastShotTime if missing
+    if (!w.lastShotTime) w.lastShotTime = 0;
+    const now = performance.now();
+    const elapsed = now - w.lastShotTime;
+
+    if (elapsed < w.rateOfFire) return; // enforce rate of fire
+
+    // --- semi-auto check ---
+    if (w.fireMode === "semi-auto") {
+        if (!w._semiAutoReady) return; // already fired this trigger
+        w._semiAutoReady = false;      // block until next trigger
+    }
+
+    // Attempt ammo
+    if (!player.useAmmo(1)) {
+        logDebug("No ammo!");
+        try { new Audio('sounds/click.ogg').play().catch(()=>{}); } catch(e){}
+        return;
+    }
+
+    w.lastShotTime = now;
+
+    // --- compute forward direction ---
+    const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
+    raycaster.setFromCamera(retNDC, camera);
+    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
+    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(1));
+    const forwardDir = retWorld.clone().sub(shootOrigin).normalize();
+
+    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread);
+
+    for (const dir of dirs) {
+        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage });
+    }
+
+    try { new Audio('sounds/fire.ogg').play().catch(()=>{}); } catch(e){}
+}
+
+
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
    try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
@@ -516,7 +587,6 @@ function triggerFire() {
     const w = player.currentWeapon;
     if (!w) return false;
 
-    // Check ammo first
     if (!player.useAmmo(1)) {
         logDebug("No ammo! Reload first.");
         try {
@@ -527,47 +597,34 @@ function triggerFire() {
         return false;
     }
 
-    lastPlayerFireMs = performance.now(); // record fire time
+    lastPlayerFireMs = performance.now();
 
-    // --- Compute projectile origin and direction ---
-    // World position of the reticle (far out along camera ray)
-    const retNDC = new THREE.Vector2(
-        (ret.x / cw) * 2 - 1,
-        - (ret.y / ch) * 2 + 1
-    );
+    // Compute shooting origin and forward direction
+    const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
     raycaster.setFromCamera(retNDC, camera);
     const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
-
-    // World origin at bottom center of the screen, slightly in front of camera
     const bottomNDC = new THREE.Vector2(0, -1);
     raycaster.setFromCamera(bottomNDC, camera);
-    const originDistance = 1; // units in front of camera
-    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(originDistance));
+    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(1));
+    const forwardDir = retWorld.clone().sub(shootOrigin).normalize();
 
-    // Direction from bottom to reticle
-    const shootDir = retWorld.clone().sub(shootOrigin).normalize();
+    // Generate spread directions
+    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread);
 
-    // Spawn projectile
-    // old: spawnProjectile(shootOrigin, shootDir, w.damage);
-spawnProjectileUnified(shootOrigin, shootDir, {
-    damage: w.damage,
-    color: 0xffff00,
-    explosive: w.explosive ?? false,
-});
-
-
-        // Play weapon-specific firing sound
-    if (w.fireSound) {
-        try {
-            const fireSound = new Audio(w.fireSound);
-            fireSound.currentTime = 0;
-            fireSound.play().catch(()=>{});
-        } catch(e){}
+    // Spawn each projectile
+    for (const dir of directions) {
+        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage });
     }
-    
-	logDebug("Projectile fired from bottom to reticle");
-}
 
+    // Optional sound
+    try {
+        const snd = new Audio('sounds/fire.ogg');
+        snd.currentTime = 0;
+        snd.play().catch(()=>{});
+    } catch(e){}
+
+    return true;
+}
 
 
 /**
@@ -585,12 +642,14 @@ spawnProjectileUnified(shootOrigin, shootDir, {
  *   - trail: boolean
  */
 function spawnProjectileUnified(origin, direction, options = {}) {
-    const {
+    console.log(player.currentWeapon.name, player.currentWeapon.projectilesPerShot);
+
+	const {
         damage = 1,
         color = 0xffff00,
         speed = PROJECTILE_SPEED,
         isEnemy = false,
-        size = 0.02,
+        size = 0.1,
         lifetime = PROJECTILE_LIFETIME,
         explosive = false,
         trail = true
@@ -768,8 +827,7 @@ function animate(nowMs) {
 
   
   
-  updateAutoFire(nowMs);
-
+      handleFire(); // <-- centralized firing
   
   // Update displayed reticle
   displayedRet.x += (ret.x - displayedRet.x) * LERP;
