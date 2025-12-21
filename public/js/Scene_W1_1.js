@@ -1,3 +1,5 @@
+// js/scenes/scene_w1_1.js
+import { Scene_W1_2 } from "./scene_w1_2.js";
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
 
@@ -16,7 +18,7 @@ export const Scene_W1_1 = {
 
   camera: {
     position: { x: 0, y: 1.7, z: 0 },
-    lookAt:   { x: 0, y: 1.4, z: -6 },
+    lookAt: { x: 0, y: 1.4, z: -6 },
     fov: 60,
     near: 0.1,
     far: 100
@@ -67,7 +69,6 @@ export const Scene_W1_1 = {
           metalness: 0.5
         }
       },
-
       {
         id: "crateA",
         type: "crate",
@@ -86,7 +87,6 @@ export const Scene_W1_1 = {
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
-
       {
         id: "crateB",
         type: "crate",
@@ -105,7 +105,6 @@ export const Scene_W1_1 = {
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
-
       {
         id: "wall1",
         type: "wall",
@@ -124,7 +123,6 @@ export const Scene_W1_1 = {
         },
         hitSounds: ["sounds/ric1.ogg"]
       },
-
       {
         id: "catwalk",
         type: "catwalk",
@@ -145,148 +143,94 @@ export const Scene_W1_1 = {
   },
 
   enemies: [
-  {
-    id: "gruntA",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 2, y: 0.9, z: -7 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
-    coverObject: "crateA",
-	firePauseMs:  50,
-    weapon: "pistol",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntB",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 4, y: 0.9, z: -7 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
-    coverObject: "crateB",
-	firePauseMs:  50,
-    weapon: "pistol",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntD",
-    type: "Grunt",
-    hp: 40,
-    position: { x: -1.9, y: 0.9, z: -6 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
-    coverObject: "wall1",
-	firePauseMs:  50,
-    weapon: "assaultRifle",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntC",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 0, y: 3.9, z: -8 },
-    behavior: { pattern: "standInOpen" },
-    coverObject: null,
-	firePauseMs:  3000,
-    weapon: "sniperRifle",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-  {
-  id: "gruntE",
-  type: "Grunt",
-  hp: 40,
-
-  // Starts centered in the room, slightly forward so it's easy to see
-  position: { x: 0, y: 0.9, z: 3 },
-
-  behavior: {
-    pattern: "path",
-    params: {
-      loop: true,
-      steps: [
-        // Move left 3 units over 3 seconds
-        { type: "move", axis: "x", distance: -3, durationMs: 3000 },
-
-        // Brief pause
-        { type: "pause", durationMs: 500 },
-
-        // Move forward (toward player) 2 units
-        { type: "move", axis: "z", distance: 2, durationMs: 2000 },
-
-        // Pause again
-        { type: "pause", durationMs: 500 },
-
-        // Move right 6 units (passes through origin to the other side)
-        { type: "move", axis: "x", distance: 6, durationMs: 6000 },
-
-        // Pause
-        { type: "pause", durationMs: 500 },
-
-        // Move backward to original Z
-        { type: "move", axis: "z", distance: -2, durationMs: 2000 },
-
-        // Pause
-        { type: "pause", durationMs: 500 },
-
-        // Move left back to original X
-        { type: "move", axis: "x", distance: -3, durationMs: 3000 }
-      ]
+    {
+      id: "gruntA",
+      type: "Grunt",
+      hp: 40,
+      position: { x: 2, y: 0.9, z: -7 },
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
+      coverObject: "crateA",
+      firePauseMs: 50,
+      weapon: "pistol",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
+    },
+    {
+      id: "gruntB",
+      type: "Grunt",
+      hp: 40,
+      position: { x: 4, y: 0.9, z: -7 },
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
+      coverObject: "crateB",
+      firePauseMs: 50,
+      weapon: "pistol",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
+    },
+    {
+      id: "gruntD",
+      type: "Grunt",
+      hp: 40,
+      position: { x: -1.9, y: 0.9, z: -6 },
+      behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
+      coverObject: "wall1",
+      firePauseMs: 50,
+      weapon: "assaultRifle",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
+    },
+    {
+      id: "gruntC",
+      type: "Grunt",
+      hp: 40,
+      position: { x: 0, y: 3.9, z: -8 },
+      behavior: { pattern: "standInOpen" },
+      coverObject: null,
+      firePauseMs: 3000,
+      weapon: "sniperRifle",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
+    },
+    {
+      id: "gruntE",
+      type: "Grunt",
+      hp: 40,
+      position: { x: 0, y: 0.9, z: 3 },
+      behavior: {
+        pattern: "path",
+        params: {
+          loop: true,
+          steps: [
+            { type: "move", axis: "x", distance: -3, durationMs: 3000 },
+            { type: "pause", durationMs: 500 },
+            { type: "move", axis: "z", distance: 2, durationMs: 2000 },
+            { type: "pause", durationMs: 500 },
+            { type: "move", axis: "x", distance: 6, durationMs: 6000 },
+            { type: "pause", durationMs: 500 },
+            { type: "move", axis: "z", distance: -2, durationMs: 2000 },
+            { type: "pause", durationMs: 500 },
+            { type: "move", axis: "x", distance: -3, durationMs: 3000 }
+          ]
+        }
+      },
+      firePauseMs: 800,
+      weapon: "pistol",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
     }
-  },
-
-  firePauseMs: 800,
-  weapon: "pistol",
-
-  hitSounds: [
-    "assets/sfx/grunt/hit1.ogg",
-    "assets/sfx/grunt/hit2.ogg"
   ],
-  deathSounds: [
-    "assets/sfx/grunt/death1.ogg",
-    "assets/sfx/grunt/death2.ogg"
-  ],
-
-  sprite: "assets/sprites/grunt.png"
-}
-
-],
-
 
   objective: {
     type: "eliminateAllEnemies",
     description: "Eliminate all enemies to complete this scene."
-  }
+  },
+
+  nextScene: Scene_W1_2
+
+
 };

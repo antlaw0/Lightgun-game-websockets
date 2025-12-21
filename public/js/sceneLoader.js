@@ -317,6 +317,10 @@ const loader = new GLTFLoader();
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;
 
+  // Hook automatic objective check on death
+  e.onDeath = (id) => {
+    this._checkObjectiveAfterHit();
+  };
       // register via helper
       this.addEnemy(e);
     });
@@ -783,20 +787,29 @@ applyDamageToMesh(mesh, damage = 1) {
     if (!this.objective) return;
 
     if (this.objective.type === "eliminateAllEnemies") {
-      const remaining = this.enemies.filter(e => !e._isDead);
-      if (remaining.length === 0) {
-        if (typeof window.onSceneComplete === "function") {
-          window.onSceneComplete(this.sceneDef);
-        } else {
-          window.dispatchEvent(new CustomEvent("sceneComplete", {
-            detail: { scene: this.sceneDef }
-          }));
-        }
-      }
-    }
-  }
+        const remaining = this.enemies.filter(e => !e._isDead);
+        console.log("Enemies still alive:", remaining.length);
 
-  // -----------------------------
+        if (remaining.length === 0) {
+            console.log("All enemies defeated!");
+
+            // Optional: remove dead enemies from array now
+            this.enemies = [];
+            this.enemiesById = {};
+            this.enemyMeshes = [];
+
+            if (typeof window.onSceneComplete === "function") {
+                window.onSceneComplete(this.sceneDef);
+            } else {
+                window.dispatchEvent(new CustomEvent("sceneComplete", {
+                    detail: { scene: this.sceneDef }
+                }));
+            }
+        }
+    }
+}
+
+// -----------------------------
   // Raycasting Mesh List
   // -----------------------------
 getIntersectableMeshes() {

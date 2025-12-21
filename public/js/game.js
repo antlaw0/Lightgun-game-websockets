@@ -1,7 +1,7 @@
 // js/game.js
 // This file is written as an ES module. Include it as:
 // <script type="module" src="js/game.js"></script>
-
+import { SceneManager } from './sceneManager.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
@@ -267,43 +267,48 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 // ------------------ Scene / Level management ------------------
+
+  // Load using SceneManager for on-rails intro/exit
+// ------------------ Scene / Level management ------------------
 window.sceneLoader = new SceneLoader(scene, camera, player);
 let currentLevel = Level_Warehouse;
 let currentSceneIndex = 0;
+window.sceneManager = new SceneManager(camera, sceneLoader);
 
 function loadLevel(level) {
-  currentLevel = level;
-  currentSceneIndex = 0;
-  loadSceneIndex(currentSceneIndex);
+    currentLevel = level;
+    currentSceneIndex = 0;
+    loadSceneIndex(currentSceneIndex);
 }
 
-function loadSceneIndex(index) {
-  if (!currentLevel || !currentLevel.scenes) return;
-  if (index < 0 || index >= currentLevel.scenes.length) {
-    logDebug("No more scenes in level.");
-    return;
-  }
-  const sc = currentLevel.scenes[index];
-  sceneLoader.loadScene(sc);
-  logDebug(`Loaded scene: ${sc.name}`);
-}
+async function loadSceneIndex(index) {
+    if (!currentLevel || !currentLevel.scenes) return;
+    if (index < 0 || index >= currentLevel.scenes.length) {
+        logDebug("No more scenes in level.");
+        return;
+    }
 
-// Provide onSceneComplete per your choice B: app must trigger next scene manually
-window.onSceneComplete = function(sceneDef) {
-  logDebug(`Scene complete: ${sceneDef.name}. Call nextScene() to advance.`);
-  // You (or your UI) decide when to call nextScene(); for convenience we'll also emit an event:
-  window.dispatchEvent(new CustomEvent("sceneCompleteReady", { detail: { scene: sceneDef } }));
-};
+    const sceneObj = currentLevel.scenes[index]; // this is the actual scene object
+
+    try {
+        // Directly load the scene object — no import
+        await window.sceneManager.loadScene(sceneObj);
+
+        logDebug(`Scene complete: ${sceneObj.name || "Unnamed Scene"}`);
+    } catch (err) {
+        console.error("Failed to load scene:", sceneObj, err);
+    }
+}
 
 function nextScene() {
-  const next = currentSceneIndex + 1;
-  if (next < currentLevel.scenes.length) {
-    currentSceneIndex = next;
-    loadSceneIndex(currentSceneIndex);
-  } else {
-    logDebug(`Level ${currentLevel.name} complete.`);
-    window.dispatchEvent(new CustomEvent("levelComplete", { detail: { level: currentLevel } }));
-  }
+    const next = currentSceneIndex + 1;
+    if (next < currentLevel.scenes.length) {
+        currentSceneIndex = next;
+        loadSceneIndex(currentSceneIndex);
+    } else {
+        logDebug(`Level ${currentLevel.name} complete.`);
+        window.dispatchEvent(new CustomEvent("levelComplete", { detail: { level: currentLevel } }));
+    }
 }
 
 // Hook sceneLoaded event to announce

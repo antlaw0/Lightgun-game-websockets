@@ -378,43 +378,32 @@ if (this.coverType === "full") {
   }
 
   die() {
-  if (this._isDead) return;
-  this._isDead = true;
-
-  // Play death sounds
+    if (this._isDead) return;  // prevent double death
+    this._isDead = true;
   this._playRandom(this.deathSounds);
+    // Hide the mesh immediately
+    if (this.mesh) this.mesh.visible = false;
 
-  // Hide and remove mesh from scene
-  if (this.mesh) {
-    this.mesh.visible = false;
-
-    if (this.sceneGroup && this.mesh.parent) {
-      this.sceneGroup.remove(this.mesh);
+    // Remove from enemyMeshes so raycasting no longer hits it
+    if (this.mesh) {
+        this.mesh.traverse(obj => {
+            if (obj.isMesh) {
+                const idx = window.sceneLoader.enemyMeshes.indexOf(obj);
+                if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+            }
+        });
     }
 
-    // Dispose of geometry/material to free memory
-    if (this.mesh.geometry) this.mesh.geometry.dispose();
-    if (this.mesh.material) {
-      if (this.mesh.material.map) this.mesh.material.map.dispose();
-      this.mesh.material.dispose();
-    }
-  }
+    // Trigger death callback (objective check)
+    if (typeof this.onDeath === "function") this.onDeath(this.id);
 
-  // Remove from global enemy array
-  const idx = ENEMY_INSTANCES.indexOf(this);
-  if (idx !== -1) ENEMY_INSTANCES.splice(idx, 1);
-
-  // Remove from sceneLoader.enemies if it exists
-  if (window.sceneLoader && Array.isArray(window.sceneLoader.enemies)) {
-    const sceneIdx = window.sceneLoader.enemies.indexOf(this);
-    if (sceneIdx !== -1) window.sceneLoader.enemies.splice(sceneIdx, 1);
-  }
-
-  // Dispatch event for any other game logic
-  window.dispatchEvent(new CustomEvent("enemyDied", {
-    detail: { id: this.id }
-  }));
+    console.log("Enemy died:", this.id, "Enemies remaining:", 
+        window.sceneLoader.enemies.filter(e => !e._isDead).length
+    );
 }
+
+
+
 
 update(deltaMs, nowMs, player) {
     if (this._isDead) return;
