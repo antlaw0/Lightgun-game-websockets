@@ -1,5 +1,5 @@
 // js/sceneManager.js
-import { runCameraSteps } from "./cameraRails.js";
+import { runCameraRails } from "./cameraRails.js";
 
 export class SceneManager {
     constructor(camera, sceneLoader) {
@@ -25,29 +25,35 @@ export class SceneManager {
 
         console.log(`SceneManager loading scene: ${sceneDef.name}`);
 
-        // Build the world (SceneLoader handles props, enemies, room, lights)
+        // Build the world (props, enemies, room, lights)
         this.sceneLoader.loadScene(sceneDef);
 
-        // Run intro camera steps if defined
-        if (sceneDef.introSteps?.length) {
-            await runCameraSteps(this.camera, sceneDef.introSteps);
+        // Run intro camera rails if defined
+        const introRails = sceneDef.cameraRails?.intro;
+        if (Array.isArray(introRails) && introRails.length > 0) {
+            await runCameraRails(this.camera, introRails);
         }
 
-        // Combat happens here; SceneLoader emits "sceneComplete" when done
+        // Gameplay begins after this point
+        // SceneLoader will emit "sceneComplete" when enemies are cleared
     }
 
-    // Called by SceneLoader when scene completes
+    // Called when SceneLoader dispatches sceneComplete
     async onSceneCompleted(scene) {
+        // Ignore stale events
+        if (scene !== this.currentScene) return;
+
         console.log(`Scene completed: ${scene.name}`);
 
-        // Run exit camera steps
-        if (scene.exitSteps?.length) {
-            await runCameraSteps(this.camera, scene.exitSteps);
+        // Run exit camera rails if defined
+        const exitRails = scene.cameraRails?.exit;
+        if (Array.isArray(exitRails) && exitRails.length > 0) {
+            await runCameraRails(this.camera, exitRails);
         }
 
-        // Load the next scene if defined
+        // Transition to next scene if defined
         if (scene.nextScene) {
-            this.loadScene(scene.nextScene);
+            await this.loadScene(scene.nextScene);
         }
     }
 }

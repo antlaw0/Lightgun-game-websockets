@@ -15,7 +15,15 @@ export const Scene_W1_1 = {
     height: 8,
     depth: 30
   },
-
+  cameraRails: {
+    intro: [
+      { type: "moveTo", position: { x: 0, y: 1.6, z: 10 }, duration: 1500 },
+      { type: "lookAt", target: { x: 0, y: 1.6, z: 0 }, duration: 800 }
+    ],
+    exit: [
+      { type: "moveTo", position: { x: 0, y: 1.6, z: -12 }, duration: 2000 }
+    ]
+  },
   camera: {
     position: { x: 0, y: 1.7, z: 0 },
     lookAt: { x: 0, y: 1.4, z: -6 },

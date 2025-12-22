@@ -36,7 +36,6 @@ export const player = new Player({
   currentWeaponIndex: 0
 });
 
-HUD.init(player);
 
 // Example usage:
 setTimeout(() => player.takeDamage(30), 2000);
@@ -134,12 +133,13 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
+HUD.init(player, camera);
 
 
 // -----------------------------------------------------
 // DEBUG FREE CAMERA (WASD + QE + Arrow keys)
 // -----------------------------------------------------
-const camSpeed = 0.2;
+const camSpeed = 0.1;
 const camRotSpeed = 0.02;
 
 
@@ -282,22 +282,14 @@ function loadLevel(level) {
 }
 
 async function loadSceneIndex(index) {
-    if (!currentLevel || !currentLevel.scenes) return;
-    if (index < 0 || index >= currentLevel.scenes.length) {
-        logDebug("No more scenes in level.");
-        return;
-    }
+    if (!currentLevel?.scenes) return;
+    if (index < 0 || index >= currentLevel.scenes.length) return;
 
-    const sceneObj = currentLevel.scenes[index]; // this is the actual scene object
+    const sceneObj = currentLevel.scenes[index];
 
-    try {
-        // Directly load the scene object — no import
-        await window.sceneManager.loadScene(sceneObj);
+    await window.sceneManager.loadScene(sceneObj);
 
-        logDebug(`Scene complete: ${sceneObj.name || "Unnamed Scene"}`);
-    } catch (err) {
-        console.error("Failed to load scene:", sceneObj, err);
-    }
+    logDebug(`Scene complete: ${sceneObj.name}`);
 }
 
 function nextScene() {
@@ -829,6 +821,7 @@ function animate(nowMs) {
   requestAnimationFrame(animate);
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
+HUD.update(nowMs);
 
   
   

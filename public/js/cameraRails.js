@@ -1,60 +1,92 @@
-export async function runCameraSteps(camera, steps) {
-    for (let step of steps) {
-        if (step.type === 'move') {
-            await moveCamera(camera, step.value, step.duration);
-        } else if (step.type === 'rotate') {
-            await rotateCamera(camera, step.value, step.duration, step.axis || 'y');
-        }
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+
+export async function runCameraRails(camera, steps) {
+  for (const step of steps) {
+    switch (step.type) {
+      case 'moveTo':
+        await moveTo(camera, step.position, step.duration);
+        break;
+
+      case 'lookAt':
+        await lookAt(camera, step.target, step.duration);
+        break;
+
+      case 'rotate':
+        await rotate(camera, step.rotation, step.duration);
+        break;
+
+      default:
+        console.warn("Unknown camera rail step:", step);
     }
+  }
 }
 
-function moveCamera(camera, distance, duration) {
-    return new Promise(resolve => {
-        const startPos = camera.position.clone();
-        const direction = new THREE.Vector3(0, 0, -1); // forward in local space
-        direction.applyQuaternion(camera.quaternion).normalize();
-        const endPos = startPos.clone().add(direction.multiplyScalar(distance));
-        let startTime = null;
+function moveTo(camera, position, duration) {
+  return new Promise(resolve => {
+    const start = camera.position.clone();
+    const end = new THREE.Vector3(position.x, position.y, position.z);
 
-        function animate(time) {
-            if (!startTime) startTime = time;
-            let t = (time - startTime) / duration;
-            if (t > 1) t = 1;
-
-            camera.position.lerpVectors(startPos, endPos, t);
-
-            if (t < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                resolve();
-            }
-        }
-        requestAnimationFrame(animate);
-    });
+    animateLerp(duration, t => {
+      camera.position.lerpVectors(start, end, t);
+    }, resolve);
+  });
 }
 
-function rotateCamera(camera, degrees, duration, axis) {
-    return new Promise(resolve => {
-        const startQuat = camera.quaternion.clone();
-        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-        euler[axis] = THREE.MathUtils.degToRad(degrees);
-        const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);
+function lookAt(camera, target, duration) {
+  return new Promise(resolve => {
+    const startQuat = camera.quaternion.clone();
 
-        let startTime = null;
+    camera.lookAt(target.x, target.y, target.z);
+    const endQuat = camera.quaternion.clone();
+    camera.quaternion.copy(startQuat);
 
-        function animate(time) {
-            if (!startTime) startTime = time;
-            let t = (time - startTime) / duration;
-            if (t > 1) t = 1;
+    animateLerp(duration, t => {
+      THREE.Quaternion.slerp(
+        startQuat,
+        endQuat,
+        camera.quaternion,
+        t
+      );
+    }, resolve);
+  });
+}
 
-            THREE.Quaternion.slerp(startQuat, endQuat, camera.quaternion, t);
+function rotate(camera, rotation, duration) {
+  return new Promise(resolve => {
+    const startQuat = camera.quaternion.clone();
+    const euler = new THREE.Euler(
+      THREE.MathUtils.degToRad(rotation.x || 0),
+      THREE.MathUtils.degToRad(rotation.y || 0),
+      THREE.MathUtils.degToRad(rotation.z || 0),
+      'YXZ'
+    );
+    const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);
 
-            if (t < 1) {
-                requestAnimationFrame(animate);
-            } else {
-                resolve();
-            }
-        }
-        requestAnimationFrame(animate);
-    });
+    animateLerp(duration, t => {
+      THREE.Quaternion.slerp(
+        startQuat,
+        endQuat,
+        camera.quaternion,
+        t
+      );
+    }, resolve);
+  });
+}
+
+function animateLerp(duration, update, done) {
+  let startTime = null;
+
+  function frame(time) {
+    if (!startTime) startTime = time;
+    const t = Math.min((time - startTime) / duration, 1);
+    update(t);
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      done();
+    }
+  }
+
+  requestAnimationFrame(frame);
 }
