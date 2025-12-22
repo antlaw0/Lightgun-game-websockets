@@ -1,5 +1,6 @@
+// js/scenes/scene_test_hallway_L.js
 export const Scene_W1_2 = {
-  name: "Warehouse - Scene 2",
+  name: "Test Scene - L Shaped Hallway",
 
   background: {
     texture: "assets/backgrounds/black_bg.png",
@@ -8,38 +9,63 @@ export const Scene_W1_2 = {
     position: { x: 0, y: 0, z: 0 }
   },
 
+  // Overall bounding room, larger than the hallway itself
   room: {
-    width: 20,
+    width: 40,
     height: 8,
-    depth: 30
+    depth: 40
   },
 
   camera: {
-    position: { x: 0, y: 1.7, z: 0 },
-    lookAt:   { x: 0, y: 1.4, z: -6 },
+    position: { x: 0, y: 1.7, z: 6 },
+    lookAt: { x: 0, y: 1.4, z: -6 },
     fov: 60,
     near: 0.1,
-    far: 100
+    far: 120
   },
 
   lights: [
-    { type: "ambient", color: 0x8899aa, intensity: 0.4 },
     {
+      type: "ambient",
+      color: 0x8899aa,
+      intensity: 0.35
+    },
+    {
+      // Light for first hallway leg (-Z)
       type: "spot",
       color: 0xffffff,
-      intensity: 3,
-      distance: 28,
-      angle: Math.PI / 5,
-      penumbra: 0.0,
+      intensity: 2.5,
+      distance: 30,
+      angle: Math.PI / 6,
+      penumbra: 0.15,
       decay: 2,
-      position: { x: 0, y: 7.8, z: 0 },
-      target: { x: 0, y: 0, z: 0 },
+      position: { x: 0, y: 7.5, z: 2 },
+      target: { x: 0, y: 0, z: -10 },
       castShadow: true,
       shadow: {
-        mapSize: { width: 4096, height: 4096 },
+        mapSize: { width: 2048, height: 2048 },
         bias: -0.00008,
         near: 1,
-        far: 30
+        far: 40
+      }
+    },
+    {
+      // Light for second hallway leg (+X)
+      type: "spot",
+      color: 0xffffff,
+      intensity: 2.5,
+      distance: 30,
+      angle: Math.PI / 6,
+      penumbra: 0.15,
+      decay: 2,
+      position: { x: 6, y: 7.5, z: -14 },
+      target: { x: 14, y: 0, z: -14 },
+      castShadow: true,
+      shadow: {
+        mapSize: { width: 2048, height: 2048 },
+        bias: -0.00008,
+        near: 1,
+        far: 40
       }
     }
   ],
@@ -48,245 +74,93 @@ export const Scene_W1_2 = {
     floor: "assets/textures/warehouse_floor.png",
     ceiling: "assets/textures/warehouse_ceiling.png",
     wall: "assets/textures/warehouse_wall.png",
-    backWall: "assets/textures/warehouse_back.png"
+    backWall: "assets/textures/warehouse_wall.png"
   },
 
   environment: {
     staticObjects: [
-      {
-        id: "explosiveBarrel1",
-        type: "glb",
-        file: "/assets/models/explosive_barrel.glb",
-        position: { x: 0, y: 0, z: 2 },
-        scale: { x: 1, y: 1, z: 1 },
-        rotation: { x: 0, y: 0, z: 0 },
-        coverType: "low",
-        material: {
-          map: "assets/textures/barrel_diffuse.png",
-          roughness: 0.6,
-          metalness: 0.5
-        }
-      },
+      // ===== FIRST LEG (-Z) =====
 
       {
-        id: "crateA",
-        type: "crate",
-        position: { x: 2, y: 0.5, z: -6 },
-        size: { x: 1, y: 1, z: 1 },
-        hp: 8,
-        maxHp: 8,
-        coverType: "low",
-        material: {
-          map: "assets/props/crate.png",
-          color: 0xffffff,
-          roughness: 0.75,
-          metalness: 0.0
-        },
-        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
-        deathSounds: ["assets/sfx/props/crate_break.ogg"],
-        deathAction: "break"
-      },
-
-      {
-        id: "crateB",
-        type: "crate",
-        position: { x: 4, y: 0.5, z: -6 },
-        size: { x: 1, y: 1, z: 1 },
-        hp: 8,
-        maxHp: 8,
-        coverType: "low",
-        material: {
-          map: "assets/props/crate.png",
-          color: 0xffffff,
-          roughness: 0.75,
-          metalness: 0.0
-        },
-        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
-        deathSounds: ["assets/sfx/props/crate_break.ogg"],
-        deathAction: "break"
-      },
-
-      {
-        id: "wall1",
+        id: "hall1_leftWall",
         type: "wall",
-        hp: 200,
-        maxHp: 200,
-        position: { x: -4.5, y: 0, z: -6 },
-        size: { x: 4, y: 2.5, z: 0.2 },
-        rotation: { x: 0, y: 0, z: 0 },
-        coverType: "full",
         indestructible: true,
+        position: { x: -2, y: 1.25, z: -6 },
+        size: { x: 0.2, y: 2.5, z: 16 },
         material: {
           map: "assets/props/brick_wall.png",
-          color: 0xffff00,
+          roughness: 0.95,
+          metalness: 0.0
+        },
+        hitSounds: ["sounds/ric1.ogg"]
+      },
+      {
+        id: "hall1_rightWall",
+        type: "wall",
+        indestructible: true,
+        position: { x: 2, y: 1.25, z: -6 },
+        size: { x: 0.2, y: 2.5, z: 16 },
+        material: {
+          map: "assets/props/brick_wall.png",
           roughness: 0.95,
           metalness: 0.0
         },
         hitSounds: ["sounds/ric1.ogg"]
       },
 
+      // ===== CORNER BLOCKER (forces turn) =====
+
       {
-        id: "catwalk",
-        type: "catwalk",
-        position: { x: 0, y: 3, z: -8 },
-        size: { x: 12, y: 0.2, z: 1 },
-        hp: 9999,
-        maxHp: 9999,
+        id: "cornerBlock",
+        type: "wall",
+        indestructible: true,
+        position: { x: 0, y: 1.25, z: -14 },
+        size: { x: 4, y: 2.5, z: 0.4 },
         material: {
-          color: 0x777777,
-          roughness: 0.25,
-          metalness: 0.9
+          map: "assets/props/brick_wall.png",
+          roughness: 0.95,
+          metalness: 0.0
         },
-        hitSounds: [],
-        deathSounds: [],
-        deathAction: "none"
+        hitSounds: ["sounds/ric1.ogg"]
+      },
+
+      // ===== SECOND LEG (+X) =====
+
+      {
+        id: "hall2_backWall",
+        type: "wall",
+        indestructible: true,
+        position: { x: 8, y: 1.25, z: -16 },
+        size: { x: 16, y: 2.5, z: 0.2 },
+        material: {
+          map: "assets/props/brick_wall.png",
+          roughness: 0.95,
+          metalness: 0.0
+        },
+        hitSounds: ["sounds/ric1.ogg"]
+      },
+      {
+        id: "hall2_frontWall",
+        type: "wall",
+        indestructible: true,
+        position: { x: 8, y: 1.25, z: -12 },
+        size: { x: 16, y: 2.5, z: 0.2 },
+        material: {
+          map: "assets/props/brick_wall.png",
+          roughness: 0.95,
+          metalness: 0.0
+        },
+        hitSounds: ["sounds/ric1.ogg"]
       }
     ]
   },
 
-  enemies: [
-  {
-    id: "gruntA",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 2, y: 0.9, z: -7 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
-    coverObject: "crateA",
-	firePauseMs:  50,
-    weapon: "pistol",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntB",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 4, y: 0.9, z: -7 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
-    coverObject: "crateB",
-	firePauseMs:  50,
-    weapon: "pistol",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntD",
-    type: "Grunt",
-    hp: 40,
-    position: { x: -1.9, y: 0.9, z: -6 },
-    behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
-    coverObject: "wall1",
-	firePauseMs:  50,
-    weapon: "assaultRifle",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-
-  {
-    id: "gruntC",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 0, y: 3.9, z: -8 },
-    behavior: { pattern: "standInOpen" },
-    coverObject: null,
-	firePauseMs:  3000,
-    weapon: "sniperRifle",
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    sprite: "assets/sprites/grunt.png"
-  },
-  {
-  id: "gruntE",
-  type: "Grunt",
-  hp: 40,
-
-  // Starts centered in the room, slightly forward so it's easy to see
-  position: { x: 0, y: 0.9, z: 3 },
-
-  behavior: {
-    pattern: "path",
-    params: {
-      loop: true,
-      steps: [
-        // Move left 3 units over 3 seconds
-        { type: "move", axis: "x", distance: -3, durationMs: 3000 },
-
-        // Brief pause
-        { type: "pause", durationMs: 500 },
-
-        // Move forward (toward player) 2 units
-        { type: "move", axis: "z", distance: 2, durationMs: 2000 },
-
-        // Pause again
-        { type: "pause", durationMs: 500 },
-
-        // Move right 6 units (passes through origin to the other side)
-        { type: "move", axis: "x", distance: 6, durationMs: 6000 },
-
-        // Pause
-        { type: "pause", durationMs: 500 },
-
-        // Move backward to original Z
-        { type: "move", axis: "z", distance: -2, durationMs: 2000 },
-
-        // Pause
-        { type: "pause", durationMs: 500 },
-
-        // Move left back to original X
-        { type: "move", axis: "x", distance: -3, durationMs: 3000 }
-      ]
-    }
-  },
-
-  firePauseMs: 800,
-  weapon: "pistol",
-
-  hitSounds: [
-    "assets/sfx/grunt/hit1.ogg",
-    "assets/sfx/grunt/hit2.ogg"
-  ],
-  deathSounds: [
-    "assets/sfx/grunt/death1.ogg",
-    "assets/sfx/grunt/death2.ogg"
-  ],
-
-  sprite: "assets/sprites/grunt.png"
-}
-
-],
-
+  enemies: [],
 
   objective: {
-    type: "eliminateAllEnemies",
-    description: "Eliminate all enemies to complete this scene."
-  }
+    type: "reachEnd",
+    description: "Traverse the L-shaped hallway to verify movement, collision, lighting, and audio."
+  },
+
+  nextScene: null
 };
