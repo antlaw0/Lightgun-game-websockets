@@ -5,6 +5,7 @@ import { SceneManager } from './sceneManager.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
+import { ENEMY_AI_ENABLED, setEnemyAIEnabled } from './enemy.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
@@ -170,10 +171,17 @@ window.addEventListener("mouseleave", () => {
     sendDesktopPayload({ fire: false });
 });
 
-document.addEventListener('keydown', (e) => {
-    switch (e.key.toLowerCase()) {
 
-        // Movement
+window.addEventListener("keydown", (e) => {
+  if (e.code === "F4") {
+    setEnemyAIEnabled(!ENEMY_AI_ENABLED);
+    logDebug(`Enemy AI toggled: ${ENEMY_AI_ENABLED ? "ON" : "OFF"}`);
+  }
+});
+        
+		// Movement
+        document.addEventListener('keydown', (e) => {
+    switch(e.key.toLowerCase()) {
         case 'w': // forward
             camera.position.z -= camSpeed;
             break;
@@ -192,8 +200,6 @@ document.addEventListener('keydown', (e) => {
         case 'e': // up
             camera.position.y += camSpeed;
             break;
-
-        // Rotation (arrow keys)
         case 'arrowleft':
             camera.rotation.y += camRotSpeed;
             break;
@@ -208,6 +214,7 @@ document.addEventListener('keydown', (e) => {
             break;
     }
 });
+
 
 
 

@@ -1,5 +1,11 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { getWeapon } from "./weapons.js";
+export let ENEMY_AI_ENABLED = true;
+
+export function setEnemyAIEnabled(enabled) {
+  ENEMY_AI_ENABLED = !!enabled;
+  console.log("Enemy AI:", ENEMY_AI_ENABLED ? "ENABLED" : "DISABLED");
+}
 
 export const ENEMY_INSTANCES = [];
 //import { ENEMY_DEFS } from "./scenes.js";
@@ -407,7 +413,7 @@ if (this.coverType === "full") {
 
 update(deltaMs, nowMs, player) {
     if (this._isDead) return;
-
+    if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
     const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
@@ -503,6 +509,7 @@ _initPathBehavior(params) {
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
+	    if (!ENEMY_AI_ENABLED) return; // HARD STOP
     if (nowMs < this._nextAllowedFireMs) return;
   if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
@@ -562,6 +569,7 @@ _initPathBehavior(params) {
   // Behaviors
   //
   _updateStand(deltaMs, nowMs, params) {
+	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
     const interval = params.fireIntervalMs || 1200;
     if (!this._lastStandFire) this._lastStandFire = 0;
     if (nowMs - this._lastStandFire > interval) {
@@ -571,6 +579,7 @@ _initPathBehavior(params) {
   }
 
   _updatePatrol(deltaMs, nowMs, params) {
+	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
     if (!this._patrol) {
       this._patrol = {
         dir: 1,
@@ -596,6 +605,7 @@ _initPathBehavior(params) {
   }
 
   _updatePopOut(deltaMs, nowMs, params) {
+	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
     // Ensure _coverParams reflect any runtime overrides
     const cp = this._coverParams;
 

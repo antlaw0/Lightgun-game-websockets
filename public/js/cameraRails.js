@@ -41,12 +41,7 @@ function lookAt(camera, target, duration) {
     camera.quaternion.copy(startQuat);
 
     animateLerp(duration, t => {
-      THREE.Quaternion.slerp(
-        startQuat,
-        endQuat,
-        camera.quaternion,
-        t
-      );
+      camera.quaternion.slerp(endQuat, t); // <-- use instance method
     }, resolve);
   });
 }
@@ -63,12 +58,7 @@ function rotate(camera, rotation, duration) {
     const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);
 
     animateLerp(duration, t => {
-      THREE.Quaternion.slerp(
-        startQuat,
-        endQuat,
-        camera.quaternion,
-        t
-      );
+      camera.quaternion.slerp(endQuat, t); // <-- use instance method
     }, resolve);
   });
 }
