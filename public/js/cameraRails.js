@@ -18,6 +18,11 @@ export async function runCameraRails(camera, steps) {
       default:
         console.warn("Unknown camera rail step:", step);
     }
+
+    // Trigger optional callback when this step is reached
+    if (typeof step.onReach === 'function') {
+      await step.onReach();
+    }
   }
 }
 
@@ -41,7 +46,7 @@ function lookAt(camera, target, duration) {
     camera.quaternion.copy(startQuat);
 
     animateLerp(duration, t => {
-      camera.quaternion.slerp(endQuat, t); // <-- use instance method
+      camera.quaternion.slerp(endQuat, t); // instance method
     }, resolve);
   });
 }
@@ -58,7 +63,7 @@ function rotate(camera, rotation, duration) {
     const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);
 
     animateLerp(duration, t => {
-      camera.quaternion.slerp(endQuat, t); // <-- use instance method
+      camera.quaternion.slerp(endQuat, t); // instance method
     }, resolve);
   });
 }

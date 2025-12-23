@@ -1,5 +1,6 @@
 // js/scenes/scene_w1_1.js
 import { Scene_W1_2 } from "./scene_w1_2.js";
+
 export const Scene_W1_1 = {
   name: "Warehouse - Scene 1",
 
@@ -15,15 +16,25 @@ export const Scene_W1_1 = {
     height: 8,
     depth: 30
   },
+
   cameraRails: {
-    intro: [
-      { type: "moveTo", position: { x: 0, y: 1.6, z: 10 }, duration: 1500 },
-      { type: "lookAt", target: { x: 0, y: 1.6, z: 0 }, duration: 800 }
-    ],
+    intro: [],
+
     exit: [
-      { type: "moveTo", position: { x: 0, y: 1.6, z: -12 }, duration: 2000 }
+      {
+        type: "rotate",
+        rotation: { y: -90 },
+        duration: 3000
+      },
+      {
+        type: "moveTo",
+        position: { x: 8.5, y: 1.7, z: -8.5 },
+        duration: 8000,
+        triggerNextScene: true
+      }
     ]
   },
+
   camera: {
     position: { x: 0, y: 1.7, z: 0 },
     lookAt: { x: 0, y: 1.4, z: -6 },
@@ -77,6 +88,16 @@ export const Scene_W1_1 = {
           metalness: 0.5
         }
       },
+
+      {
+        id: "exitDoor",
+        type: "door",
+        object3D: null,
+        position: { x: 8.5, y: 0, z: -8.5 },
+        targetRotation: { y: -Math.PI / 2 },
+        duration: 2
+      },
+
       {
         id: "crateA",
         type: "crate",
@@ -95,6 +116,7 @@ export const Scene_W1_1 = {
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
+
       {
         id: "crateB",
         type: "crate",
@@ -113,6 +135,7 @@ export const Scene_W1_1 = {
         deathSounds: ["assets/sfx/props/crate_break.ogg"],
         deathAction: "break"
       },
+
       {
         id: "wall1",
         type: "wall",
@@ -120,7 +143,6 @@ export const Scene_W1_1 = {
         maxHp: 200,
         position: { x: -4.5, y: 0, z: -6 },
         size: { x: 4, y: 2.5, z: 0.2 },
-        rotation: { x: 0, y: 0, z: 0 },
         coverType: "full",
         indestructible: true,
         material: {
@@ -131,6 +153,7 @@ export const Scene_W1_1 = {
         },
         hitSounds: ["sounds/ric1.ogg"]
       },
+
       {
         id: "catwalk",
         type: "catwalk",
@@ -150,6 +173,15 @@ export const Scene_W1_1 = {
     ]
   },
 
+  transitionObjects: [
+    {
+      id: "exitDoor",
+      object3D: null,
+      targetRotation: { y: -Math.PI / 2 },
+      duration: 2
+    }
+  ],
+
   enemies: [
     {
       id: "gruntA",
@@ -160,10 +192,11 @@ export const Scene_W1_1 = {
       coverObject: "crateA",
       firePauseMs: 50,
       weapon: "pistol",
-      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
     },
+
     {
       id: "gruntB",
       type: "Grunt",
@@ -173,10 +206,11 @@ export const Scene_W1_1 = {
       coverObject: "crateB",
       firePauseMs: 50,
       weapon: "pistol",
-      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
     },
+
     {
       id: "gruntD",
       type: "Grunt",
@@ -186,23 +220,24 @@ export const Scene_W1_1 = {
       coverObject: "wall1",
       firePauseMs: 50,
       weapon: "assaultRifle",
-      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
     },
+
     {
       id: "gruntC",
       type: "Grunt",
       hp: 40,
       position: { x: 0, y: 3.9, z: -8 },
       behavior: { pattern: "standInOpen" },
-      coverObject: null,
       firePauseMs: 3000,
       weapon: "sniperRifle",
-      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
     },
+
     {
       id: "gruntE",
       type: "Grunt",
@@ -227,8 +262,8 @@ export const Scene_W1_1 = {
       },
       firePauseMs: 800,
       weapon: "pistol",
-      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"],
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
     }
   ],
@@ -239,6 +274,4 @@ export const Scene_W1_1 = {
   },
 
   nextScene: Scene_W1_2
-
-
 };
