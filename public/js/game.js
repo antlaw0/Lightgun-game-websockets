@@ -6,6 +6,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled } from './enemy.js';
+import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
@@ -135,6 +136,7 @@ const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
 HUD.init(player, camera);
+initSparks(scene);
 
 
 // -----------------------------------------------------
@@ -335,7 +337,7 @@ function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
   const deviatedDir = trueDir.clone().applyAxisAngle(axis, randomAngle).normalize();
 
   // Create visual mesh like player bullets
-  const geo = new THREE.SphereGeometry(0.05, 8, 8);
+  const geo = new THREE.SphereGeometry(0.02, 8, 8);
   const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // red for enemies
   const bullet = new THREE.Mesh(geo, mat);
   bullet.position.copy(origin);
@@ -490,42 +492,69 @@ function handleFire() {
     const w = player.currentWeapon;
     if (!w || !isFiring) return;
 
-    // initialize lastShotTime if missing
-    if (!w.lastShotTime) w.lastShotTime = 0;
     const now = performance.now();
+
+    // Initialize lastShotTime if missing
+    if (typeof w.lastShotTime !== "number") w.lastShotTime = 0;
+
     const elapsed = now - w.lastShotTime;
 
-    if (elapsed < w.rateOfFire) return; // enforce rate of fire
+    // Enforce rate of fire
+    if (elapsed < (w.rateOfFire || 100)) return;
 
-    // --- semi-auto check ---
+    // --- Semi-auto logic ---
     if (w.fireMode === "semi-auto") {
         if (!w._semiAutoReady) return; // already fired this trigger
         w._semiAutoReady = false;      // block until next trigger
     }
 
-    // Attempt ammo
+    // --- Ammo check ---
     if (!player.useAmmo(1)) {
         logDebug("No ammo!");
-        try { new Audio('sounds/click.ogg').play().catch(()=>{}); } catch(e){}
+        try { new Audio('sounds/click.ogg').play().catch(() => {}); } catch(e) {}
         return;
     }
 
     w.lastShotTime = now;
 
-    // --- compute forward direction ---
-    const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
+    // --- Compute shooting direction ---
+    const retNDC = new THREE.Vector2(
+        (ret.x / cw) * 2 - 1,
+        -(ret.y / ch) * 2 + 1
+    );
     raycaster.setFromCamera(retNDC, camera);
-    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
+
     const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(1));
+    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
     const forwardDir = retWorld.clone().sub(shootOrigin).normalize();
 
-    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread);
+    // --- Generate spread directions ---
+    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0);
 
     for (const dir of dirs) {
-        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage });
+        spawnProjectileUnified(shootOrigin, dir, {
+            damage: w.damage || 1,
+            color: w.color ?? 0xffff00,
+            speed: w.projectileSpeed ?? PROJECTILE_SPEED,
+            size: w.projectileSize ?? 0.02,
+            lifetime: w.projectileLifetime ?? PROJECTILE_LIFETIME,
+            explosive: w.explosive ?? false,
+            trail: true,
+            isEnemy: false
+        });
     }
 
-    try { new Audio('sounds/fire.ogg').play().catch(()=>{}); } catch(e){}
+    // --- Play weapon-specific sound ---
+    try {
+        if (w.fireSound) {
+            const snd = new Audio(w.fireSound);
+            snd.currentTime = 0;
+            snd.play().catch(() => {});
+        }
+    } catch (e) {}
+
+    // Debug: log the shot
+    // console.log(`Fired ${w.name} at ${now}`);
 }
 
 
@@ -602,7 +631,12 @@ function triggerFire() {
     }
 
     lastPlayerFireMs = performance.now();
-
+    
+	const fireSound = new Audio(w.fireSound);
+            fireSound.currentTime = 0;
+            fireSound.play();
+        
+	
     // Compute shooting origin and forward direction
     const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
     raycaster.setFromCamera(retNDC, camera);
@@ -617,19 +651,15 @@ function triggerFire() {
 
     // Spawn each projectile
     for (const dir of directions) {
-        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage });
+        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage,
+		explosive: w.explosive,
+    explosionRadius: w.explosionRadius,
+    explosionDamage: w.explosionDamage,
+explosionSounds:  w.explosionSounds    	
+		
+		});
     }
-
-    // Optional sound
-    try {
-        const snd = new Audio('sounds/fire.ogg');
-        snd.currentTime = 0;
-        snd.play().catch(()=>{});
-    } catch(e){}
-
-    return true;
 }
-
 
 /**
  * Spawn a projectile (player or enemy)
@@ -646,32 +676,33 @@ function triggerFire() {
  *   - trail: boolean
  */
 function spawnProjectileUnified(origin, direction, options = {}) {
-    console.log(player.currentWeapon.name, player.currentWeapon.projectilesPerShot);
-
-	const {
+    const {
         damage = 1,
         color = 0xffff00,
         speed = PROJECTILE_SPEED,
         isEnemy = false,
-        size = 0.1,
+        size = 0.02,
         lifetime = PROJECTILE_LIFETIME,
         explosive = false,
         trail = true
     } = options;
 
-    // Geometry & material
-    const geo = new THREE.CapsuleGeometry(size, size*4, 4, 8);
-    geo.rotateX(Math.PI / 2); // point along +Z
-    const mat = new THREE.MeshBasicMaterial({ color });
+    const dir = direction.clone().normalize();
 
+    // Geometry & material
+    const geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
+    const mat = new THREE.MeshBasicMaterial({ color });
     const bullet = new THREE.Mesh(geo, mat);
     bullet.position.copy(origin);
 
-    // Orient to travel direction
-    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
+    // Orient capsule (native +Y axis → travel direction)
+    bullet.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        dir
+    );
 
     bullet.userData = {
-        direction: direction.clone().normalize(),
+        direction: dir,
         bornTime: performance.now(),
         damage,
         isEnemy,
@@ -680,14 +711,18 @@ function spawnProjectileUnified(origin, direction, options = {}) {
         trail: null
     };
 
-    // Optional motion trail
+    // Motion trail
     if (trail) {
-        const trailLength = size*5;
+        const trailLength = size * 5;
         const trailGeo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0,0,0),
-            new THREE.Vector3(0,0,-trailLength)
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, -trailLength, 0) // ← correct axis
         ]);
-        const trailMat = new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.7 });
+        const trailMat = new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.7
+        });
         const line = new THREE.Line(trailGeo, trailMat);
         bullet.add(line);
         bullet.userData.trail = line;
@@ -700,7 +735,6 @@ function spawnProjectileUnified(origin, direction, options = {}) {
 
     return bullet;
 }
-
 
 function updateProjectiles(dt) {
     const toRemove = [];
@@ -738,7 +772,14 @@ const moveDist = bullet.userData.speed * (dt / 1000);
             const hits = rayTemp.intersectObjects(intersectables, true);
             if (hits.length > 0) {
                 const hit = hits[0];
-                const mesh = hit.object;
+                  spawnSparks(
+    hit.point,
+    hit.face?.normal?.clone().transformDirection(hit.object.matrixWorld)
+      || new THREE.Vector3(0, 1, 0)
+  );
+				
+				
+				const mesh = hit.object;
 
                 bullet.userData.explosionPos = hit.point.clone();
 
@@ -833,7 +874,8 @@ HUD.update(nowMs);
   
   
       handleFire(); // <-- centralized firing
-  
+  updateSparks(deltaMs);
+
   // Update displayed reticle
   displayedRet.x += (ret.x - displayedRet.x) * LERP;
   displayedRet.y += (ret.y - displayedRet.y) * LERP;

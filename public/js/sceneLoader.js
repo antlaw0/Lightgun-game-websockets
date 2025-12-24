@@ -244,69 +244,131 @@ _applyCameraSettings() {
     // Props (including full-cover walls)
 const staticObjects = sceneDef.environment?.staticObjects ?? [];
 staticObjects.forEach((pdef, idx) => {
-  if (!pdef.id) pdef.id = `prop_${idx}`;
+    if (!pdef.id) pdef.id = `prop_${idx}`;
 
-  if (pdef.type === "glb" && pdef.file) {
-    // Load a GLB via Three.js loader
-const loader = new GLTFLoader();    
-	loader.load(pdef.file, (gltf) => {
-    const model = gltf.scene;
+    // -----------------------------
+    // GLB PROP LOADING
+    // -----------------------------
+    if (pdef.type === "glb" && pdef.file) {
+        const loader = new GLTFLoader();
+        loader.load(pdef.file, (gltf) => {
+            const model = gltf.scene;
 
-    // Apply position, scale, rotation
-    model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
-    if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
-    if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
+            // Apply position, scale, rotation
+            model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
+            if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
+            if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
 
-    // Apply material if specified
-    if (pdef.material) {
-        const texLoader = new THREE.TextureLoader();
-        model.traverse(obj => {
-            if (obj.isMesh) {
-                if (pdef.material.map) {
-                    obj.material.map = texLoader.load(pdef.material.map);
-                    obj.material.map.colorSpace = THREE.SRGBColorSpace;
-                }
-                if (pdef.material.color !== undefined) obj.material.color.set(pdef.material.color);
-                if (pdef.material.roughness !== undefined) obj.material.roughness = pdef.material.roughness;
-                if (pdef.material.metalness !== undefined) obj.material.metalness = pdef.material.metalness;
-                obj.castShadow = true;
-                obj.receiveShadow = true;
+            // Apply material if specified
+            if (pdef.material) {
+                const texLoader = new THREE.TextureLoader();
+                model.traverse(obj => {
+                    if (obj.isMesh) {
+                        if (pdef.material.map) {
+                            obj.material.map = texLoader.load(pdef.material.map);
+                            obj.material.map.colorSpace = THREE.SRGBColorSpace;
+                        }
+                        if (pdef.material.color !== undefined) obj.material.color.set(pdef.material.color);
+                        if (pdef.material.roughness !== undefined) obj.material.roughness = pdef.material.roughness;
+                        if (pdef.material.metalness !== undefined) obj.material.metalness = pdef.material.metalness;
+                        obj.castShadow = true;
+                        obj.receiveShadow = true;
+                    }
+                });
             }
+
+            this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
         });
+
+        return; // skip other prop creation
     }
 
-    this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
-});
-  } else {
-    // Existing PropClass path
+    // -----------------------------
+    // DOOR PROP LOADING
+    // -----------------------------
+    if (pdef.type === "door") {
+        const width  = pdef.size?.x ?? 1.2;
+        const height = pdef.size?.y ?? 2.2;
+        const depth  = pdef.size?.z ?? 0.15;
+
+        const geo = new THREE.BoxGeometry(width, height, depth);
+        const mat = new THREE.MeshStandardMaterial({
+            color: 0xFFFF00,
+            roughness: 0.6,
+            metalness: 0.1
+        });
+
+        const door = new THREE.Mesh(geo, mat);
+
+        // Position: hinge at left edge
+        door.position.set(
+            pdef.position.x + width / 2,
+            pdef.position.y + height / 2,
+            pdef.position.z
+        );
+    // Apply starting Y rotation if provided (in degrees)
+    if (pdef.rotationY !== undefined) {
+        door.rotation.y = THREE.MathUtils.degToRad(pdef.rotationY);
+    }
+        door.castShadow = true;
+        door.receiveShadow = true;
+
+        door.userData = {
+            propId: pdef.id,
+            type: "door",
+            solid: true
+        };
+
+        this.scene.add(door);
+
+        // Register as prop (for raycasting)
+        this.addProp({
+            id: pdef.id,
+            mesh: door,
+            size: { x: width, y: height, z: depth },
+            takeDamage: () => false
+        });
+
+        // Bind to transitionObjects if present
+        const transitions = this.sceneDef.transitionObjects;
+        if (Array.isArray(transitions)) {
+            const t = transitions.find(t => t.id === pdef.id);
+            if (t) t.object3D = door;
+        }
+
+        return; // skip default prop creation for doors
+    }
+
+    // -----------------------------
+    // DEFAULT PROP (PropClass)
+    // -----------------------------
     const p = new PropClass({
-      ...pdef,
-      id: pdef.id,
-      coverType: pdef.coverType ?? "none",
-      materialParams: pdef.materialParams ?? {}
+        ...pdef,
+        id: pdef.id,
+        coverType: pdef.coverType ?? "none",
+        materialParams: pdef.materialParams ?? {}
     });
+
     this.staticObjects.push({
-      id: pdef.id,
-      mesh: p.mesh,
-      position: p.mesh.position,
-      size: pdef.size,
-      coverType: pdef.coverType ?? "none"
+        id: pdef.id,
+        mesh: p.mesh,
+        position: p.mesh.position,
+        size: pdef.size,
+        coverType: pdef.coverType ?? "none"
     });
 
     p.mesh.traverse(obj => {
-      if (obj.isMesh) {
-        obj.userData = Object.assign(obj.userData || {}, {
-          propId: pdef.id,
-          coverType: pdef.coverType ?? "none",
-          size: pdef.size
-        });
-      }
+        if (obj.isMesh) {
+            obj.userData = Object.assign(obj.userData || {}, {
+                propId: pdef.id,
+                coverType: pdef.coverType ?? "none",
+                size: pdef.size
+            });
+        }
     });
 
     this.addProp(p);
-  }
 });
-    
 	// Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {

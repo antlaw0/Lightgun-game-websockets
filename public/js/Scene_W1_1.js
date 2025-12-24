@@ -94,7 +94,8 @@ export const Scene_W1_1 = {
         type: "door",
         object3D: null,
         position: { x: 8.5, y: 0, z: -8.5 },
-        targetRotation: { y: -Math.PI / 2 },
+		rotationY:  90, //starting angle
+        targetRotation: { y: -90 },
         duration: 2
       },
 
