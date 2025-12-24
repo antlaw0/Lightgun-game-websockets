@@ -1,7 +1,18 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 
-export async function runCameraRails(camera, steps) {
+/**
+ * Run camera rails steps.
+ * @param {THREE.Camera} camera 
+ * @param {Array} steps - Array of step objects
+ * @param {Function} onTriggerNextScene - optional callback if a step has triggerNextScene: true
+ */
+export async function runCameraRails(camera, steps, onTriggerNextScene) {
   for (const step of steps) {
+    if (!step || typeof step !== 'object') {
+      console.error('Invalid camera step:', step);
+      continue;
+    }
+
     switch (step.type) {
       case 'moveTo':
         await moveTo(camera, step.position, step.duration);
@@ -15,15 +26,30 @@ export async function runCameraRails(camera, steps) {
         await rotate(camera, step.rotation, step.duration);
         break;
 
+      case 'pause':
+        await pause(step.duration);
+        break;
+
       default:
         console.warn("Unknown camera rail step:", step);
     }
 
-    // Trigger optional callback when this step is reached
+    // Trigger optional step callback
     if (typeof step.onReach === 'function') {
       await step.onReach();
     }
+
+    // Trigger scene transition if flag is set
+    if (step.triggerNextScene && typeof onTriggerNextScene === 'function') {
+      await onTriggerNextScene();
+    }
   }
+}
+
+// --- helpers ---
+
+function pause(duration) {
+  return new Promise(resolve => setTimeout(resolve, duration));
 }
 
 function moveTo(camera, position, duration) {
@@ -46,7 +72,7 @@ function lookAt(camera, target, duration) {
     camera.quaternion.copy(startQuat);
 
     animateLerp(duration, t => {
-      camera.quaternion.slerp(endQuat, t); // instance method
+      camera.quaternion.slerp(endQuat, t);
     }, resolve);
   });
 }
@@ -63,7 +89,7 @@ function rotate(camera, rotation, duration) {
     const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);
 
     animateLerp(duration, t => {
-      camera.quaternion.slerp(endQuat, t); // instance method
+      camera.quaternion.slerp(endQuat, t);
     }, resolve);
   });
 }

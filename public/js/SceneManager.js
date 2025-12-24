@@ -29,57 +29,16 @@ export class SceneManager {
         this.sceneLoader.loadScene(sceneDef);
 
         // Optionally hide scene objects until ready (can fade in later)
-        if (sceneDef.group) {
-            sceneDef.group.visible = true;
-        }
+        if (sceneDef.group) sceneDef.group.visible = true;
 
         // Run intro camera rails if defined
         const introRails = sceneDef.cameraRails?.intro;
         if (Array.isArray(introRails) && introRails.length > 0) {
-            // Run camera rails and transition objects in parallel
             await Promise.all([
                 runCameraRails(this.camera, introRails),
                 this.runTransitionObjects(sceneDef)
             ]);
         }
-    }
-
-    // Trigger the next scene mid-rail
-    async triggerNextSceneAtStep(nextScene) {
-        if (!nextScene.group) return;
-
-        // Make sure the scene group is visible
-        nextScene.group.visible = true;
-
-        // Optionally fade in the next scene smoothly
-        await this.fadeInScene(nextScene.group, 1); // 1 second fade
-    }
-
-    // Fade in a scene's objects
-    async fadeInScene(sceneGroup, duration = 1) {
-        sceneGroup.traverse(obj => {
-            if (obj.material) {
-                obj.material.transparent = true;
-                obj.material.opacity = 0;
-            }
-        });
-
-        return new Promise(resolve => {
-            let t = 0;
-            const clock = new THREE.Clock();
-
-            function step() {
-                t += clock.getDelta() / duration;
-                sceneGroup.traverse(obj => {
-                    if (obj.material && obj.material.transparent) {
-                        obj.material.opacity = Math.min(t, 1);
-                    }
-                });
-                if (t < 1) requestAnimationFrame(step);
-                else resolve();
-            }
-            step();
-        });
     }
 
     // Called when SceneLoader dispatches sceneComplete
@@ -89,23 +48,27 @@ export class SceneManager {
 
         const exitRails = scene.cameraRails?.exit;
         if (Array.isArray(exitRails) && exitRails.length > 0) {
-            // Run exit camera rails and optional transition objects
-            await Promise.all([
-                runCameraRails(this.camera, exitRails),
-                this.runTransitionObjects(scene)
-            ]);
-        }
+            // Run exit rails, passing a callback to load the next scene
+            await runCameraRails(this.camera, exitRails, async () => {
+                // After the last step with triggerNextScene
+                if (scene.nextScene) {
+                    await this.loadScene(scene.nextScene);
+                }
+            });
 
-        // Transition to next scene if defined
-        if (scene.nextScene) {
-            await this.loadScene(scene.nextScene);
+            // Animate transition objects in parallel
+            await this.runTransitionObjects(scene);
+        } else {
+            // If no exit rails, immediately load next scene
+            if (scene.nextScene) {
+                await this.loadScene(scene.nextScene);
+            }
         }
     }
 
     // Animate optional transition objects like doors or props
     async runTransitionObjects(sceneDef) {
         if (!sceneDef.transitionObjects || !Array.isArray(sceneDef.transitionObjects)) return;
-
         const promises = sceneDef.transitionObjects.map(obj => this.animateObject(obj));
         await Promise.all(promises);
     }
@@ -114,7 +77,7 @@ export class SceneManager {
     async animateObject(obj) {
         if (!obj || !obj.object3D) return;
         const targetRotation = obj.targetRotation || null;
-        const duration = obj.duration || 1; // seconds
+        const duration = obj.duration || 1;
         if (!targetRotation) return;
 
         return new Promise(resolve => {
@@ -127,7 +90,6 @@ export class SceneManager {
                 obj.object3D.rotation.x = THREE.MathUtils.lerp(startRot.x, targetRotation.x, Math.min(t, 1));
                 obj.object3D.rotation.y = THREE.MathUtils.lerp(startRot.y, targetRotation.y, Math.min(t, 1));
                 obj.object3D.rotation.z = THREE.MathUtils.lerp(startRot.z, targetRotation.z, Math.min(t, 1));
-
                 if (t < 1) requestAnimationFrame(step);
                 else resolve();
             }
