@@ -42,16 +42,18 @@ export const Scene_W1_1 = {
   },
 
   lights: [
-    { type: "ambient", color: 0x8899aa, intensity: 0.4 },
+    
+
+	{ type: "ambient", color: 0x8899aa, intensity: 0.6 },
     {
       type: "spot",
       color: 0xffffff,
-      intensity: 3,
-      distance: 28,
-      angle: Math.PI / 5,
-      penumbra: 0.0,
+      intensity: 30,
+      distance: 50,
+      angle: Math.PI / 3,
+      penumbra: 0.1,
       decay: 2,
-      position: { x: 0, y: 7.8, z: 0 },
+      position: { x: 0, y: 7, z: 0 },
       target: { x: 0, y: 0, z: 0 },
       castShadow: true,
       shadow: {
@@ -71,21 +73,28 @@ export const Scene_W1_1 = {
   },
 
   environment: {
-    staticObjects: [
-      {
-        id: "explosiveBarrel1",
-        type: "glb",
-        file: "/assets/models/explosive_barrel.glb",
-        position: { x: 0, y: 0, z: 2 },
-        scale: { x: 1, y: 1, z: 1 },
-        rotation: { x: 0, y: 0, z: 0 },
-        coverType: "low",
-        material: {
-          map: "assets/textures/barrel_diffuse.png",
-          roughness: 0.6,
-          metalness: 0.5
-        }
-      },
+	    staticObjects: [
+{
+  id: "barrel_01",
+  type: "prefab",
+  prefab: "metal_barrel",
+  position: { x: 0, y: 0.45, z: -6 },
+  rotationY: 0,
+  hp: 12,
+  maxHp: 12,
+  coverType: "low",
+  material: {
+  map: "assets/props/explosive_barrel_side.png",
+  roughness: 0.6,
+  metalness: 0.0
+},
+  hitSounds: [
+    "assets/sfx/props/metalHit1.ogg",
+    "assets/sfx/props/metalHit2.ogg"
+  ],
+  deathSounds: ["assets/sfx/props/metal_break.ogg"],
+  deathAction: "break"
+},
 
       {
         id: "exitDoor",

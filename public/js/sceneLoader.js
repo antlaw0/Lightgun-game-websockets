@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { buildPrefab } from "./prefabLibrary.js";
 
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 
@@ -243,133 +244,188 @@ _applyCameraSettings() {
 
     // Props (including full-cover walls)
 const staticObjects = sceneDef.environment?.staticObjects ?? [];
-staticObjects.forEach((pdef, idx) => {
-    if (!pdef.id) pdef.id = `prop_${idx}`;
 
-    // -----------------------------
-    // GLB PROP LOADING
-    // -----------------------------
-    if (pdef.type === "glb" && pdef.file) {
-        const loader = new GLTFLoader();
-        loader.load(pdef.file, (gltf) => {
-            const model = gltf.scene;
+for (let idx = 0; idx < staticObjects.length; idx++) {
+  const pdef = staticObjects[idx];
+  if (!pdef.id) pdef.id = `prop_${idx}`;
 
-            // Apply position, scale, rotation
-            model.position.set(pdef.position.x, pdef.position.y, pdef.position.z);
-            if (pdef.scale) model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
-            if (pdef.rotation) model.rotation.set(pdef.rotation.x, pdef.rotation.y, pdef.rotation.z);
+  // =============================
+  // PREFAB PROP
+  // =============================
+  if (pdef.type === "prefab" && pdef.prefab) {
+const prefab = buildPrefab(pdef.prefab, pdef.materials);
 
-            // Apply material if specified
-            if (pdef.material) {
-                const texLoader = new THREE.TextureLoader();
-                model.traverse(obj => {
-                    if (obj.isMesh) {
-                        if (pdef.material.map) {
-                            obj.material.map = texLoader.load(pdef.material.map);
-                            obj.material.map.colorSpace = THREE.SRGBColorSpace;
-                        }
-                        if (pdef.material.color !== undefined) obj.material.color.set(pdef.material.color);
-                        if (pdef.material.roughness !== undefined) obj.material.roughness = pdef.material.roughness;
-                        if (pdef.material.metalness !== undefined) obj.material.metalness = pdef.material.metalness;
-                        obj.castShadow = true;
-                        obj.receiveShadow = true;
-                    }
-                });
-            }
+    // Transform
+    prefab.position.set(
+      pdef.position?.x ?? 0,
+      pdef.position?.y ?? 0,
+      pdef.position?.z ?? 0
+    );
 
-            this.addProp({ mesh: model, id: pdef.id, takeDamage: () => false });
-        });
-
-        return; // skip other prop creation
+    if (pdef.rotation) {
+      prefab.rotation.set(
+        pdef.rotation.x ?? 0,
+        pdef.rotation.y ?? 0,
+        pdef.rotation.z ?? 0
+      );
     }
 
-    // -----------------------------
-    // DOOR PROP LOADING
-    // -----------------------------
-    if (pdef.type === "door") {
-        const width  = pdef.size?.x ?? 1.2;
-        const height = pdef.size?.y ?? 2.2;
-        const depth  = pdef.size?.z ?? 0.15;
-
-        const geo = new THREE.BoxGeometry(width, height, depth);
-        const mat = new THREE.MeshStandardMaterial({
-            color: 0xFFFF00,
-            roughness: 0.6,
-            metalness: 0.1
-        });
-
-        const door = new THREE.Mesh(geo, mat);
-
-        // Position: hinge at left edge
-        door.position.set(
-            pdef.position.x + width / 2,
-            pdef.position.y + height / 2,
-            pdef.position.z
-        );
-    // Apply starting Y rotation if provided (in degrees)
-    if (pdef.rotationY !== undefined) {
-        door.rotation.y = THREE.MathUtils.degToRad(pdef.rotationY);
-    }
-        door.castShadow = true;
-        door.receiveShadow = true;
-
-        door.userData = {
-            propId: pdef.id,
-            type: "door",
-            solid: true
-        };
-
-        this.scene.add(door);
-
-        // Register as prop (for raycasting)
-        this.addProp({
-            id: pdef.id,
-            mesh: door,
-            size: { x: width, y: height, z: depth },
-            takeDamage: () => false
-        });
-
-        // Bind to transitionObjects if present
-        const transitions = this.sceneDef.transitionObjects;
-        if (Array.isArray(transitions)) {
-            const t = transitions.find(t => t.id === pdef.id);
-            if (t) t.object3D = door;
-        }
-
-        return; // skip default prop creation for doors
+    if (pdef.scale) {
+      prefab.scale.set(
+        pdef.scale.x ?? 1,
+        pdef.scale.y ?? 1,
+        pdef.scale.z ?? 1
+      );
     }
 
-    // -----------------------------
-    // DEFAULT PROP (PropClass)
-    // -----------------------------
-    const p = new PropClass({
-        ...pdef,
-        id: pdef.id,
-        coverType: pdef.coverType ?? "none",
-        materialParams: pdef.materialParams ?? {}
+    // Tag meshes for hit detection
+    prefab.traverse(obj => {
+  if (obj.isMesh) {
+    obj.castShadow = true;
+    obj.receiveShadow = true;
+    Object.assign(obj.userData, {  // <-- preserves existing userData
+      propId: pdef.id,
+      solid: true
     });
-
-    this.staticObjects.push({
-        id: pdef.id,
-        mesh: p.mesh,
-        position: p.mesh.position,
-        size: pdef.size,
-        coverType: pdef.coverType ?? "none"
-    });
-
-    p.mesh.traverse(obj => {
-        if (obj.isMesh) {
-            obj.userData = Object.assign(obj.userData || {}, {
-                propId: pdef.id,
-                coverType: pdef.coverType ?? "none",
-                size: pdef.size
-            });
-        }
-    });
-
-    this.addProp(p);
+  }
 });
-	// Enemies
+
+this.addProp({
+  id: pdef.id,
+  mesh: prefab,
+  size: pdef.size ?? { x: 1, y: 1, z: 1 },
+  position: prefab.position, // ← THIS IS CRITICAL
+  takeDamage: () => false
+});
+
+    continue;
+  }
+
+  // =============================
+  // GLB PROP
+  // =============================
+  if (pdef.type === "glb" && pdef.file) {
+    const loader = new GLTFLoader();
+
+    loader.load(pdef.file, (gltf) => {
+      const model = gltf.scene;
+
+      model.position.set(
+        pdef.position?.x ?? 0,
+        pdef.position?.y ?? 0,
+        pdef.position?.z ?? 0
+      );
+
+      if (pdef.scale) {
+        model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
+      }
+
+      if (pdef.rotation) {
+        model.rotation.set(
+          pdef.rotation.x,
+          pdef.rotation.y,
+          pdef.rotation.z
+        );
+      }
+
+      model.traverse(obj => {
+        if (obj.isMesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          obj.userData = {
+            propId: pdef.id,
+            solid: true
+          };
+        }
+      });
+
+      this.addProp({
+        id: pdef.id,
+        mesh: model,
+        takeDamage: () => false
+      });
+    });
+
+    continue;
+  }
+
+  // =============================
+  // DOOR PROP
+  // =============================
+  if (pdef.type === "door") {
+    const width  = pdef.size?.x ?? 1.2;
+    const height = pdef.size?.y ?? 2.2;
+    const depth  = pdef.size?.z ?? 0.15;
+
+    const geo = new THREE.BoxGeometry(width, height, depth);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffff00,
+      roughness: 0.6,
+      metalness: 0.1
+    });
+
+    const door = new THREE.Mesh(geo, mat);
+
+    door.position.set(
+      pdef.position.x + width / 2,
+      pdef.position.y + height / 2,
+      pdef.position.z
+    );
+
+    if (pdef.rotationY !== undefined) {
+      door.rotation.y = THREE.MathUtils.degToRad(pdef.rotationY);
+    }
+
+    door.castShadow = true;
+    door.receiveShadow = true;
+    door.userData = {
+      propId: pdef.id,
+      type: "door",
+      solid: true
+    };
+
+    this.scene.add(door);
+
+    this.addProp({
+      id: pdef.id,
+      mesh: door,
+      size: { x: width, y: height, z: depth },
+      takeDamage: () => false
+    });
+
+    const transitions = this.sceneDef.transitionObjects;
+    if (Array.isArray(transitions)) {
+      const t = transitions.find(t => t.id === pdef.id);
+      if (t) t.object3D = door;
+    }
+
+    continue;
+  }
+
+  // =============================
+  // DEFAULT PROP (PropClass)
+  // =============================
+  const p = new PropClass({
+    ...pdef,
+    id: pdef.id,
+    coverType: pdef.coverType ?? "none",
+    materialParams: pdef.materialParams ?? {}
+  });
+
+  p.mesh.traverse(obj => {
+    if (obj.isMesh) {
+      obj.userData = {
+        propId: pdef.id,
+        coverType: pdef.coverType ?? "none",
+        solid: true
+      };
+    }
+  });
+
+  this.addProp(p);
+}
+
+// Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;
@@ -480,22 +536,18 @@ this.staticObjects.forEach(o => {
       (minZ + maxZ) / 2
     );
 
-    // Shift props and enemies so room center is at origin
-    this.props.forEach(p => {
-      p.mesh.position.sub(this.roomCenterOffset);
-      // keep prop logical position in sync too
-      if (p.position && p.position.x !== undefined) {
-        p.position.x -= this.roomCenterOffset.x;
-        p.position.y -= this.roomCenterOffset.y;
-        p.position.z -= this.roomCenterOffset.z;
-      }
-    });
-    this.enemies.forEach(e => {
-      if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
-      if (e.basePosition) e.basePosition.sub(this.roomCenterOffset);
-    });
-  }
+// Shift props and enemies ONLY if room was auto-calculated
+if (!this.sceneDef.room) {
+  this.props.forEach(p => {
+    p.mesh.position.sub(this.roomCenterOffset);
+  });
 
+  this.enemies.forEach(e => {
+    if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
+    if (e.basePosition) e.basePosition.sub(this.roomCenterOffset);
+  });
+}
+  }
 
 _useDefinedRoom(roomDef) {
   this.roomWidth  = roomDef.width;
@@ -699,6 +751,26 @@ this.staticObjects = [];
     this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
     this.explosions = [];
   }
+
+_createPrefabProp(pdef, prefab) {
+  return {
+    id: pdef.id,
+    mesh: prefab,
+    size: pdef.size ?? { x: 1, y: 1, z: 1 },
+    position: pdef.position ?? { x: 0, y: 0, z: 0 },
+    takeDamage: () => false,
+    dispose() {
+      prefab.traverse(obj => {
+        if (obj.isMesh) {
+          obj.geometry?.dispose();
+          if (obj.material?.map) obj.material.map.dispose();
+          obj.material?.dispose();
+        }
+      });
+    }
+  };
+}
+
 
   // -----------------------------
   // Update (enemies, projectiles, explosions)
