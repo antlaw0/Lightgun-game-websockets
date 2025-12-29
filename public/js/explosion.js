@@ -11,7 +11,7 @@ export class Explosion {
     this.floorY = options.floorY ?? 0;
     this.explosionSounds = options.explosionSounds ?? [];
     this.age = 0;
-    this.lifespan = options.lifespan ?? 0.3;
+    this.lifespan = options.lifespan ?? 1.0;
     this.isDone = false;
 // --- Explosion particles ---
 this.particleCount =
@@ -120,7 +120,15 @@ _updateParticles(deltaSeconds) {
     if (this.isDone) return;
     this.age += deltaSeconds;
 
-    const scale = Math.min(this.age / this.lifespan, 1) * this.blastRadius;
+    const t = Math.min(this.age / this.lifespan, 1);
+
+// Fast expansion, slow settle
+const eased = 1 - Math.pow(1 - t, 3);
+
+const scale = eased * this.blastRadius;
+this.mesh.scale.set(scale, scale, scale);
+
+	
     if (this.mesh) this.mesh.scale.set(scale, scale, scale);
 this._updateParticles(deltaSeconds);
 

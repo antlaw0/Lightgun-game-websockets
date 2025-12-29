@@ -4,6 +4,7 @@ export class Prop {
   constructor(def) {
     this.id = def.id;
     this.type = def.type || "prop";
+this.explosion = def.explosion ?? null;
 
     // Explosion interaction flags
     this.coverType = def.coverType || "none"; 
@@ -45,6 +46,7 @@ export class Prop {
   //
   takeDamage(amount) {
     console.log("Hit prop");
+console.log("indestructible?", this.indestructible);
 
     this._playRandom(this.hitSounds);
 
@@ -211,27 +213,29 @@ export class Prop {
   }
 
   _die() {
-    this._playRandom(this.deathSounds);
+  this._playRandom(this.deathSounds);
 
-    if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+  if (this.explosion && window.spawnTestExplosion) {
+    const worldPos = new THREE.Vector3();
+    this.mesh.getWorldPosition(worldPos);
 
-    if (window.sceneLoader) {
-      const index = window.sceneLoader.props.indexOf(this);
-      if (index !== -1) window.sceneLoader.props.splice(index, 1);
-    }
+    window.spawnTestExplosion({
+      x: worldPos.x,
+      y: worldPos.y,
+      z: worldPos.z,
+      blastRadius: this.explosion.blastRadius,
+      maxDamage: this.explosion.maxDamage,
+      explosionSounds: this.explosion.explosionSounds
+    });
   }
 
-  dispose() {
-    if (!this.mesh) return;
-    try {
-      this.mesh.geometry?.dispose();
-      if (this.mesh.material) {
-        this.mesh.material.map?.dispose();
-        this.mesh.material.normalMap?.dispose();
-        this.mesh.material.roughnessMap?.dispose();
-        this.mesh.material.metalnessMap?.dispose();
-        this.mesh.material.dispose();
-      }
-    } catch {}
+  if (this.mesh && this.mesh.parent) {
+    this.mesh.parent.remove(this.mesh);
   }
+
+  if (window.sceneLoader) {
+    const index = window.sceneLoader.props.indexOf(this);
+    if (index !== -1) window.sceneLoader.props.splice(index, 1);
+  }
+}
 }

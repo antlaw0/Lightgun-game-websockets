@@ -252,61 +252,68 @@ for (let idx = 0; idx < staticObjects.length; idx++) {
   // =============================
   // PREFAB PROP
   // =============================
-  if (pdef.type === "prefab" && pdef.prefab) {
-const prefab = buildPrefab(pdef.prefab, pdef);
+// =============================
+// PREFAB PROP (updated for Prop instances)
+// =============================
+// =============================
+// PREFAB PROP
+// =============================
+// =============================
+// PREFAB PROPS (Prop-based)
+// =============================
+if (pdef.type === "prefab" && pdef.prefab) {
+    // Build the Prop instance via prefabLibrary
+    const propInstance = buildPrefab(pdef.prefab, pdef);
 
+    if (!propInstance || !propInstance.mesh) {
+        console.warn("Failed to build prefab:", pdef.prefab, pdef.id);
+        continue;
+    }
 
-    // Transform
-    prefab.position.set(
-      pdef.position?.x ?? 0,
-      pdef.position?.y ?? 0,
-      pdef.position?.z ?? 0
-    );
+    // Override transforms if defined
+    if (pdef.position) {
+        propInstance.mesh.position.set(
+            pdef.position.x ?? 0,
+            pdef.position.y ?? 0,
+            pdef.position.z ?? 0
+        );
+    }
 
     if (pdef.rotation) {
-      prefab.rotation.set(
-        pdef.rotation.x ?? 0,
-        pdef.rotation.y ?? 0,
-        pdef.rotation.z ?? 0
-      );
+        propInstance.mesh.rotation.set(
+            pdef.rotation.x ?? 0,
+            pdef.rotation.y ?? 0,
+            pdef.rotation.z ?? 0
+        );
     }
 
     if (pdef.scale) {
-      prefab.scale.set(
-        pdef.scale.x ?? 1,
-        pdef.scale.y ?? 1,
-        pdef.scale.z ?? 1
-      );
+        propInstance.mesh.scale.set(
+            pdef.scale.x ?? 1,
+            pdef.scale.y ?? 1,
+            pdef.scale.z ?? 1
+        );
     }
 
-    // Tag meshes for hit detection
-    prefab.traverse(obj => {
-  if (obj.isMesh) {
-    obj.castShadow = true;
-    obj.receiveShadow = true;
-    Object.assign(obj.userData, {  // <-- preserves existing userData
-      propId: pdef.id,
-      solid: true
+    // Traverse the mesh for shadow / hit detection
+    propInstance.mesh.traverse(obj => {
+        if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            Object.assign(obj.userData, {
+                propId: pdef.id,
+                solid: true
+            });
+        }
     });
-  }
-});
 
-this.addProp({
-  id: pdef.id,
-  mesh: prefab,
-  size: pdef.size ?? { x: 1, y: 1, z: 1 },
-  position: prefab.position, // ← THIS IS CRITICAL
-  takeDamage: () => false
-});
-console.log(
-  "Prefab", pdef.id,
-  "position", prefab.position.x,
-  prefab.position.y,
-  prefab.position.z
-);
+    // Add prop to SceneLoader (tracks props + adds mesh to scene)
+    this.addProp(propInstance);
+
+    console.log(`Prefab prop loaded: ${pdef.id}`, propInstance.mesh.position);
 
     continue;
-  }
+}
 
   // =============================
   // GLB PROP

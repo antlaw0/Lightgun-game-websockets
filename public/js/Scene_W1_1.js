@@ -83,6 +83,14 @@ export const Scene_W1_1 = {
   hp: 12,
   maxHp: 12,
   coverType: "low",
+  explosion: {
+    blastRadius: 5,
+    maxDamage: 40,
+    explosionSounds: [
+      "/assets/sfx/explosions/explosion_2a.ogg",
+      "/assets/sfx/explosions/explosion_2a.ogg"
+    ]
+  },
 material: {
   side: "assets/props/explosive_barrel_side.png",
   top: "assets/props/test.png",

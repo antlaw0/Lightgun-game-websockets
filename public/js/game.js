@@ -261,7 +261,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
 
@@ -772,6 +773,8 @@ const moveDist = bullet.userData.speed * (dt / 1000);
             const hits = rayTemp.intersectObjects(intersectables, true);
             if (hits.length > 0) {
                 const hit = hits[0];
+				  console.log("Hit object:", hits[0].object);
+  console.log("userData:", hits[0].object.userData);
                   spawnSparks(
     hit.point,
     hit.face?.normal?.clone().transformDirection(hit.object.matrixWorld)

@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js";
+import { Prop } from "./prop.js";
 
 /*
 =====================================================
@@ -20,17 +21,15 @@ function loadTexture(path) {
   if (!path) return null;
 
   const tex = textureLoader.load(
-  path,
-  () => console.log("Texture loaded"),
-  undefined,
-  () => console.error("Texture failed")
-);
+    path,
+    () => console.log("Texture loaded"),
+    undefined,
+    () => console.error("Texture failed")
+  );
 
-  
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  
 
   return tex;
 }
@@ -56,10 +55,8 @@ function createMaterial(
     color: color ?? 0xffffff,
     roughness,
     metalness,
-	    transparent: false,
-		  depthWrite: true
-  
-	  
+    transparent: false,
+    depthWrite: true
   });
 }
 
@@ -89,68 +86,86 @@ export function buildPrefab(type, data = {}) {
 =====================================================
 */
 
-function buildMetalBarrel(data) {
-  const radiusTop = 0.45;
-  const radiusBottom = 0.45;
-  const height = 0.9;
-  const radialSegments = 24;
 
+export function buildMetalBarrel(data = {}) {
+  const radius = data.radius ?? 0.35;
+  const height = data.height ?? 1.0;
+
+  //
+  // Geometry
+  //
   const geometry = new THREE.CylinderGeometry(
-    radiusTop,
-    radiusBottom,
+    radius,
+    radius,
     height,
-    radialSegments,
-    1,
-    false
+    24,
+    1
   );
 
-  const mat = data.material ?? {};
+  //
+  // Material
+  //
+  const texLoader = new THREE.TextureLoader();
 
-  const color = mat.color ?? 0xffffff;
-  const roughness = mat.roughness ?? 0.6;
-  const metalness = mat.metalness ?? 0.0;
+  const material = new THREE.MeshStandardMaterial({
+    map: data.material?.map
+      ? texLoader.load(data.material.map, () => console.log("Texture loaded"))
+      : null,
+    normalMap: data.material?.normalMap
+      ? texLoader.load(data.material.normalMap)
+      : null,
+    roughness: data.material?.roughness ?? 0.6,
+    metalness: data.material?.metalness ?? 0.8
+  });
 
-  const sideMat = createMaterial(
-    mat.side ?? mat.map ?? null,
-    color,
-    roughness,
-    metalness
+  //
+  // Create Prop (AUTHORITATIVE OBJECT)
+  //
+  const prop = new Prop({
+    id: data.id ?? `barrel_${crypto.randomUUID()}`,
+    type: "barrel",
+
+    position: data.position ?? { x: 0, y: 0, z: 0 },
+    size: { x: radius * 2, y: height, z: radius * 2 },
+
+    hp: data.hp ?? 12,
+    indestructible: false,
+
+    hitSounds: data.hitSounds ?? [],
+    deathSounds: data.deathSounds ?? [],
+
+    explosion: data.explosion ?? {
+      blastRadius: 3.5,
+      maxDamage: 20,
+      explosionSounds: []
+    },
+
+    material: {}, // handled manually below
+    deathAction: "explode"
+  });
+
+  //
+  // Replace the default box mesh with barrel mesh
+  //
+  const barrelMesh = new THREE.Mesh(geometry, material);
+
+  barrelMesh.position.set(
+    prop.position.x,
+    prop.position.y + height / 2,
+    prop.position.z
   );
 
-  const topMat = createMaterial(
-    mat.top ?? mat.map ?? null,
-    color,
-    roughness,
-    metalness
-  );
+  barrelMesh.castShadow = true;
+  barrelMesh.receiveShadow = true;
 
-  const bottomMat = createMaterial(
-    mat.bottom ?? mat.map ?? null,
-    color,
-    roughness,
-    metalness
-  );
+  //
+  // CRITICAL LINK
+  //
+  barrelMesh.userData.prop = prop;
 
-  const mesh = new THREE.Mesh(geometry, [
-    sideMat,    // index 0: cylinder side
-    topMat,     // index 1: top cap
-    bottomMat   // index 2: bottom cap
-  ]);
+  prop.mesh = barrelMesh;
 
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-
-  console.log("Metal barrel material:", data.material);
-    // Apply rotation if specified in prefab data
-    if (data.rotation) {
-        mesh.rotation.set(
-            data.rotation.x ?? 0,
-            data.rotation.y ?? 0,
-            data.rotation.z ?? 0
-        );
-    }
-  return mesh;
-
+  return prop;
 }
 
 /*
@@ -162,14 +177,9 @@ function buildMetalBarrel(data) {
 function buildCrate(data) {
   const size = data.size ?? { x: 1, y: 1, z: 1 };
 
-  const geometry = new THREE.BoxGeometry(
-    size.x,
-    size.y,
-    size.z
-  );
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 
   const matData = data.material ?? {};
-
   const material = createMaterial(
     matData.map ?? null,
     matData.color ?? 0xffffff,
@@ -181,5 +191,24 @@ function buildCrate(data) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
-  return mesh;
+  // Wrap in Prop
+  const crateProp = new Prop({
+    id: data.id ?? "crate_" + Math.random(),
+    type: "crate",
+    position: data.position,
+    rotation: data.rotation,
+    size,
+    hp: data.hp ?? 8,
+    maxHp: data.hp ?? 8,
+    explosion: data.explosion,
+    material: data.material,
+    hitSounds: data.hitSounds,
+    deathSounds: data.deathSounds,
+    deathAction: data.deathAction ?? "break"
+  });
+
+  crateProp.mesh = mesh;
+  mesh.userData.prop = crateProp;
+
+  return crateProp;
 }
