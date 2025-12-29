@@ -44,11 +44,11 @@ export const Scene_W1_1 = {
   lights: [
     
 
-	{ type: "ambient", color: 0x8899aa, intensity: 0.6 },
+	{ type: "ambient", color: 0xffffff, intensity: 0.5 },
     {
       type: "spot",
       color: 0xffffff,
-      intensity: 30,
+      intensity: 8,
       distance: 50,
       angle: Math.PI / 3,
       penumbra: 0.1,
@@ -78,16 +78,19 @@ export const Scene_W1_1 = {
   id: "barrel_01",
   type: "prefab",
   prefab: "metal_barrel",
-  position: { x: 0, y: 0.45, z: -6 },
-  rotationY: 0,
+      position:  { x:  0,  y:  0,  z:  -6  },
+	  rotation: { x: 0, y: Math.PI, z: 0 },
   hp: 12,
   maxHp: 12,
   coverType: "low",
-  material: {
-  map: "assets/props/explosive_barrel_side.png",
-  roughness: 0.6,
-  metalness: 0.0
+material: {
+  side: "assets/props/explosive_barrel_side.png",
+  top: "assets/props/test.png",
+  bottom: "assets/props/explosive_barrel_side.png",
+  roughness: 0.75,
+  metalness: 0.2
 },
+
   hitSounds: [
     "assets/sfx/props/metalHit1.ogg",
     "assets/sfx/props/metalHit2.ogg"

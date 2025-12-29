@@ -253,7 +253,8 @@ for (let idx = 0; idx < staticObjects.length; idx++) {
   // PREFAB PROP
   // =============================
   if (pdef.type === "prefab" && pdef.prefab) {
-const prefab = buildPrefab(pdef.prefab, pdef.materials);
+const prefab = buildPrefab(pdef.prefab, pdef);
+
 
     // Transform
     prefab.position.set(
@@ -297,6 +298,12 @@ this.addProp({
   position: prefab.position, // ← THIS IS CRITICAL
   takeDamage: () => false
 });
+console.log(
+  "Prefab", pdef.id,
+  "position", prefab.position.x,
+  prefab.position.y,
+  prefab.position.z
+);
 
     continue;
   }
