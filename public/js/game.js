@@ -127,6 +127,8 @@ ws.onmessage = (ev) => {
     console.warn("ws message parse failed", e);
   }
 };
+import { ENEMY_INSTANCES } from './enemy.js';
+window.ENEMY_INSTANCES = ENEMY_INSTANCES; // now Player.meleeAttack() can see it
 
 // ------------------ Three.js Setup ------------------
 const scene = new THREE.Scene();
@@ -179,6 +181,12 @@ window.addEventListener("mouseleave", () => {
     sendDesktopPayload({ fire: false });
 });
 
+window.addEventListener("keydown", e => {
+  if (e.code === "KeyV") { // or MouseButton / F key
+    console.log("Key pressed for melee attack");
+	player.meleeAttack();
+  }
+});
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "F4") {

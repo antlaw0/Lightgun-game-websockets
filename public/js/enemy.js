@@ -24,10 +24,7 @@ export class Weapon {
     this.reloadTimeMs = def.reloadTimeMs || 1500;
     this.reloadSound = def.reloadSound || null;
     this.ammoInClip = this.clipSize;
-    this.ammoReserve =
-  (typeof def.ammoReserve === "number")
-    ? def.ammoReserve
-    : Infinity;
+this.ammoReserve = (typeof def.ammoReserve === "number") ? def.ammoReserve : Infinity;
 
 	this.lastFireTimestamp = -Infinity;
     this.isReloading = false;
