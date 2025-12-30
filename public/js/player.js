@@ -46,7 +46,8 @@ export class Player extends EventTarget {
   }
 
   takeDamage(amount) {
-    this.hp = Math.max(this.hp - amount, 0);
+    window.hud.shakeCamera(0.3, 0.4);
+	this.hp = Math.max(this.hp - amount, 0);
     this._emitHealth();
   }
 

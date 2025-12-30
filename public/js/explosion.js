@@ -198,7 +198,13 @@ _lineIntersectsMesh(start, end, mesh) {
     let damage = computeDamage(dist);
     if (damage <= 0) continue;
 
-    console.log(`Explosion: Target ${target.obj.id || target.obj.mesh?.userData.propId || 'unknown'} type=${target.type}, dist=${dist.toFixed(2)}, damage=${damage.toFixed(2)}`);
+    //console.log(`Explosion: Target ${target.obj.id || target.obj.mesh?.userData.propId || 'unknown'} type=${target.type}, dist=${dist.toFixed(2)}, damage=${damage.toFixed(2)}`);
+	    if (window.hud && typeof window.hud.shakeCamera === 'function') {
+        const intensity = Math.min(1, this.blastRadius / 5); // scale by blast size
+        const duration = 0.5; // seconds
+        window.hud.shakeCamera(intensity, duration);
+    }
+
 
     // Check LOS blocked by props
     let blocked = false;

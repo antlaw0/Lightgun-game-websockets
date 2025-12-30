@@ -6,7 +6,18 @@ export const HUD = {
     this.player = player;
     this.camera = camera;
 
+    // -------------------------------------------------
+    // Camera shake system (advanced)
+    // -------------------------------------------------
+    this._activeShakes = [];
+    this._shakeTime = 0;
+
+    this._cameraBasePosition = camera.position.clone();
+    this._cameraBaseRotation = camera.rotation.clone();
+
+    // -------------------------------------------------
     // DOM references
+    // -------------------------------------------------
     this.healthFill = document.querySelector('.hud-health .health-fill');
     this.healthText = document.querySelector('.hud-health .health-text');
     this.ammoCount = document.querySelector('.ammo-count');
@@ -15,7 +26,9 @@ export const HUD = {
     this.weaponImgEl = document.querySelector('.weapon-img');
     this.ammoTypeEl = document.querySelector('.ammo-type');
 
+    // -------------------------------------------------
     // Camera debug HUD
+    // -------------------------------------------------
     this.cameraDebugEl = document.createElement('div');
     this.cameraDebugEl.className = 'hud-camera-debug';
     this.cameraDebugEl.style.display = 'none';
@@ -30,7 +43,9 @@ export const HUD = {
       }
     });
 
-    // Listen for updates from player
+    // -------------------------------------------------
+    // Player event listeners
+    // -------------------------------------------------
     player.addEventListener('healthChanged', e => {
       this.updateHealth(e.detail.hp, e.detail.maxHp);
     });
@@ -47,18 +62,123 @@ export const HUD = {
       );
     });
 
-    // Initialize display
+    // -------------------------------------------------
+    // Initial HUD state
+    // -------------------------------------------------
     this.updateHealth(player.hp, player.maxHp);
-    const w = player.currentWeapon;
-    this.updateAmmo(w.ammoInClip, w.totalAmmo, w.clipSize, w.name, w.id, w.ammoType);
-  },
 
+    const w = player.currentWeapon;
+    this.updateAmmo(
+      w.ammoInClip,
+      w.totalAmmo,
+      w.clipSize,
+      w.name,
+      w.id,
+      w.ammoType
+    );
+  }, // end init()
+
+  // =================================================
+  // PUBLIC CAMERA SHAKE APIS
+  // =================================================
+
+  // Generic shake (weapon fire, damage)
+  shakeCamera(intensity = 0.1, duration = 0.3) {
+    this._activeShakes.push({
+      intensity,
+      duration,
+      time: duration,
+      direction: null
+    });
+  }, // end shakeCamera()
+
+  // Explosion-style shake with distance falloff
+  shakeCameraAt(worldPos, maxIntensity = 0.5, radius = 10) {
+    if (!this.camera) return;
+
+    const camPos = this.camera.position;
+    const distance = camPos.distanceTo(worldPos);
+
+    if (distance > radius) return;
+
+    const t = 1 - distance / radius;
+    const intensity = maxIntensity * (t * t); // quadratic falloff
+
+    const dir = camPos.clone().sub(worldPos).normalize();
+
+    this._activeShakes.push({
+      intensity,
+      duration: 0.5,
+      time: 0.5,
+      direction: dir
+    });
+  }, // end shakeCameraAt()
+
+  // =================================================
+  // FRAME UPDATE
+  // =================================================
   update(delta) {
+    this._updateCameraShake(delta);
+
     if (this.cameraDebugEnabled && this.camera) {
       this.updateCameraDebug();
     }
-  },
+  }, // end update()
 
+  // =================================================
+  // CAMERA SHAKE CORE
+  // =================================================
+  _updateCameraShake(delta) {
+  if (!this.camera) return;
+
+  this._shakeTime += delta;
+
+  let totalOffset = new THREE.Vector3();
+  let rotX = 0;
+  let rotY = 0;
+
+  for (let i = this._activeShakes.length - 1; i >= 0; i--) {
+    const s = this._activeShakes[i];
+    s.time -= delta;
+
+    if (s.time <= 0) {
+      this._activeShakes.splice(i, 1);
+      continue;
+    }
+
+    const p = s.time / s.duration;
+    const falloff = p * p;
+
+    const n1 = Math.sin(this._shakeTime * 40 + i * 10);
+    const n2 = Math.sin(this._shakeTime * 53 + i * 20);
+
+    const strength = s.intensity * falloff;
+
+    const localOffset = new THREE.Vector3(
+      n1 * strength,
+      n2 * strength,
+      0
+    );
+
+    if (s.direction) {
+      localOffset.addScaledVector(s.direction, strength * 0.6);
+    }
+
+    totalOffset.add(localOffset);
+
+    rotX += n2 * strength * 0.15;
+    rotY += n1 * strength * 0.15;
+  }
+
+  // Apply as delta so it stacks with camera systems
+  this.camera.position.add(totalOffset);
+  this.camera.rotation.x += rotX;
+  this.camera.rotation.y += rotY;
+}, // end _updateCameraShake()
+
+// =================================================
+  // HUD DISPLAY
+  // =================================================
   updateHealth(hp, maxHp) {
     const pct = (hp / maxHp) * 100;
     this.healthFill.style.width = pct + '%';
@@ -68,7 +188,7 @@ export const HUD = {
     else this.healthFill.className = 'health-fill hp-red';
 
     this.healthText.textContent = `${hp} / ${maxHp}`;
-  },
+  }, // end updateHealth()
 
   updateAmmo(ammoInClip, totalAmmo, clipSize, weaponName, weaponId, ammoType) {
     this.ammoCount.textContent = `${ammoInClip} / ${clipSize}`;
@@ -84,8 +204,11 @@ export const HUD = {
     if (this.ammoTypeEl) {
       this.ammoTypeEl.textContent = ammoType ? `Ammo: ${ammoType}` : '';
     }
-  },
+  }, // end updateAmmo()
 
+  // =================================================
+  // CAMERA DEBUG
+  // =================================================
   updateCameraDebug() {
     const pos = this.camera.position;
 
@@ -119,5 +242,5 @@ Forward:
   Y: ${forward.y.toFixed(2)}
   Z: ${forward.z.toFixed(2)}
 `;
-  }
-};
+  } // end updateCameraDebug()
+}; // end HUD

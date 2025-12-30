@@ -136,6 +136,12 @@ const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
 HUD.init(player, camera);
+window.hud = HUD;
+//console.log("HUD object:", HUD);
+console.log("HUD shakeCamera:", HUD.shakeCamera);
+window.hud = HUD;
+console.log("window.hud:", window.hud);
+
 initSparks(scene);
 
 
@@ -872,7 +878,8 @@ function animate(nowMs) {
   requestAnimationFrame(animate);
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
-HUD.update(nowMs);
+HUD.update(deltaMs / 1000); // convert ms → seconds
+
 
   
   
