@@ -1,14 +1,18 @@
 // js/player.js
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+
 import { WEAPON_DEFS } from "./weapons.js";
 import { AMMO_DEFS } from "./ammo.js";
 
 export class Player extends EventTarget {
-  constructor({ maxHp = 100, hp = 100 } = {}) {
+  constructor({ maxHp = 10000, hp = 10000 } = {}) {
     super();
 
     this.maxHp = maxHp;
     this.hp = hp;
-
+// In Player constructor
+    // Private backing field
+    this._position = new THREE.Vector3(0, 1.7, 5); // match camera start
     // Initialize ammo pools per type
     this.ammoPools = {};
     for (const key in AMMO_DEFS) {
@@ -55,7 +59,18 @@ export class Player extends EventTarget {
     this.hp = Math.min(this.hp + amount, this.maxHp);
     this._emitHealth();
   }
-
+  get position() {
+    // Assume your player is represented by a camera or some 3D position
+    //return window.camera.position.clone(); // or wherever your player "is"
+return this._position;	
+  }
+  
+  
+    set position(v) {
+    // copy the vector so _position stays updated
+    this._position.copy(v);
+  }
+  
   // Cycle weapons forward/backward
   cycleWeapon(direction = 1) {
     if (!this.weapons || this.weapons.length === 0) return;
@@ -107,7 +122,49 @@ try {
     this.currentWeaponIndex = index;
     this._emitAmmo();
   }
+  meleeAttack() {
+    const nowMs = performance.now();
+    const reach = 2.0;          // how far the melee can reach
+    const radius = 1.5;         // radius around hit point
+    const damage = 15;          // melee damage
+    const knockbackForce = 0.3; // how much enemies get pushed
 
+    if (!this.mesh) return;
+
+    const forward = this.getForwardVector();
+    const origin = this.mesh.position.clone();
+    const hitPos = origin.clone().add(forward.multiplyScalar(reach));
+
+    // Find all alive enemies within melee range
+    const hitEnemies = window.ENEMY_INSTANCES.filter(e => {
+      if (e._isDead) return false;
+      const dist = e.mesh.position.distanceTo(hitPos);
+      return dist <= radius;
+    });
+
+    hitEnemies.forEach(e => {
+      // Apply melee damage
+      e.takeDamage(damage, "melee");
+
+      // Apply knockback
+      const dir = e.mesh.position.clone().sub(origin).normalize();
+      e._knockback.add(dir.multiplyScalar(knockbackForce));
+
+      // Optional: trigger enemy hit sounds (already handled in takeDamage)
+    });
+  }
+
+  getForwardVector() {
+    // Assumes player is facing along Z axis (adjust if you use camera)
+    // If you have a camera reference: use camera.getWorldDirection()
+    const forward = new THREE.Vector3(0, 0, -1);
+    if (this.mesh) {
+      forward.applyQuaternion(this.mesh.quaternion).normalize();
+    }
+    return forward;
+  }
+
+ 
   _emitHealth() {
     this.dispatchEvent(
       new CustomEvent("healthChanged", {

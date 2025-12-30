@@ -417,6 +417,9 @@ update(deltaMs, nowMs, player) {
     const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
+
+
+this.meleeAttack(player); // new melee attack
     if (pattern === "popOutFromCover") {
       this._updatePopOut(deltaMs, nowMs, p);
     } else if (pattern === "patrol") {
@@ -505,12 +508,62 @@ _initPathBehavior(params) {
   this._targetOffset = new THREE.Vector3(0, 0, 0);
 }
 
+
+  meleeAttack(player) {
+  if (!this.mesh || this._isDead) return;
+  if (!player || player.hp <= 0) return;
+
+  const nowMs = performance.now();
+
+  // Initialize cooldown tracker
+  if (!this._lastMelee) this._lastMelee = 0;
+
+  const meleeCooldown = 800;
+  if (nowMs - this._lastMelee < meleeCooldown) return;
+
+  const reach = 2.0;
+  const radius = 1.2;
+  const damage = 10;
+  const knockbackForce = 0.25;
+
+  const origin = this.mesh.position;
+  const targetPos = player.position; // SAFE: Vector3
+
+  const dist = origin.distanceTo(targetPos);
+
+  if (dist > reach + radius) return; // ❗ no hit, no cooldown
+
+  // ✅ HIT CONFIRMED — now consume cooldown
+  this._lastMelee = nowMs;
+
+  console.log("Melee hit!");
+
+  player.takeDamage(damage);
+
+  // Optional knockback
+  if (player.mesh) {
+const dir = targetPos.clone().sub(origin).normalize();
+
+    
+	if (!player._knockback) player._knockback = new THREE.Vector3();
+    player._knockback.add(dir.multiplyScalar(knockbackForce));
+  }
+
+  try {
+    const s = new Audio("assets/sfx/swing_medium.ogg");
+    s.currentTime = 0;
+    s.play().catch(() => {});
+  } catch (_) {}
+}
+
   //
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
 	    if (!ENEMY_AI_ENABLED) return; // HARD STOP
-    if (nowMs < this._nextAllowedFireMs) return;
+    
+	
+	if (nowMs < this._nextAllowedFireMs) return;
   if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
   const muzzle = this.mesh.position.clone();

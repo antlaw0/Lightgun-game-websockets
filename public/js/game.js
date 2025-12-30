@@ -17,8 +17,8 @@ import { Player } from './player.js';
 import { HUD } from './hud.js';
 
 export const player = new Player({
-  maxHp: 100,
-  hp: 100,
+  maxHp: 10000,
+  hp: 10000,
   weapons: [
     {
       name: "Starter Pistol",
@@ -138,7 +138,7 @@ camera.lookAt(0, 1.7, 0);
 HUD.init(player, camera);
 window.hud = HUD;
 //console.log("HUD object:", HUD);
-console.log("HUD shakeCamera:", HUD.shakeCamera);
+//console.log("HUD shakeCamera:", HUD.shakeCamera);
 window.hud = HUD;
 console.log("window.hud:", window.hud);
 
@@ -880,7 +880,8 @@ function animate(nowMs) {
   lastMs = nowMs;
 HUD.update(deltaMs / 1000); // convert ms → seconds
 
-
+    // **Sync player position with camera**
+    player.position.copy(camera.position);
   
   
       handleFire(); // <-- centralized firing
