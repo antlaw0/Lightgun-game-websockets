@@ -11,14 +11,16 @@ export const Scene_W1_2 = {
 
   // Overall bounding room, larger than the hallway itself
   room: {
-    width: 40,
-    height: 8,
-    depth: 40
-  },
+  width: 10,
+  height: 5,
+  depth: 12,
+  center: { x: 0, y: 0, z: 0 }
+},
+
 
   camera: {
-    position: { x: 0, y: 1.7, z: 6 },
-    lookAt: { x: 0, y: 1.4, z: -6 },
+    position: { x: 0, y: 1.7, z: 8 },
+    lookAt: { x: 0, y: 1.4, z: 0 },
     fov: 60,
     near: 0.1,
     far: 120
@@ -70,6 +72,53 @@ export const Scene_W1_2 = {
     }
   ],
 
+enemies: [
+  
+  {
+      id: "gruntC",
+      type: "Grunt",
+      hp: 40,
+      position: { x: 1, y: 0.9, z: 0 },
+	  
+      behavior: { pattern: "standInOpen" },
+      firePauseMs: 3000,
+      weapon: "sniperRifle",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
+      sprite: "assets/sprites/grunt.png"
+    },
+
+  {
+    id: "MeleegruntA",
+    type: "Grunt",
+    hp: 40,
+    position: { x: 1, y: 0.9, z: 2 },
+
+    behavior: {
+      pattern: "meleeRush",
+      params: {
+        approachSpeed: 2.2,
+        meleeRange: 1.5,
+        sideOffset: 1.1,
+        attackCooldownMs: 700
+      }
+    }, // end behavior
+
+    hitSounds: [
+      "assets/sfx/grunt/hit1.ogg",
+      "assets/sfx/grunt/hit2.ogg"
+    ],
+
+    deathSounds: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+
+    sprite: "assets/sprites/grunt.png"
+  }
+], 
+
+  
   roomTextures: {
     floor: "assets/textures/warehouse_floor.png",
     ceiling: "assets/textures/warehouse_ceiling.png",
@@ -78,84 +127,11 @@ export const Scene_W1_2 = {
   },
 
   environment: {
-    staticObjects: [
-      // ===== FIRST LEG (-Z) =====
+    staticObjects: []
 
-      {
-        id: "hall1_leftWall",
-        type: "wall",
-        indestructible: true,
-        position: { x: -2, y: 1.25, z: -6 },
-        size: { x: 0.2, y: 2.5, z: 16 },
-        material: {
-          map: "assets/props/brick_wall.png",
-          roughness: 0.95,
-          metalness: 0.0
-        },
-        hitSounds: ["sounds/ric1.ogg"]
-      },
-      {
-        id: "hall1_rightWall",
-        type: "wall",
-        indestructible: true,
-        position: { x: 2, y: 1.25, z: -6 },
-        size: { x: 0.2, y: 2.5, z: 16 },
-        material: {
-          map: "assets/props/brick_wall.png",
-          roughness: 0.95,
-          metalness: 0.0
-        },
-        hitSounds: ["sounds/ric1.ogg"]
       },
 
-      // ===== CORNER BLOCKER (forces turn) =====
-
-      {
-        id: "cornerBlock",
-        type: "wall",
-        indestructible: true,
-        position: { x: 0, y: 1.25, z: -14 },
-        size: { x: 4, y: 2.5, z: 0.4 },
-        material: {
-          map: "assets/props/brick_wall.png",
-          roughness: 0.95,
-          metalness: 0.0
-        },
-        hitSounds: ["sounds/ric1.ogg"]
-      },
-
-      // ===== SECOND LEG (+X) =====
-
-      {
-        id: "hall2_backWall",
-        type: "wall",
-        indestructible: true,
-        position: { x: 8, y: 1.25, z: -16 },
-        size: { x: 16, y: 2.5, z: 0.2 },
-        material: {
-          map: "assets/props/brick_wall.png",
-          roughness: 0.95,
-          metalness: 0.0
-        },
-        hitSounds: ["sounds/ric1.ogg"]
-      },
-      {
-        id: "hall2_frontWall",
-        type: "wall",
-        indestructible: true,
-        position: { x: 8, y: 1.25, z: -12 },
-        size: { x: 16, y: 2.5, z: 0.2 },
-        material: {
-          map: "assets/props/brick_wall.png",
-          roughness: 0.95,
-          metalness: 0.0
-        },
-        hitSounds: ["sounds/ric1.ogg"]
-      }
-    ]
-  },
-
-  enemies: [],
+  
 
   objective: {
     type: "reachEnd",

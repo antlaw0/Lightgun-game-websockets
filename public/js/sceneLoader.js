@@ -61,7 +61,9 @@ window.sceneLoader = this;
     if (propInstance.id) this.propsById[propInstance.id] = propInstance;
 
     // scene + mesh tracking
-    this.scene.add(propInstance.mesh);
+this.sceneRoot.add(propInstance.mesh);
+
+	
     propInstance.mesh.traverse(obj => {
   if (obj.isMesh) {
     this.propMeshes.push(obj);
@@ -76,8 +78,10 @@ window.sceneLoader = this;
     this.enemies.push(enemyInstance);
     if (enemyInstance.id) this.enemiesById[enemyInstance.id] = enemyInstance;
 
-    this.scene.add(enemyInstance.mesh);
-    enemyInstance.mesh.traverse(obj => {
+    this.sceneRoot.add(enemyInstance.mesh);
+
+    
+	enemyInstance.mesh.traverse(obj => {
   if (obj.isMesh) {
     this.enemyMeshes.push(obj);
   }
@@ -91,8 +95,9 @@ window.sceneLoader = this;
     this.explosions.push(explosionInstance);
     // If the explosion has a mesh or points object, SceneLoader won't assume the property name.
     // Explosion author should add its mesh to scene themselves or expose `mesh` property for us to add.
-    if (explosionInstance.mesh) this.scene.add(explosionInstance.mesh);
-    // If explosion exposes `addToScene(scene)` use it (optional)
+    if (explosionInstance.mesh) this.sceneRoot.add(explosionInstance.mesh);
+
+	// If explosion exposes `addToScene(scene)` use it (optional)
     if (typeof explosionInstance.addToScene === "function") explosionInstance.addToScene(this.scene);
   }
 
@@ -197,7 +202,9 @@ _applyCameraSettings() {
     if (def.target && light.target) {
       const t = new THREE.Object3D();
       t.position.set(def.target.x, def.target.y, def.target.z);
-      this.scene.add(t);
+      this.sceneRoot.add(t);
+
+	  
       light.target = t;
     }
 
@@ -225,7 +232,8 @@ _applyCameraSettings() {
       }
     }
 
-    this.scene.add(light);
+    this.sceneRoot.add(light);
+
 
     this.sceneLights.push(light);
   });
@@ -241,6 +249,12 @@ _applyCameraSettings() {
     this.sceneDef = sceneDef;
 
     console.log(`SceneLoader loading scene: ${sceneDef.name}`);
+// ================================
+// CREATE FRESH SCENE ROOT GROUP
+// ================================
+this.sceneRoot = new THREE.Group();
+this.sceneRoot.name = `sceneRoot_${sceneDef.name}`;
+this.scene.add(this.sceneRoot);
 
     // Props (including full-cover walls)
 const staticObjects = sceneDef.environment?.staticObjects ?? [];
@@ -519,18 +533,20 @@ this.staticObjects.forEach(o => {
   o.position = o.mesh.position;
 });
 
-    // Enemies: iterate array
-    this.enemies.forEach(e => {
-      const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
-      minX = Math.min(minX, pos.x);
-      maxX = Math.max(maxX, pos.x);
-      minY = Math.min(minY, pos.y);
-      maxY = Math.max(maxY, pos.y + 1);
-      minZ = Math.min(minZ, pos.z);
-      maxZ = Math.max(maxZ, pos.z);
-    });
+    // Enemies: iterate array to include in room bounds
+this.enemies.forEach(e => {
+  // Use current mesh position to calculate bounds
+  const pos = e.mesh?.position ?? new THREE.Vector3(0, 0, 0);
 
-    // Padding
+  minX = Math.min(minX, pos.x);
+  maxX = Math.max(maxX, pos.x);
+  minY = Math.min(minY, pos.y);
+  maxY = Math.max(maxY, pos.y + 1); // assuming 1 unit enemy height
+  minZ = Math.min(minZ, pos.z);
+  maxZ = Math.max(maxZ, pos.z);
+});
+
+// Padding
     minX -= this.padding;
     maxX += this.padding;
     minY -= this.padding;
@@ -624,7 +640,9 @@ _createRoom() {
   floor.userData = { type: "room", solid: true, 
     hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
   };
-  this.scene.add(floor);
+  this.sceneRoot.add(floor);
+
+  
   this.roomMeshes.push(floor);
 
   // -----------------
@@ -640,7 +658,8 @@ _createRoom() {
       hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
   };
-  this.scene.add(ceiling);
+  this.sceneRoot.add(ceiling);
+
   this.roomMeshes.push(ceiling);
 
   // -----------------
@@ -656,7 +675,8 @@ _createRoom() {
     hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
   };
-  this.scene.add(backWall);
+  this.sceneRoot.add(backWall);
+
   this.roomMeshes.push(backWall);
 
   // -----------------
@@ -672,7 +692,8 @@ _createRoom() {
     hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
   };
-  this.scene.add(leftWall);
+  this.sceneRoot.add(leftWall);
+
   this.roomMeshes.push(leftWall);
 
   // -----------------
@@ -687,7 +708,8 @@ _createRoom() {
       hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
 
   };
-  this.scene.add(rightWall);
+  this.sceneRoot.add(rightWall);
+
   this.roomMeshes.push(rightWall);
 
   // -----------------
@@ -731,7 +753,20 @@ _createRoom() {
   // Unload Scene (adjusted to arrays)
   // -----------------------------
   unloadScene() {
-    // Clear room
+    // ================================
+// REMOVE SCENE ROOT GROUP
+// ================================
+if (this.sceneRoot) {
+  this.scene.remove(this.sceneRoot);
+  this.sceneRoot.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose?.();
+    if (obj.material) obj.material.dispose?.();
+  });
+  this.sceneRoot = null;
+}
+
+	
+	// Clear room
     this.roomMeshes.forEach((m) => {
       this.scene.remove(m);
       if (m.geometry) m.geometry.dispose();

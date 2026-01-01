@@ -57,7 +57,14 @@ this.meleeCooldownMs = 600;
 
 
   takeDamage(amount) {
-    window.hud.shakeCamera(0.3, 0.4);
+    try {
+            const hitSound = new Audio("assets/sfx/playerHit.ogg");
+            hitSound.currentTime = 0;
+            hitSound.play().catch(() => {});
+        } catch (_) {}
+
+
+	window.hud.shakeCamera(0.3, 0.4);
 	this.hp = Math.max(this.hp - amount, 0);
     this._emitHealth();
   }

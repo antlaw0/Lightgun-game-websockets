@@ -1,6 +1,7 @@
 // js/sceneManager.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { runCameraRails } from "./cameraRails.js";
+import { ENEMY_INSTANCES } from "./enemy.js";
 
 export class SceneManager {
     constructor(camera, sceneLoader) {
@@ -25,8 +26,24 @@ export class SceneManager {
         this.currentScene = sceneDef;
         console.log(`SceneManager loading scene: ${sceneDef.name}`);
 
-        // Build the world (props, enemies, room, lights)
-        this.sceneLoader.loadScene(sceneDef);
+// ===== HARD RESET ENEMIES BEFORE NEW SCENE =====
+ENEMY_INSTANCES.forEach(enemy => {
+  if (enemy.mesh && enemy.mesh.parent) {
+    enemy.mesh.parent.remove(enemy.mesh);
+  }
+});
+ENEMY_INSTANCES.length = 0;
+
+// ===== RESET SCENE GROUP TRANSFORM =====
+if (sceneDef.group) {
+  sceneDef.group.position.set(0, 0, 0);
+  sceneDef.group.rotation.set(0, 0, 0);
+  sceneDef.group.scale.set(1, 1, 1);
+}
+
+// Build the world (props, enemies, room, lights)
+this.sceneLoader.loadScene(sceneDef);
+
 
         // Optionally hide scene objects until ready (can fade in later)
         if (sceneDef.group) sceneDef.group.visible = true;
@@ -45,6 +62,7 @@ export class SceneManager {
     async onSceneCompleted(scene) {
         if (scene !== this.currentScene) return;
         console.log(`Scene completed: ${scene.name}`);
+console.log("Clearing enemies and loading next scene:", scene.nextScene?.name);
 
         const exitRails = scene.cameraRails?.exit;
         if (Array.isArray(exitRails) && exitRails.length > 0) {

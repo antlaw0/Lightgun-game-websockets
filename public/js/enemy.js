@@ -1,5 +1,18 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { getWeapon } from "./weapons.js";
+const DEFAULT_MELEE_PARAMS = {
+  approachSpeed: 4.0,
+  meleeRange: 1.6,
+  preferredDistance: 1.9,
+  sideOffset: 0.9,
+  strafeSpeed: 1.4,
+  lungeSpeed: 9.0,
+  lungeDurationMs: 180,
+  attackCooldownMs: 800,
+  recoverDurationMs: 300
+};
+
+
 export let ENEMY_AI_ENABLED = true;
 
 export function setEnemyAIEnabled(enabled) {
@@ -106,6 +119,7 @@ export class Enemy {
   return hits.length === 0;
 }
 _snapBasePositionToCoverEdge() {
+
   if (this.coverType !== "full") return;
 
   const cover = this._resolveCoverObject();
@@ -166,6 +180,7 @@ this._nextAllowedFireMs = 0;
 this.type = mergedDef.displayName || "Enemy";
 this.hp = mergedDef.hp || 1;
     
+this._melee = null; // will be lazily initialized
 	
 	this.maxHp = this.hp;
     let weaponDef = null;
@@ -213,14 +228,16 @@ this.deathSounds = Array.isArray(mergedDef.deathSounds) ? mergedDef.deathSounds 
 
     this.player = player;
     this.fireCallback = fireCallback;
+// ===== SPAWN INITIALIZATION GUARD =====
+this._spawnInitialized = false;
 
     this.position = new THREE.Vector3(
-      instanceConfig.position.x || 0,
-      instanceConfig.position.y || 0,
-      instanceConfig.position.z || 0
-    );
+  (instanceConfig.position?.x) ?? 0,
+  (instanceConfig.position?.y) ?? 0,
+  (instanceConfig.position?.z) ?? 0
+);
 
-    this.facing = instanceConfig.facing || 0;
+this.facing = instanceConfig.facing || 0;
     this.coverIndex = instanceConfig.coverIndex ?? null;
 this.coverObjectId = instanceConfig.coverObject || null;
 
@@ -239,11 +256,19 @@ this.coverObjectId = instanceConfig.coverObject || null;
     const tex = new THREE.TextureLoader().load(mergedDef.sprite);
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
     this.mesh = new THREE.Mesh(plane, mat);
+// place mesh at given position from scene instanceConfig
+this.position = new THREE.Vector3(
+  (instanceConfig.position?.x) ?? 0,
+  (instanceConfig.position?.y) ?? 0,
+  (instanceConfig.position?.z) ?? 0
+);
+this.mesh.position.copy(this.position);
+this.basePosition = this.position.clone();  // ✅ clone independent copy
+this._targetPosition = this.basePosition.clone();
+this._spawnInitialized = true; // mark as initialized immediately
 
-    // place mesh at given position
-    this.mesh.position.copy(this.position);
-    this.basePosition = this.mesh.position.clone(); // used for lerping back
-    this.baseRotationY = this.facing;
+	this._targetOffset = new THREE.Vector3(0, 0, 0);
+	this.baseRotationY = this.facing;
 // NOW path behavior can safely initialize
 if (this.behavior.pattern === "path") {
   this._initPathBehavior(this.behavior.params || {});
@@ -312,11 +337,19 @@ if (this.behavior?.params?.leanSide) {
     this._leanSide = (distToLeft < distToRight) ? -1 : 1;
   }
 }
-if (this.coverType === "full") {
-  this._snapBasePositionToCoverEdge();
+
+// Only snap to cover if enemy actually has a cover object defined
+if (this.coverType === "full" && this.coverObjectId) {
+  const cover = this._resolveCoverObject();
+  if (cover) {
+    this._snapBasePositionToCoverEdge();
+  } else {
+    console.warn(`Enemy ${this.id} has coverType "full" but no valid cover object. Using defined scene position.`);
+  }
 }
 
-    // knockback vector applied on top of other offsets (decays over time)
+    
+	// knockback vector applied on top of other offsets (decays over time)
     this._knockback = new THREE.Vector3();
 
     // For firing cadence while popped
@@ -407,17 +440,23 @@ if (this.coverType === "full") {
 
 
 
-
 update(deltaMs, nowMs, player) {
-    if (this._isDead) return;
+	
+	if (this._isDead) return;
     if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
     const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
 
 
-this.meleeAttack(player); // new melee attack
-    if (pattern === "popOutFromCover") {
+
+    
+	
+	if (pattern === "meleeRush") {
+      this._updateMeleeRush(deltaMs, nowMs, this.behavior.params || {}, player);
+}
+
+	else if (pattern === "popOutFromCover") {
       this._updatePopOut(deltaMs, nowMs, p);
     } else if (pattern === "patrol") {
       this._updatePatrol(deltaMs, nowMs, p);
@@ -505,6 +544,42 @@ _initPathBehavior(params) {
   this._targetOffset = new THREE.Vector3(0, 0, 0);
 }
 
+  _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
+  // Merge default params with scene-defined ones
+  const p = {
+    approachSpeed: 2,
+    meleeRange: 1.5,
+    sideOffset: 1.1,
+    attackCooldownMs: 700,
+    ...params
+  };
+
+  const deltaSeconds = deltaMs / 1000;
+
+  const dirToPlayer = new THREE.Vector3().subVectors(player.position, this.basePosition);
+  const distanceToPlayer = dirToPlayer.length();
+
+  // Only move if outside melee range
+  if (distanceToPlayer > p.meleeRange) {
+    dirToPlayer.normalize();
+
+    const side = new THREE.Vector3().crossVectors(dirToPlayer, new THREE.Vector3(0, 1, 0)).normalize();
+    const targetOffset = side.multiplyScalar(p.sideOffset * Math.sin(nowMs * 0.002));
+
+    const moveVector = dirToPlayer.add(targetOffset).normalize().multiplyScalar(p.approachSpeed * deltaSeconds);
+
+    // ✅ Update basePosition so next frame uses the new position
+    this.basePosition.add(moveVector);
+
+    // Update _targetPosition for animation smoothing
+    this._targetPosition.copy(this.basePosition);
+  }
+
+  // Melee attack if in range
+  if (distanceToPlayer <= p.meleeRange) {
+    this.meleeAttack(player);
+  }
+}
 
   meleeAttack(player) {
   if (!this.mesh || this._isDead) return;
@@ -557,63 +632,55 @@ const dir = targetPos.clone().sub(origin).normalize();
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
-	    if (!ENEMY_AI_ENABLED) return; // HARD STOP
-    
-	
-	if (nowMs < this._nextAllowedFireMs) return;
-  if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
+    if (!ENEMY_AI_ENABLED) return;
+    if (nowMs < this._nextAllowedFireMs) return;
+    if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
-  const muzzle = this.mesh.position.clone();
-  muzzle.y += 0.9;
+    // Safe player position fallback
+    const target = (this.player.mesh?.getWorldPosition(new THREE.Vector3()))
+                   || this.player.position
+                   || new THREE.Vector3(0, 1.7, 0);
 
-  const targetPos =
-    this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
+    const origin = this.mesh.getWorldPosition(new THREE.Vector3());
+    origin.y += 0.9;
 
-  // HARD BLOCK: do not fire if wall is between muzzle and player
-  if (!this._hasClearShot(muzzle, targetPos)) {
-    return;
-  }
+    this.weapon.recordFire(nowMs);
+    if (this.firePauseMs > 0) this._nextAllowedFireMs = nowMs + this.firePauseMs;
 
-  // Fire is now physically valid
-  this.weapon.recordFire(nowMs);
-  // Enemy-level pause before next firing sequence
-  if (this.firePauseMs > 0) {
-    this._nextAllowedFireMs = nowMs + this.firePauseMs;
-  }
-  // Compute direction with accuracy deviation
-  const idealDir = targetPos.clone().sub(muzzle).normalize();
-  const deviatedDir = idealDir.clone();
+    // Vector toward player in world space
+    const idealDir = target.clone().sub(origin).normalize();
 
-  if (this.accuracy < 1.0) {
-    const maxAngle = (1 - this.accuracy) * (Math.PI / 6);
-    const randAxis = new THREE.Vector3(
-      Math.random() - 0.5,
-      Math.random() - 0.5,
-      Math.random() - 0.5
-    ).normalize();
-    const angle = (Math.random() - 0.5) * maxAngle;
-    deviatedDir.applyAxisAngle(randAxis, angle).normalize();
-  }
+    // Apply deviation
+    let deviatedDir = idealDir.clone();
+    if (this.accuracy < 1.0) {
+        const maxAngle = (1 - this.accuracy) * (Math.PI / 6);
 
-  // Spawn projectile
-  this.fireCallback(
-    muzzle,
-    muzzle.clone().add(deviatedDir.multiplyScalar(28)),
-    28
-  );
+        const worldUp = new THREE.Vector3(0, 1, 0);
+        let right = new THREE.Vector3().crossVectors(worldUp, idealDir).normalize();
+        if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+        const up = new THREE.Vector3().crossVectors(idealDir, right).normalize();
 
-  // Optional immediate-hit logic
-  const angleBetween = idealDir.angleTo(deviatedDir);
-  const hitThreshold = 0.03;
+        const pitch = (Math.random() - 0.5) * maxAngle;
+        const yaw = (Math.random() - 0.5) * maxAngle;
 
-  if (angleBetween <= hitThreshold) {
-    window.dispatchEvent(
-      new CustomEvent("enemyFiredHitPlayer", {
-        detail: { id: this.id, damage: this.weapon.damage }
-      })
+        deviatedDir.applyAxisAngle(right, pitch);
+        deviatedDir.applyAxisAngle(up, yaw);
+        deviatedDir.normalize();
+    }
+
+    this.fireCallback(
+        origin,
+        origin.clone().add(deviatedDir.multiplyScalar(28)),
+        28
     );
-  }
+
+    if (idealDir.angleTo(deviatedDir) <= 0.03) {
+        window.dispatchEvent(new CustomEvent("enemyFiredHitPlayer", {
+            detail: { id: this.id, damage: this.weapon.damage }
+        }));
+    }
 }
+
 
   //
   // Behaviors
@@ -767,7 +834,9 @@ if (this._isFullyPoppedTarget &&
 
   // Smoothly lerp actual mesh transform toward target transforms each frame
   _applyAnimationSmoothing(deltaMs) {
-    // If targets not set yet, ensure defaults
+    
+	
+	// If targets not set yet, ensure defaults
     if (!this._targetPosition) {
       this._targetPosition = this.basePosition.clone();
     }
@@ -788,6 +857,7 @@ if (this._isFullyPoppedTarget &&
     const desiredPos = this._targetPosition.clone().add(this._targetOffset);
     this.mesh.position.lerp(desiredPos, t);
 
+this.position.copy(this.mesh.position);
     // Apply knockback offset on top of smooth pose
     // Decay the knockback each frame (exponential-ish)
     const decayFactor = Math.pow(0.9, Math.max(1, deltaMs / 16)); // smaller deltaMs -> slower decay steps
@@ -818,7 +888,10 @@ if (this._isFullyPoppedTarget &&
       this.mesh.material.dispose();
     }
   }
+
+
 }
+
 export function killAllEnemies() {
   ENEMY_INSTANCES.forEach(enemy => {
     if (!enemy._isDead) enemy.die();
