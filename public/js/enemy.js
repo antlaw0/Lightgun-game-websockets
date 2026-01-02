@@ -11,6 +11,7 @@ const DEFAULT_MELEE_PARAMS = {
   attackCooldownMs: 800,
   recoverDurationMs: 300
 };
+const PLAYER_HIT_RADIUS = 0.35; // meters (about shoulder width)
 
 
 export let ENEMY_AI_ENABLED = true;
@@ -632,54 +633,101 @@ const dir = targetPos.clone().sub(origin).normalize();
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
-    if (!ENEMY_AI_ENABLED) return;
+    if (!ENEMY_AI_ENABLED) return; // global AI stop
     if (nowMs < this._nextAllowedFireMs) return;
     if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
-    // Safe player position fallback
-    const target = (this.player.mesh?.getWorldPosition(new THREE.Vector3()))
-                   || this.player.position
-                   || new THREE.Vector3(0, 1.7, 0);
+    // ---------------------------
+    // Resolve world-space positions safely
+    // ---------------------------
 
-    const origin = this.mesh.getWorldPosition(new THREE.Vector3());
-    origin.y += 0.9;
+    const origin = this.mesh.position.clone();
+    origin.y += 0.9; // muzzle height
+
+    const target =
+        this.player.mesh?.position?.clone() ||
+        this.player.position?.clone() ||
+        new THREE.Vector3(0, 1.7, 0);
+
+    // HARD BLOCK: wall between enemy and player
+    if (!this._hasClearShot(origin, target)) return;
+
+    // ---------------------------
+    // Fire bookkeeping
+    // ---------------------------
 
     this.weapon.recordFire(nowMs);
-    if (this.firePauseMs > 0) this._nextAllowedFireMs = nowMs + this.firePauseMs;
+    if (this.firePauseMs > 0) {
+        this._nextAllowedFireMs = nowMs + this.firePauseMs;
+    }
 
-    // Vector toward player in world space
+    // ---------------------------
+    // Compute ideal firing direction
+    // ---------------------------
+
     const idealDir = target.clone().sub(origin).normalize();
+    let shotDir = idealDir.clone();
 
-    // Apply deviation
-    let deviatedDir = idealDir.clone();
+    // ---------------------------
+    // Apply symmetric accuracy deviation
+    // ---------------------------
+
     if (this.accuracy < 1.0) {
         const maxAngle = (1 - this.accuracy) * (Math.PI / 6);
 
         const worldUp = new THREE.Vector3(0, 1, 0);
-        let right = new THREE.Vector3().crossVectors(worldUp, idealDir).normalize();
+        let right = new THREE.Vector3().crossVectors(worldUp, idealDir);
         if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+        right.normalize();
+
         const up = new THREE.Vector3().crossVectors(idealDir, right).normalize();
 
+        const yaw   = (Math.random() - 0.5) * maxAngle;
         const pitch = (Math.random() - 0.5) * maxAngle;
-        const yaw = (Math.random() - 0.5) * maxAngle;
 
-        deviatedDir.applyAxisAngle(right, pitch);
-        deviatedDir.applyAxisAngle(up, yaw);
-        deviatedDir.normalize();
+        shotDir.applyAxisAngle(up, yaw);
+        shotDir.applyAxisAngle(right, pitch);
+        shotDir.normalize();
     }
+
+    // ---------------------------
+    // Spawn projectile (visual / physics)
+    // ---------------------------
+
+    const range = 28;
 
     this.fireCallback(
         origin,
-        origin.clone().add(deviatedDir.multiplyScalar(28)),
-        28
+        origin.clone().add(shotDir.clone().multiplyScalar(range)),
+        range
     );
 
-    if (idealDir.angleTo(deviatedDir) <= 0.03) {
-        window.dispatchEvent(new CustomEvent("enemyFiredHitPlayer", {
-            detail: { id: this.id, damage: this.weapon.damage }
-        }));
-    }
-}
+    // ---------------------------
+    // PLAYER HIT TEST (ray → sphere)
+    // ---------------------------
+
+    const toPlayer = target.clone().sub(origin);
+    const projLength = toPlayer.dot(shotDir);
+
+    if (projLength > 0) {
+        const closestPoint = origin.clone().add(
+            shotDir.clone().multiplyScalar(projLength)
+        );
+
+        const distanceToPlayer = closestPoint.distanceTo(target);
+
+        if (distanceToPlayer <= PLAYER_HIT_RADIUS) {
+            window.dispatchEvent(
+                new CustomEvent("enemyFiredHitPlayer", {
+                    detail: {
+                        id: this.id,
+                        damage: this.weapon.damage
+                    }
+                })
+            );
+        } // end hit check
+    } // end forward projection check
+} // end _attemptFire
 
 
   //
