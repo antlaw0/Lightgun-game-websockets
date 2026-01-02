@@ -24,7 +24,7 @@ export const Scene_W1_1 = {
       {
         type: "moveTo",
         position: { x: 8.0, y: 1.7, z: -8.0 },
-        duration: 1000
+        duration: 8000
         
       },
 	    { type: "lookAt", target: { x: 8.5, y: 1.7, z: -8.1 }, duration: 1000 }, 
@@ -207,6 +207,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: 2, y: 0.9, z: -7 },
+	  	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateA",
       firePauseMs: 50,
@@ -221,6 +239,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: 4, y: 0.9, z: -7 },
+	  	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateB",
       firePauseMs: 50,
@@ -235,6 +271,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: -1.9, y: 0.9, z: -6 },
+	  	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: { pattern: "popOutFromCover", params: { coverType: "full" } },
       coverObject: "wall1",
       firePauseMs: 50,
@@ -249,6 +303,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: 0, y: 3.9, z: -8 },
+	  	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: { pattern: "standInOpen" },
       firePauseMs: 3000,
       weapon: "sniperRifle",
@@ -262,6 +334,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: 0, y: 0.9, z: 3 },
+	  	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: {
         pattern: "path",
         params: {

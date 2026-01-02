@@ -115,3 +115,43 @@ console.log("Clearing enemies and loading next scene:", scene.nextScene?.name);
         });
     }
 }
+
+/**
+ * Dev helper: instant scene loader by filename.
+ * Usage from console:
+ *    window.sceneManager.loadSceneByName("scene_w1_2");
+ * Assumes scene files live in /js/scenes/ and export a single scene object.
+ */
+SceneManager.prototype.loadSceneByName = async function(sceneName) {
+    if (!sceneName || typeof sceneName !== "string") {
+        console.error("loadSceneByName: invalid scene name", sceneName);
+        return;
+    }
+
+    try {
+        // Optional: cleanup current scene
+        if (this.currentScene && typeof this.currentScene.cleanup === "function") {
+            this.currentScene.cleanup();
+        }
+
+        // Dynamic import from your new scenes folder
+        const sceneModule = await import(`/js/scenes/${sceneName}.js`);
+
+        // Grab the first exported object as the scene
+        const sceneDef = sceneModule[Object.keys(sceneModule)[0]];
+
+        if (!sceneDef) {
+            console.error("Scene not found in module:", sceneName);
+            return;
+        }
+
+        // Load it through the normal SceneManager pipeline
+        await this.loadScene(sceneDef);
+
+        console.log(`Dev helper: loaded scene "${sceneName}"`);
+    } catch (err) {
+        console.error(`Failed to load scene "${sceneName}":`, err);
+    }
+};
+
+

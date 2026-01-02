@@ -180,7 +180,21 @@ this._nextAllowedFireMs = 0;
 
 this.type = mergedDef.displayName || "Enemy";
 this.hp = mergedDef.hp || 1;
+this.alive = true; // mark enemy as alive for taunts
+this._hasEngagedPlayer=false
+// ----------------------------
+// VOICE DEFINITIONS
+// ----------------------------
+this.voice = mergedDef.voice || {};
+
+this.voicePain   = this.voice.pain   || [];
+this.voiceDeath  = this.voice.death  || [];
+this.voiceEngage = this.voice.engage || [];
+this.voiceTaunt  = this.voice.taunt  || [];
+
+this._nextTauntTime = performance.now() + this._randomTauntDelay();
     
+
 this._melee = null; // will be lazily initialized
 	
 	this.maxHp = this.hp;
@@ -229,6 +243,10 @@ this.deathSounds = Array.isArray(mergedDef.deathSounds) ? mergedDef.deathSounds 
 
     this.player = player;
     this.fireCallback = fireCallback;
+	
+	 
+   
+   
 // ===== SPAWN INITIALIZATION GUARD =====
 this._spawnInitialized = false;
 
@@ -362,10 +380,20 @@ if (this.coverType === "full" && this.coverObjectId) {
     }
   }
 
+	_postSpawnInit() {
+  if (this._hasEngagedPlayer) return;
+  this._hasEngagedPlayer = true;
+  this._playVoice("engage");
+}
+
+
   _randInterval(min, max) {
     // return a random ms interval between min and max
     return min + Math.floor(Math.random() * Math.max(0, (max - min)));
   }
+_randomTauntDelay() {
+  return 4000 + Math.random() * 8000; // 4–12 seconds
+} // end _randomTauntDelay
 
   _playRandom(arr) {
     if (!arr || arr.length === 0) return;
@@ -385,7 +413,12 @@ if (this.coverType === "full" && this.coverObjectId) {
 
     this._playRandom(this.hitSounds);
 
-    if (this.hp <= 0) this.die();
+      if (this.health > 0) {
+    this._playVoice("pain");
+  } else {
+    this._playVoice("death");
+    this.die();
+  }
   }
 
   //
@@ -445,7 +478,31 @@ update(deltaMs, nowMs, player) {
 	
 	if (this._isDead) return;
     if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
-    const pattern = this.behavior.pattern;
+    if (this.mesh && !this._postSpawnDone) {
+  this._postSpawnDone = true;
+  this._postSpawnInit();
+}
+
+// ----------------------------
+// TAUNT VOICES (ambient chatter)
+// ----------------------------
+if (
+  this.alive &&
+  this.voiceTaunt.length > 0 &&
+  window.enemyVoiceManager
+) {
+  if (nowMs >= this._nextTauntTime) {
+    window.enemyVoiceManager.request({
+      enemy: this,
+      type: "taunt",
+      clips: this.voiceTaunt
+    });
+
+    this._nextTauntTime = nowMs + this._randomTauntDelay();
+  }
+}
+
+	const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
 
@@ -582,6 +639,20 @@ _initPathBehavior(params) {
   }
 }
 
+  
+  _playVoice(type) {
+  if (!window.enemyVoiceManager) return;
+
+  const clips = this.voice?.[type];
+  if (!clips || clips.length === 0) return;
+
+  window.enemyVoiceManager.request({
+    enemy: this,
+    type,
+    clips
+  });
+}
+
   meleeAttack(player) {
   if (!this.mesh || this._isDead) return;
   if (!player || player.hp <= 0) return;
@@ -629,6 +700,20 @@ const dir = targetPos.clone().sub(origin).normalize();
   } catch (_) {}
 }
 
+  _requestVoice(type) {
+  if (!this.voice || !this.voice[type]) return;
+
+  window.enemyVoiceManager?.request({
+    enemy: this,
+    type,
+    clips: this.voice[type]
+  });
+} // end _requestVoice
+_randomTauntDelay() {
+  return 4000 + Math.random() * 8000; // 4–12 seconds
+} // end _randomTauntDelay
+
+  
   //
   // Fire projectile using SceneLoader callback
   //

@@ -83,6 +83,23 @@ enemies: [
       behavior: { pattern: "standInOpen" },
       firePauseMs: 3000,
       weapon: "sniperRifle",
+	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
       hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
       deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
       sprite: "assets/sprites/grunt.png"
@@ -93,6 +110,23 @@ enemies: [
     type: "Grunt",
     hp: 40,
     position: { x: 1, y: 0.9, z: 2 },
+	    voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
 
     behavior: {
       pattern: "meleeRush",

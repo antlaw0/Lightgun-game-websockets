@@ -3,10 +3,12 @@
 // <script type="module" src="js/game.js"></script>
 import { SceneManager } from './sceneManager.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled } from './enemy.js';
 import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
+//import { initDebug } from "./debug.js";
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
@@ -137,6 +139,19 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
+// --- Audio listener (player ears) ---
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
+
+// --- Enemy voice manager (global conductor) ---
+const enemyVoiceManager = new EnemyVoiceManager(
+  camera,
+  audioListener
+);
+
+// Expose globally so Enemy.js can request voices
+window.enemyVoiceManager = enemyVoiceManager;
+
 HUD.init(player, camera);
 window.hud = HUD;
 //console.log("HUD object:", HUD);
@@ -153,6 +168,16 @@ initSparks(scene);
 const camSpeed = 0.1;
 const camRotSpeed = 0.02;
 
+window.addEventListener(
+  "pointerdown",
+  () => {
+    if (window.enemyVoiceManager?.listener?.context.state !== "running") {
+      window.enemyVoiceManager.listener.context.resume();
+      console.log("[AUDIO] AudioContext resumed");
+    }
+  },
+  { once: true }
+);
 
 window.addEventListener("wheel", e => {
   const direction = e.deltaY > 0 ? 1 : -1;
@@ -925,3 +950,34 @@ loadLevel(Level_Warehouse);
 // Expose nextScene globally so UI or user can advance after onSceneComplete
 window.nextScene = nextScene;
 window.player = player;
+
+const DEBUG_CONTEXT = {
+  // Core systems
+  THREE,
+  scene,
+  camera,
+  renderer,
+
+  // Gameplay
+  player,
+  HUD,
+  sceneLoader,
+  sceneManager,
+  Level_Warehouse,
+
+  // Enemies
+  killAllEnemies,
+  ENEMY_AI_ENABLED,
+  setEnemyAIEnabled,
+  ENEMY_INSTANCES,
+
+  // FX
+  spawnSparks,
+  initSparks,
+
+  // Utilities / helpers
+  logDebug,
+
+  // Explicit dev hooks
+  spawnTestExplosion: window.spawnTestExplosion
+};
