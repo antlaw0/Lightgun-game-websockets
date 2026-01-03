@@ -700,6 +700,15 @@ explosionSounds:  w.explosionSounds
 		});
     }
 }
+function computeWeaponSpreadRad(weapon) {
+    const accuracy = weapon.accuracy ?? 1;
+    const maxSpreadDeg = weapon.projectileSpread ?? 0;
+
+    // Accuracy tightens the cone
+    const spreadDeg = maxSpreadDeg * (1 - accuracy);
+
+    return THREE.MathUtils.degToRad(spreadDeg);
+} // closes computeWeaponSpreadRad
 
 /**
  * Spawn a projectile (player or enemy)

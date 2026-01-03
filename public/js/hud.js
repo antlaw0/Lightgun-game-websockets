@@ -35,6 +35,9 @@ _headBobStepTime: 0,       // timer for active bob
     this.weaponNameEl = document.querySelector('.weapon-name');
     this.weaponImgEl = document.querySelector('.weapon-img');
     this.ammoTypeEl = document.querySelector('.ammo-type');
+    // Reticle
+    this.reticleEl = document.getElementById('reticle');
+    this._reticleRadius = 12;
 
     // Camera debug HUD
     this.cameraDebugEl = document.createElement('div');
@@ -134,6 +137,33 @@ triggerHeadBob() {
   // =================================================
   update(delta) {
     this._updateCameraShake(delta);
+// Inside HUD.update(delta) near the top or bottom
+if (this.reticleEl && this.player?.currentWeapon) {
+    const weapon = this.player.currentWeapon;
+
+    // 1. Calculate spread in radians
+    const maxSpreadDeg = 10; // adjust
+    const spreadRad = THREE.MathUtils.degToRad(maxSpreadDeg * (1 - (weapon.accuracy ?? 1)));
+
+    // 2. Map to a distance in front of camera
+    const reticleDistance = 10;
+    const radiusWorld = Math.tan(spreadRad) * reticleDistance;
+
+    // 3. Convert world units to pixels
+    const vFOV = THREE.MathUtils.degToRad(this.camera.fov);
+    const heightWorld = 2 * Math.tan(vFOV/2) * reticleDistance;
+    const heightPx = window.innerHeight;
+    const radiusPx = radiusWorld * (heightPx / heightWorld);
+
+    // Smooth interpolation
+    this._reticleRadius = this._reticleRadius ?? radiusPx;
+    this._reticleRadius += (radiusPx - this._reticleRadius) * 0.1;
+
+    const diameter = this._reticleRadius * 2;
+    this.reticleEl.style.width = diameter + 'px';
+    this.reticleEl.style.height = diameter + 'px';
+    this.reticleEl.style.transform = `translate(-50%, -50%)`;
+}
 
     if (this.cameraDebugEnabled && this.camera) {
       this.updateCameraDebug();
