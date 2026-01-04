@@ -4,7 +4,7 @@ export const HUD = {
   // -------------------------------------------------
   // Camera/head bob state
   // -------------------------------------------------
-  _headBobEnabled: true,
+  _headBobEnabled: false,
   _headBobTime: 0,
   _headBobSpeed: 12,
   _headBobIntensity: 1,

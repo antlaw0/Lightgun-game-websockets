@@ -174,6 +174,7 @@ console.log("indestructible?", this.indestructible);
       opacity: this.materialDef.opacity ?? 1
     };
 
+
     // Legacy texture support
     if (this.texture) {
       matParams.map = texLoader.load(this.texture);
@@ -208,7 +209,7 @@ console.log("indestructible?", this.indestructible);
     mesh.userData.propId = this.id;
     mesh.userData.coverType = this.coverType;
     mesh.userData.size = this.size;
-
+mesh.userData.prop = this;
     return mesh;
   }
 

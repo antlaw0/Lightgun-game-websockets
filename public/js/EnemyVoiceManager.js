@@ -15,7 +15,7 @@ export class EnemyVoiceManager {
   }
 
   request({ enemy, type, clips }) {
-  console.log("[VOICE REQUEST]", enemy?.id, type, clips?.length);
+  //console.log("[VOICE REQUEST]", enemy?.id, type, clips?.length);
 
   // --- Basic validation ---
   if (!enemy || !enemy.mesh || !clips || clips.length === 0) {
@@ -28,7 +28,7 @@ export class EnemyVoiceManager {
   // --- ENGAGE: allow only once per scene ---
   if (type === "engage") {
     if (this._engagePlayed) {
-      console.log("[VOICE BLOCKED] engage already played");
+      //console.log("[VOICE BLOCKED] engage already played");
       return;
     }
     this._engagePlayed = true;
@@ -36,14 +36,14 @@ export class EnemyVoiceManager {
 
   // --- Max simultaneous voices ---
   if (this._activeVoices.size >= this.maxSimultaneous) {
-    console.log("[VOICE BLOCKED] maxSimultaneous");
+    //console.log("[VOICE BLOCKED] maxSimultaneous");
     return;
   } // end maxSimultaneous check
 
   // --- Global cooldown (engage ignores this) ---
   if (type !== "engage") {
     if (now - this._lastGlobalPlay < this.globalCooldownMs) {
-      console.log("[VOICE BLOCKED] global cooldown");
+      //console.log("[VOICE BLOCKED] global cooldown");
       return;
     }
   } // end global cooldown check
@@ -52,23 +52,23 @@ export class EnemyVoiceManager {
   if (type !== "engage") {
     const lastEnemy = this._enemyLastPlay.get(enemy.id) || 0;
     if (now - lastEnemy < this.perEnemyCooldownMs) {
-      console.log("[VOICE BLOCKED] per-enemy cooldown");
+      //console.log("[VOICE BLOCKED] per-enemy cooldown");
       return;
     }
   } // end per-enemy cooldown check
 
   // --- Distance check ---
   const dist = enemy.mesh.position.distanceTo(this.camera.position);
-  console.log("[VOICE DIST]", dist);
+  //console.log("[VOICE DIST]", dist);
 
   if (dist > 25) {
-    console.log("[VOICE BLOCKED] too far");
+//    console.log("[VOICE BLOCKED] too far");
     return;
   } // end distance check
 
   // --- Select and play clip ---
   const clip = clips[Math.floor(Math.random() * clips.length)];
-  console.log("[VOICE PLAY]", clip);
+  //console.log("[VOICE PLAY]", clip);
 
   this._play3D(enemy, clip);
 

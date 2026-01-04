@@ -413,7 +413,7 @@ _randomTauntDelay() {
 
     this._playRandom(this.hitSounds);
 
-      if (this.health > 0) {
+      if (this.hp > 0) {
     this._playVoice("pain");
   } else {
     this._playVoice("death");
