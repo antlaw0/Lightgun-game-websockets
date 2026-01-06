@@ -207,6 +207,24 @@ material: {
       type: "Grunt",
       hp: 40,
       position: { x: 2, y: 0.9, z: -7 },
+	  voice: {
+    pain: [
+      "assets/sfx/grunt/pain1.ogg",
+      "assets/sfx/grunt/pain2.ogg"
+    ],
+    death: [
+      "assets/sfx/grunt/death1.ogg",
+      "assets/sfx/grunt/death2.ogg"
+    ],
+	taunt: [
+      "assets/sfx/grunt/taunt1.ogg",
+      "assets/sfx/grunt/taunt2.ogg"
+    ],
+    engage: [
+      "assets/sfx/grunt/engage1.ogg"
+    ]
+  }, // end voice
+
       behavior: { pattern: "popOutFromCover", params: { coverType: "low" } },
       coverObject: "crateA",
       firePauseMs: 50,

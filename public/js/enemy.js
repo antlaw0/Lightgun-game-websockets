@@ -168,7 +168,8 @@ this._nextAllowedFireMs = 0;
 
 this.type = mergedDef.displayName || "Enemy";
 this.hp = mergedDef.hp || 1;
-    
+this._hasEngagedPlayer=false
+
 	
 	this.maxHp = this.hp;
     let weaponDef = null;
@@ -210,6 +211,21 @@ this.deathSounds = Array.isArray(mergedDef.deathSounds) ? mergedDef.deathSounds 
 	
     this.accuracy = mergedDef.accuracy || 0.5;
     this.reactionTimeMs = mergedDef.reactionTimeMs || 300;
+
+// ----------------------------
+// VOICE DEFINITIONS
+// ----------------------------
+this.voice = mergedDef.voice || {};
+
+this.voicePain   = this.voice.pain   || [];
+this.voiceDeath  = this.voice.death  || [];
+this.voiceEngage = this.voice.engage || [];
+this.voiceTaunt  = this.voice.taunt  || [];
+
+this._nextTauntTime = null;
+
+    
+
 
     // Register this enemy globally for debugging / mass actions
     ENEMY_INSTANCES.push(this);
@@ -331,18 +347,23 @@ if (this.coverType === "full") {
     }
   }
 
+  	
+	_postSpawnInit() {
+  if (this._hasEngagedPlayer) return;
+  this._hasEngagedPlayer = true;
+  this._playVoice("engage");
+}
+
+
   _randInterval(min, max) {
     // return a random ms interval between min and max
     return min + Math.floor(Math.random() * Math.max(0, (max - min)));
   }
+_randomTauntDelay() {
+  return 4000 + Math.random() * 8000; // 4–12 seconds
+} // end _randomTauntDelay
 
-  _playRandom(arr) {
-    if (!arr || arr.length === 0) return;
-    const s = new Audio(arr[Math.floor(Math.random() * arr.length)]);
-    s.currentTime = 0;
-    s.play().catch(() => {});
-  }
-
+  
   //
   // Generic damage entrypoint (used by projectiles, bullets, explosions)
   // Accepts optional damageType
@@ -354,7 +375,12 @@ if (this.coverType === "full") {
 
     this._playRandom(this.hitSounds);
 
-    if (this.hp <= 0) this.die();
+      if (this.hp > 0) {
+    this._playVoice("pain");
+  } else {
+    this._playVoice("death");
+    this.die();
+  }
   }
 
   //
@@ -411,13 +437,32 @@ if (this.coverType === "full") {
 
 
 
+
 update(deltaMs, nowMs, player) {
     if (this._isDead) return;
     if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
-    const pattern = this.behavior.pattern;
+      this._postSpawnInit(); // ADD THIS
+	const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
 
+if (
+  !this._isDead &&
+  this.voiceTaunt.length > 0 &&
+  window.enemyVoiceManager
+) {
+  if (this._nextTauntTime === null) {
+    this._nextTauntTime = nowMs + this._randomTauntDelay();
+  } else if (nowMs >= this._nextTauntTime) {
+    window.enemyVoiceManager.request({
+      enemy: this,
+      type: "taunt",
+      clips: this.voiceTaunt
+    });
+
+    this._nextTauntTime = nowMs + this._randomTauntDelay();
+  }
+}
 
 this.meleeAttack(player); // new melee attack
     if (pattern === "popOutFromCover") {
@@ -508,6 +553,18 @@ _initPathBehavior(params) {
   this._targetOffset = new THREE.Vector3(0, 0, 0);
 }
 
+_playVoice(type) {
+  if (!window.enemyVoiceManager) return;
+
+  const clips = this.voice?.[type];
+  if (!clips || clips.length === 0) return;
+
+  window.enemyVoiceManager.request({
+    enemy: this,
+    type,
+    clips
+  });
+}
 
   meleeAttack(player) {
   if (!this.mesh || this._isDead) return;

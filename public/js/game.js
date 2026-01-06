@@ -2,6 +2,8 @@
 // This file is written as an ES module. Include it as:
 // <script type="module" src="js/game.js"></script>
 import { SceneManager } from './sceneManager.js';
+import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
+
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
@@ -135,6 +137,20 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
+
+
+const audioListener = new THREE.AudioListener();
+camera.add(audioListener);
+
+const enemyVoiceManager = new EnemyVoiceManager(
+  camera,
+  audioListener
+);
+// Expose globally so Enemy.js can request voices
+window.enemyVoiceManager = enemyVoiceManager;
+
+ 
+
 HUD.init(player, camera);
 window.hud = HUD;
 //console.log("HUD object:", HUD);
@@ -151,6 +167,16 @@ initSparks(scene);
 const camSpeed = 0.1;
 const camRotSpeed = 0.02;
 
+window.addEventListener(
+  "pointerdown",
+  () => {
+    if (window.enemyVoiceManager?.listener?.context.state !== "running") {
+      window.enemyVoiceManager.listener.context.resume();
+      console.log("[AUDIO] AudioContext resumed");
+    }
+  },
+  { once: true }
+);
 
 window.addEventListener("wheel", e => {
   const direction = e.deltaY > 0 ? 1 : -1;
