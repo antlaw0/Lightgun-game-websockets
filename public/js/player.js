@@ -10,6 +10,12 @@ export class Player extends EventTarget {
 
     this.maxHp = maxHp;
     this.hp = hp;
+
+// Melee state
+this._lastMeleeMs = 0;
+this.meleeCooldownMs = 600;
+
+
 // In Player constructor
     // Private backing field
     this._position = new THREE.Vector3(0, 1.7, 5); // match camera start
@@ -64,7 +70,73 @@ export class Player extends EventTarget {
     //return window.camera.position.clone(); // or wherever your player "is"
 return this._position;	
   }
-  
+  getForwardVector() {
+    const forward = new THREE.Vector3(0, 0, -1);
+    if (window.camera && window.camera.getWorldDirection) {
+        window.camera.getWorldDirection(forward);
+    } else if (this.mesh) {
+        forward.applyQuaternion(this.mesh.quaternion).normalize();
+    }
+    return forward;
+}
+
+meleeAttack() {
+    console.log("Melee function triggered");
+
+    const nowMs = performance.now();
+    if (nowMs - this._lastMeleeMs < this.meleeCooldownMs) {
+        console.log("Melee on cooldown");
+        return;
+    }
+
+    // Use camera if available, otherwise player position
+    const origin = window.camera?.position?.clone() || this._position.clone();
+    const forward = new THREE.Vector3();
+
+    if (window.camera?.getWorldDirection) {
+        window.camera.getWorldDirection(forward);
+    } else {
+        forward.set(0, 0, -1); // default forward if camera missing
+    }
+
+    const reach = 2.2;
+    const radius = 1.4;
+    const damage = 15;
+    const knockbackForce = 0.35;
+
+    const hitPos = origin.clone().add(forward.multiplyScalar(reach));
+
+    let hitSomething = false;
+
+    // ✅ Safely get enemies from window
+    const enemies = window.ENEMY_INSTANCES || [];
+    if (enemies.length === 0) {
+        console.log("No enemies available to hit");
+    }
+
+    for (const enemy of enemies) {
+        if (!enemy.mesh || enemy._isDead) continue;
+        const dist = enemy.mesh.position.distanceTo(hitPos);
+        if (dist > radius) continue;
+
+        enemy.takeDamage(damage, "melee");
+        const dir = enemy.mesh.position.clone().sub(origin).normalize();
+        enemy._knockback.add(dir.multiplyScalar(knockbackForce));
+        hitSomething = true;
+        console.log(`Hit enemy: ${enemy.name || enemy.id || "unknown"}, dist=${dist.toFixed(2)}`);
+    }
+
+    if (hitSomething) {
+        this._lastMeleeMs = nowMs;
+        try {
+            const s = new Audio("assets/sfx/swing_medium.ogg");
+            s.currentTime = 0;
+            s.play().catch(() => {});
+        } catch (_) {}
+    } else {
+        console.log("Melee hit nothing");
+    }
+}
   
     set position(v) {
     // copy the vector so _position stays updated
@@ -122,48 +194,7 @@ try {
     this.currentWeaponIndex = index;
     this._emitAmmo();
   }
-  meleeAttack() {
-    const nowMs = performance.now();
-    const reach = 2.0;          // how far the melee can reach
-    const radius = 1.5;         // radius around hit point
-    const damage = 15;          // melee damage
-    const knockbackForce = 0.3; // how much enemies get pushed
-
-    if (!this.mesh) return;
-
-    const forward = this.getForwardVector();
-    const origin = this.mesh.position.clone();
-    const hitPos = origin.clone().add(forward.multiplyScalar(reach));
-
-    // Find all alive enemies within melee range
-    const hitEnemies = window.ENEMY_INSTANCES.filter(e => {
-      if (e._isDead) return false;
-      const dist = e.mesh.position.distanceTo(hitPos);
-      return dist <= radius;
-    });
-
-    hitEnemies.forEach(e => {
-      // Apply melee damage
-      e.takeDamage(damage, "melee");
-
-      // Apply knockback
-      const dir = e.mesh.position.clone().sub(origin).normalize();
-      e._knockback.add(dir.multiplyScalar(knockbackForce));
-
-      // Optional: trigger enemy hit sounds (already handled in takeDamage)
-    });
-  }
-
-  getForwardVector() {
-    // Assumes player is facing along Z axis (adjust if you use camera)
-    // If you have a camera reference: use camera.getWorldDirection()
-    const forward = new THREE.Vector3(0, 0, -1);
-    if (this.mesh) {
-      forward.applyQuaternion(this.mesh.quaternion).normalize();
-    }
-    return forward;
-  }
-
+  
  
   _emitHealth() {
     this.dispatchEvent(

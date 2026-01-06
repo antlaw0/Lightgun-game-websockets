@@ -205,6 +205,12 @@ window.addEventListener("mouseleave", () => {
     sendDesktopPayload({ fire: false });
 });
 
+window.addEventListener("keydown", e => {
+  if (e.code === "KeyV") { // or MouseButton / F key
+    //console.log("Key pressed for melee attack");
+	player.meleeAttack();
+  }
+});
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "F4") {

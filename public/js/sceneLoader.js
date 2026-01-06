@@ -1,5 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { buildPrefab } from "./prefabLibrary.js";
+import { ENEMY_INSTANCES } from "./enemy.js";
+window.ENEMY_INSTANCES = ENEMY_INSTANCES;
 
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 

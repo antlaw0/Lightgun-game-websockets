@@ -565,6 +565,12 @@ _playVoice(type) {
     clips
   });
 }
+_playRandom(arr) {
+    if (!arr || arr.length === 0) return;
+    const s = new Audio(arr[Math.floor(Math.random() * arr.length)]);
+    s.currentTime = 0;
+    s.play().catch(() => {});
+  }
 
   meleeAttack(player) {
   if (!this.mesh || this._isDead) return;
