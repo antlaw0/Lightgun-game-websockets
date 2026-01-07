@@ -464,9 +464,14 @@ if (
   }
 }
 
-this.meleeAttack(player); // new melee attack
-    if (pattern === "popOutFromCover") {
-      this._updatePopOut(deltaMs, nowMs, p);
+    
+	if (pattern === "meleeRush") {
+      this._updateMeleeRush(deltaMs, nowMs, this.behavior.params || {}, player);
+}
+
+	else if (pattern === "popOutFromCover") {
+
+	  this._updatePopOut(deltaMs, nowMs, p);
     } else if (pattern === "patrol") {
       this._updatePatrol(deltaMs, nowMs, p);
 	  } else if (pattern === "path") {
@@ -571,6 +576,70 @@ _playRandom(arr) {
     s.currentTime = 0;
     s.play().catch(() => {});
   }
+_updateMeleeRush(deltaMs, nowMs, params = {}, player) {
+
+  // -------------------------------------------------
+  // SAFETY GUARDS
+  // -------------------------------------------------
+  if (this._isDead) return; // correct death flag
+  if (!this.mesh || !this.mesh.position) return;
+  if (!player || !player.position) return;
+
+  // Ensure rush target vector exists
+  if (!this._rushTarget) {
+    this._rushTarget = new THREE.Vector3();
+  } // closing rushTarget init
+
+  // -------------------------------------------------
+  // Parameters
+  // -------------------------------------------------
+  const p = {
+    approachSpeed: 2.2,
+    meleeRange: 1.5,
+    sideOffset: 1.1,
+    attackCooldownMs: 700,
+    ...params
+  };
+
+  const deltaSeconds = deltaMs / 1000;
+
+  // Direction to player
+  const dirToPlayer = this._rushTarget
+    .copy(player.position)
+    .sub(this.basePosition);
+
+  const distanceToPlayer = dirToPlayer.length();
+
+  // -------------------------------------------------
+  // MOVEMENT
+  // -------------------------------------------------
+  if (distanceToPlayer > p.meleeRange) {
+    dirToPlayer.normalize();
+
+    // Side weave for less robotic motion
+    const side = new THREE.Vector3()
+      .crossVectors(dirToPlayer, new THREE.Vector3(0, 1, 0))
+      .normalize();
+
+    side.multiplyScalar(p.sideOffset * Math.sin(nowMs * 0.002));
+
+    const moveVector = dirToPlayer
+      .add(side)
+      .normalize()
+      .multiplyScalar(p.approachSpeed * deltaSeconds);
+
+    // Advance enemy
+    this.basePosition.add(moveVector);
+    this._targetPosition.copy(this.basePosition);
+  }
+
+  // -------------------------------------------------
+  // ATTACK
+  // -------------------------------------------------
+  if (distanceToPlayer <= p.meleeRange) {
+    this.meleeAttack(player);
+  }
+}
 
   meleeAttack(player) {
   if (!this.mesh || this._isDead) return;

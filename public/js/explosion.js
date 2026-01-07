@@ -42,7 +42,7 @@ this._createParticles();
     const audio = new Audio(src);
     audio.currentTime = 0;
     audio.play().catch(err => {
-      console.warn("Explosion sound failed:", err);
+      //console.warn("Explosion sound failed:", err);
     });
   }
 
@@ -216,16 +216,16 @@ _lineIntersectsMesh(start, end, mesh) {
   if (!mesh) continue;
 
   if (this._lineIntersectsMesh(this.position, target.pos, mesh)) {
-	    console.log(`Explosion: LOS hit prop ${prop.id}, coverType=${prop.coverType}`);
+	    //console.log(`Explosion: LOS hit prop ${prop.id}, coverType=${prop.coverType}`);
         if (target.obj === prop && target.type === "prop") {
           const result = prop.applyExplosionDamage(damage);
-          console.log(`Explosion: Prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
+          //console.log(`Explosion: Prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
           damage = result.passedThrough;
           if (result.destroyed && prop.coverType === "full") blocked = true;
           break;
         } else {
           const result = prop.applyExplosionDamage(damage);
-          console.log(`Explosion: Blocking prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
+          //console.log(`Explosion: Blocking prop ${prop.id} absorbed ${result.absorbed}, passed ${result.passedThrough}, destroyed=${result.destroyed}`);
           damage = result.passedThrough;
           if (prop.coverType === "full" && damage <= 0) {
             blocked = true;
@@ -238,7 +238,7 @@ _lineIntersectsMesh(start, end, mesh) {
     if (damage <= 0 || blocked) continue;
 
     if (target.type === "prop") {
-      console.log(`Explosion: Applying ${damage.toFixed(2)} damage to prop ${target.obj.id}`);
+      //console.log(`Explosion: Applying ${damage.toFixed(2)} damage to prop ${target.obj.id}`);
       const died = target.obj.takeDamage(damage);
       if (died) console.log(`Explosion: Prop ${target.obj.id} died!`);
     } else if (target.type === "enemy") {
