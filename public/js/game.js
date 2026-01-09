@@ -394,27 +394,43 @@ window.addEventListener("keydown", (e) => {
         killAllEnemies();
     }
 });
-function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 15) {
-    const directions = [];
-    if (numProjectiles <= 1) return [forwardDir.clone()];
+function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 0) {
+  if (numProjectiles <= 1 || spreadDeg <= 0) {
+    return [forwardDir.clone()];
+  }
 
-    const spreadRad = THREE.MathUtils.degToRad(spreadDeg);
+  const directions = [];
+  // Interpret `spreadDeg` as the full cone angle; use half-angle for sampling
+  const halfAngleRad = THREE.MathUtils.degToRad(spreadDeg) * 0.5;
 
-    for (let i = 0; i < numProjectiles; i++) {
-        // evenly distribute angles horizontally
-        const t = numProjectiles === 1 ? 0.5 : i / (numProjectiles - 1);
-        const angleH = (t - 0.5) * spreadRad;  // -halfSpread -> +halfSpread
-        const angleV = (Math.random() - 0.5) * spreadRad * 0.5; // slight random vertical offset
+  // Build orthonormal basis around forward
+  const forward = forwardDir.clone().normalize();
+  let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  if (right.lengthSq() < 1e-6) {
+    right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  }
+  const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
-        let dir = forwardDir.clone();
-        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), angleH); // horizontal rotation
-        dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), angleV); // vertical rotation
-        directions.push(dir.normalize());
-    }
+  // Sample directions uniformly inside the spherical cap (cone)
+  for (let i = 0; i < numProjectiles; i++) {
+    const u = Math.random();
+    const v = Math.random();
 
-    return directions;
-}
+    // Uniform spherical-cap sampling
+    const cosTheta = 1 - u * (1 - Math.cos(halfAngleRad));
+    const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
+    const phi = 2 * Math.PI * v;
 
+    const sample = forward.clone().multiplyScalar(cosTheta)
+      .add(right.clone().multiplyScalar(Math.cos(phi) * sinTheta))
+      .add(up.clone().multiplyScalar(Math.sin(phi) * sinTheta))
+      .normalize();
+
+    directions.push(sample);
+  }
+
+  return directions;
+} // end generateSpreadDirections
 
 
 function spawnProjectile(origin, direction, damage = 1) {
@@ -558,14 +574,17 @@ function handleFire() {
 
     // --- Compute shooting direction ---
     const retNDC = new THREE.Vector2(
-        (ret.x / cw) * 2 - 1,
-        -(ret.y / ch) * 2 + 1
+      (ret.x / cw) * 2 - 1,
+      -(ret.y / ch) * 2 + 1
     );
     raycaster.setFromCamera(retNDC, camera);
 
-    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(1));
-    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
-    const forwardDir = retWorld.clone().sub(shootOrigin).normalize();
+    // Aim direction is the camera ray through the reticle (so projectiles travel through reticle)
+    const forwardDir = raycaster.ray.direction.clone().normalize();
+
+    // Compute a muzzle origin relative to the camera so bullets visually come from lower-center
+    const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6); // moved lower: down and forward in camera space
+    const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
 
     // --- Generate spread directions ---
     const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0);
@@ -676,16 +695,17 @@ function triggerFire() {
             fireSound.play();
         
 	
-    // Compute shooting origin and forward direction
+    // Compute shooting origin and forward direction:
+    // Aim along the camera ray through the reticle so projectiles pass through the reticle center.
     const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
     raycaster.setFromCamera(retNDC, camera);
-    const retWorld = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(10));
-    const bottomNDC = new THREE.Vector2(0, -1);
-    raycaster.setFromCamera(bottomNDC, camera);
-    const shootOrigin = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(1));
-    const forwardDir = retWorld.clone().sub(shootOrigin).normalize();
+    const forwardDir = raycaster.ray.direction.clone().normalize();
 
-    // Generate spread directions
+    // Spawn from a camera-relative muzzle (bottom-center of view)
+    const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
+    const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
+
+    // Generate spread directions around the aim direction
     const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread);
 
     // Spawn each projectile
@@ -698,6 +718,86 @@ explosionSounds:  w.explosionSounds
 		
 		});
     }
+}
+// ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
+// ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
+function updateDynamicReticle({
+  camera,
+  weapon,
+  projectionDistance = 15,
+  basePlayerConeRad = 0.0015,
+  maxWeaponInaccuracyRad = 0.008
+}) {
+  if (!camera || !weapon) return;
+
+  // Weapon stats
+  const weaponAccuracy = THREE.MathUtils.clamp(weapon.accuracy ?? 1, 0, 1);
+  // Treat `projectileSpread` as the full cone angle; use half-angle for radius calc
+  const weaponSpreadHalfRad = THREE.MathUtils.degToRad(weapon.projectileSpread ?? 0) * 0.5;
+  const weaponInaccuracyRad = (1 - weaponAccuracy) * maxWeaponInaccuracyRad;
+  const totalHalfConeRad = basePlayerConeRad + weaponSpreadHalfRad + weaponInaccuracyRad;
+
+  // Ray from reticle
+  const retNDC = new THREE.Vector2(
+    (ret.x / window.innerWidth) * 2 - 1,
+    -(ret.y / window.innerHeight) * 2 + 1
+  );
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(retNDC, camera);
+
+  const camPos = camera.position.clone();
+  const forward = raycaster.ray.direction.clone().normalize();
+
+  // Camera basis
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+
+  // Center point in world space at projection distance
+  const centerWorld = camPos.clone().add(forward.clone().multiplyScalar(projectionDistance));
+
+  // Compute extreme points of the cone
+  const spreadRadiusWorld = Math.tan(totalHalfConeRad) * projectionDistance;
+
+  const extremeDirs = [
+    right.clone(),        // right edge
+    right.clone().negate(),// left edge
+    up.clone(),           // top edge
+    up.clone().negate()   // bottom edge
+  ];
+
+  const edgeWorldPoints = extremeDirs.map(dir =>
+    centerWorld.clone().add(dir.multiplyScalar(spreadRadiusWorld))
+  );
+
+  // Project center and edges to screen space
+  const projectToScreen = v => {
+    const p = v.clone().project(camera);
+    return {
+      x: (p.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-p.y * 0.5 + 0.5) * window.innerHeight
+    };
+  };
+
+  const centerScreen = projectToScreen(centerWorld);
+  const edgeScreens = edgeWorldPoints.map(projectToScreen);
+
+  // Compute max distance from center
+  let maxDist = 0;
+  for (const e of edgeScreens) {
+    const d = Math.hypot(e.x - centerScreen.x, e.y - centerScreen.y);
+    if (d > maxDist) maxDist = d;
+  }
+
+  // Clamp radius to reasonable values
+  const clampedRadius = THREE.MathUtils.clamp(
+    maxDist,
+    8,
+    Math.min(window.innerWidth, window.innerHeight) * 0.45
+  );
+
+  // Apply to CSS
+  document.documentElement.style.setProperty("--reticle-size", `${(clampedRadius * 2).toFixed(1)}px`);
 }
 
 /**
@@ -928,6 +1028,10 @@ HUD.update(deltaMs / 1000); // convert ms → seconds
   }
 
 
+  updateDynamicReticle({
+    camera,
+    weapon: player.currentWeapon
+  });
 
   // Ducking & zoom
   camera.position.y = 1.7 - (ducking ? 0.8 : 0);
@@ -949,3 +1053,4 @@ loadLevel(Level_Warehouse);
 // Expose nextScene globally so UI or user can advance after onSceneComplete
 window.nextScene = nextScene;
 window.player = player;
+

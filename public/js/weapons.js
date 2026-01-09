@@ -17,6 +17,12 @@ function baseWeapon(def) {
     rateOfFire: def.rateOfFire,
     accuracy: def.accuracy,
 
+    // Projectile/spread metadata (passed through so runtime can read them)
+    projectileSpread: def.projectileSpread ?? 0, // degrees (full cone angle)
+    projectileSpeed: def.projectileSpeed ?? 50,
+    projectileSize: def.projectileSize ?? 0.02,
+    projectileLifetime: def.projectileLifetime ?? 2.0,
+
     damage: def.damage,
     projectilesPerShot: def.projectilesPerShot,
 
@@ -43,8 +49,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "semi-auto",
     rateOfFire: 250,
-    accuracy: 0.9,
-
+    accuracy: 0.75,
+    projectileSpread:  0,
     damage: 20,
     projectilesPerShot: 1,
 
@@ -66,7 +72,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "semi-auto",
     rateOfFire: 700,
-    accuracy: 0.55,
+    accuracy: 0.6,
+    projectileSpread:  12,
 
     damage: 40,
     projectilesPerShot: 8,
@@ -89,7 +96,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "auto",
     rateOfFire: 100,
-    accuracy: 0.85,
+    accuracy: 0.88,
+    projectileSpread:  0,
 
     damage: 15,
     projectilesPerShot: 1,
@@ -113,6 +121,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 1200,
     accuracy: 0.95,
+    projectileSpread:  0,
 
     damage: 100,
     projectilesPerShot: 1,
@@ -137,7 +146,8 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
 
     fireMode: "semi-auto",
     rateOfFire: 1000,
-    accuracy: 0.99,
+    accuracy: 0.995,
+    projectileSpread:  0,
 
     damage: 80,
     projectilesPerShot: 1,
