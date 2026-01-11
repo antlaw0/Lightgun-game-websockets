@@ -44,6 +44,54 @@ export const HUD = {
     });
 
     // -------------------------------------------------
+    // Muzzle flash (screen-space) overlay
+    // -------------------------------------------------
+    this._muzzleFlashEl = document.createElement('div');
+    this._muzzleFlashEl.className = 'muzzle-flash-overlay';
+    Object.assign(this._muzzleFlashEl.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+      mixBlendMode: 'screen',
+      transition: 'opacity 0s linear',
+      opacity: '0',
+      zIndex: '9999'
+    });
+    document.body.appendChild(this._muzzleFlashEl);
+
+    // Configurable defaults
+    this.muzzleFlash = {
+      color: 'rgba(250,248,240,', // warm very-light gray base (alpha appended at runtime)
+      defaultOpacity: 0.08,
+      framesFull: 1, // fully visible frames
+      framesFade: 2, // fade out frames
+      totalFrames: 3
+    };
+    this._muzzleFlashFramesRemaining = 0; // frame-based counter
+
+    // -------------------------------------------------
+    // Reticle kick state (screen-space, DOM transform)
+    // -------------------------------------------------
+    this._reticleKick = {
+      framesRemaining: 0,
+      totalFrames: 6,
+      offset: { x: 0, y: 0 },
+      magnitudePx: 6
+    };
+
+    // -------------------------------------------------
+    // Camera micro-recoil state (rotation velocity)
+    // -------------------------------------------------
+    this._recoil = {
+      rotVel: new THREE.Vector3(0, 0, 0),
+      // damping chosen to return under ~100ms
+      damping: 40
+    };
+
+    // -------------------------------------------------
     // Player event listeners
     // -------------------------------------------------
     player.addEventListener('healthChanged', e => {
@@ -118,7 +166,11 @@ export const HUD = {
   // FRAME UPDATE
   // =================================================
   update(delta) {
+    // update camera recoil + shakes and HUD visuals (frame-based)
+    this._updateCameraRecoil(delta);
     this._updateCameraShake(delta);
+    this._updateMuzzleFlashFrame();
+    this._updateReticleKick();
 
     if (this.cameraDebugEnabled && this.camera) {
       this.updateCameraDebug();
@@ -174,7 +226,131 @@ export const HUD = {
   this.camera.position.add(totalOffset);
   this.camera.rotation.x += rotX;
   this.camera.rotation.y += rotY;
-}, // end _updateCameraShake()
+  }, // end _updateCameraShake(),
+
+  // -------------------------------------------------
+  // Camera micro-recoil integration
+  // -------------------------------------------------
+  _updateCameraRecoil(delta) {
+    if (!this.camera) return;
+    // integrate rotation velocity
+    const rv = this._recoil.rotVel;
+    // apply as small rotation deltas
+    this.camera.rotation.x += rv.x;
+    this.camera.rotation.y += rv.y;
+
+    // damping (exponential)
+    const damp = Math.exp(-this._recoil.damping * delta);
+    rv.multiplyScalar(damp);
+  },
+
+  // -------------------------------------------------
+  // Muzzle flash frame-based update
+  // -------------------------------------------------
+  _updateMuzzleFlashFrame() {
+    if (this._muzzleFlashFramesRemaining <= 0) {
+      if (this._muzzleFlashEl.style.opacity !== '0') this._muzzleFlashEl.style.opacity = '0';
+      return;
+    }
+
+    // Decrement once per animation frame (called from requestAnimationFrame loop)
+    const remaining = this._muzzleFlashFramesRemaining;
+    this._muzzleFlashFramesRemaining = Math.max(0, remaining - 1);
+
+    const t = this._muzzleFlashFramesRemaining;
+    const total = this.muzzleFlash.totalFrames;
+
+    // If at first frame (just fired) show full default opacity
+    if (t >= total - this.muzzleFlash.framesFull) {
+      this._muzzleFlashEl.style.opacity = String(this.muzzleFlash.defaultOpacity);
+    } else {
+      // fade fraction across fade frames
+      const fadeIndex = t; // 0..framesFade
+      const fadeFrac = (fadeIndex) / Math.max(1, this.muzzleFlash.framesFade);
+      this._muzzleFlashEl.style.opacity = String(this.muzzleFlash.defaultOpacity * fadeFrac);
+    }
+  },
+
+  // -------------------------------------------------
+  // Reticle kick update (applies CSS transform to reticle element)
+  // -------------------------------------------------
+  _updateReticleKick() {
+    if (!document) return;
+    const el = document.getElementById('reticle');
+    if (!el) return;
+
+    if (this._reticleKick.framesRemaining <= 0) {
+      el.style.transform = '';
+      return;
+    }
+
+    const r = this._reticleKick;
+    // compute progress 0..1 (1 at start)
+    const progress = r.framesRemaining / r.totalFrames;
+    // ease out
+    const ease = Math.sqrt(progress);
+
+    const ox = r.offset.x * ease;
+    const oy = r.offset.y * ease;
+    el.style.transform = `translate(${ox}px, ${oy}px)`;
+
+    r.framesRemaining = Math.max(0, r.framesRemaining - 1);
+  },
+
+  // -------------------------------------------------
+  // Public hook: call this from the single firing entrypoint
+  // -------------------------------------------------
+  onWeaponFire({ retX = null, retY = null, weapon = null, isAuto = false } = {}) {
+    // Throttle muzzle flash for automatic weapons
+    if (isAuto && weapon) {
+      weapon._autoFlashCounter = (weapon._autoFlashCounter || 0) + 1;
+      const everyN = weapon._muzzleFlashEvery || 3; // default every-3rd shot
+      if ((weapon._autoFlashCounter % everyN) === 0) {
+        // trigger flash
+      } else {
+        // don't flash this shot
+        // still apply small reticle kick & micro recoil per shot
+        this._triggerReticleKick();
+        this._applyCameraRecoil( (weapon._recoilPx || 1) );
+        return;
+      }
+    }
+
+    // trigger muzzle flash overlay centered on given reticle coords (or center)
+    const cx = retX ?? (window.innerWidth / 2);
+    const cy = retY ?? (window.innerHeight / 2);
+    const alpha = this.muzzleFlash.defaultOpacity;
+    this._muzzleFlashEl.style.background = `radial-gradient(circle at ${cx}px ${cy}px, ${this.muzzleFlash.color}${alpha}) 0%, rgba(0,0,0,0) 45%)`;
+    this._muzzleFlashFramesRemaining = this.muzzleFlash.totalFrames;
+
+    // reticle kick
+    this._triggerReticleKick();
+
+    // camera micro recoil (1-3 px suggested magnitude)
+    const px = (weapon && weapon._recoilPx) || 2;
+    this._applyCameraRecoil(px);
+  },
+
+  _triggerReticleKick() {
+    const r = this._reticleKick;
+    r.framesRemaining = r.totalFrames;
+    const angle = (Math.random() - 0.5) * 2 * 0.6; // lateral randomness factor
+    // upward impulse (negative y because DOM y grows downward)
+    r.offset.x = Math.round((Math.random() - 0.5) * r.magnitudePx * 0.6);
+    r.offset.y = Math.round(-Math.abs(r.magnitudePx) * (0.6 + Math.random() * 0.6));
+  },
+
+  _applyCameraRecoil(px) {
+    if (!this.camera) return;
+    // convert approximate pixel offset to camera angle (radians)
+    const fovDeg = this.camera.fov || 60;
+    const ang = (px / window.innerHeight) * fovDeg * (Math.PI / 180);
+    // primary vertical impulse (pitch)
+    const v = this._recoil.rotVel;
+    v.x -= ang; // pitch up
+    // slight random yaw
+    v.y += (Math.random() - 0.5) * ang * 0.3;
+  },
 
 // =================================================
   // HUD DISPLAY

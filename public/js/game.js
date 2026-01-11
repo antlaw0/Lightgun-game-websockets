@@ -69,6 +69,77 @@ const PROJECTILE_LIFETIME = 2.0; // seconds
 
 const enemyProjectiles = [];
 
+// ------------------ Accuracy & Reticle Constants ------------------
+// MAX_CONE_ANGLE_DEG: full cone angle (degrees) when accuracy == 0.01 (worst)
+// Accuracy is in range [0.01, 1.0]. We map accuracy -> inaccuracy = 1-accuracy
+// then coneAngle = inaccuracy * MAX_CONE_ANGLE_DEG (full angle). Half-angle used for sampling.
+// Maximum full cone angle (degrees) when accuracy == worst. Reduced to make reticle less exaggerated.
+const MAX_CONE_ANGLE_DEG = 6; // full cone degrees at worst accuracy (clear named constant)
+
+// Reticle mapping constants (pixels). MIN_RETICLE_RADIUS is the radius at perfect accuracy (1.0)
+const MIN_RETICLE_RADIUS_PX = 8; // smallest reticle radius when accuracy == 1.0
+// Maximum radius is a fraction of the screen; computed at runtime from viewport size
+const MAX_RETICLE_RADIUS_PCT = 0.45; // use min(width,height) * this for maximum radius
+
+// Helper: clamp accuracy to allowed domain [0.01, 1.0]
+function clampAccuracy(a) {
+  return THREE.MathUtils.clamp(a ?? 1.0, 0.01, 1.0);
+}
+
+// Convert accuracy -> full cone angle (radians). Uses explicit constant above.
+// inaccuracy = 1.0 - accuracy; coneAngleFull = inaccuracy * MAX_CONE_ANGLE_DEG
+function accuracyToConeHalfAngleRad(accuracy) {
+  const acc = clampAccuracy(accuracy);
+  const inaccuracy = 1.0 - acc;
+  const coneFullDeg = inaccuracy * MAX_CONE_ANGLE_DEG;
+  // half-angle in radians for sampling spherical-cap
+  return THREE.MathUtils.degToRad(coneFullDeg * 0.5);
+}
+
+// Sample a random direction uniformly inside a cone (spherical cap) around `forward`.
+// If accuracy == 1.0 the halfAngle will be zero and this returns the forward vector
+function sampleDirectionInCone(forward, halfAngleRad) {
+  const forwardN = forward.clone().normalize();
+  if (halfAngleRad <= 0) return forwardN.clone();
+
+  // Build orthonormal basis
+  let right = new THREE.Vector3().crossVectors(forwardN, new THREE.Vector3(0, 1, 0)).normalize();
+  if (right.lengthSq() < 1e-6) right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forwardN).normalize();
+
+  // Uniform spherical-cap sampling
+  const u = Math.random();
+  const v = Math.random();
+  const cosTheta = 1 - u * (1 - Math.cos(halfAngleRad));
+  const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
+  const phi = 2 * Math.PI * v;
+
+  const sample = forwardN.clone().multiplyScalar(cosTheta)
+    .add(right.clone().multiplyScalar(Math.cos(phi) * sinTheta))
+    .add(up.clone().multiplyScalar(Math.sin(phi) * sinTheta))
+    .normalize();
+
+  return sample;
+}
+
+// Generate pellet directions for shotguns: final pellet direction = accuracy cone + pellet spread cone
+function generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy, pelletSpreadDeg) {
+  const directions = [];
+  // Base aim direction is sampled once from the accuracy cone
+  const accHalf = accuracyToConeHalfAngleRad(weaponAccuracy);
+  const baseDir = sampleDirectionInCone(forwardDir, accHalf);
+
+  const pelletHalfRad = THREE.MathUtils.degToRad(pelletSpreadDeg ?? 0) * 0.5;
+
+  for (let i = 0; i < numPellets; i++) {
+    // Each pellet is sampled inside the pellet spread cone around the base direction
+    const pelletDir = sampleDirectionInCone(baseDir, pelletHalfRad);
+    directions.push(pelletDir);
+  }
+
+  return directions;
+}
+
 
 // ---- UI elements assumed in page ----
 const canvas = document.getElementById('canvas');
@@ -367,13 +438,13 @@ window.addEventListener("enemyFiredHitPlayer", (e) => {
   if (player && typeof player.takeDamage === "function") player.takeDamage(dmg);
 });
 function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
+  // Use accuracy->cone conversion and sample inside cone. When accuracy==1.0
+  // the half-angle becomes zero and the resulting direction is exactly the forward vector
   const acc = enemy.accuracy ?? 0.6;
   const origin = enemy.mesh.position.clone();
   const trueDir = playerPos.clone().sub(origin).normalize();
-  const maxAngle = (1 - acc) * 0.25;
-  const randomAngle = (Math.random() * 2 - 1) * maxAngle;
-  const axis = new THREE.Vector3(0, 1, 0);
-  const deviatedDir = trueDir.clone().applyAxisAngle(axis, randomAngle).normalize();
+  const halfAngle = accuracyToConeHalfAngleRad(acc);
+  const deviatedDir = sampleDirectionInCone(trueDir, halfAngle);
 
   // Create visual mesh like player bullets
   const geo = new THREE.SphereGeometry(0.02, 8, 8);
@@ -394,43 +465,33 @@ window.addEventListener("keydown", (e) => {
         killAllEnemies();
     }
 });
-function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 0) {
-  if (numProjectiles <= 1 || spreadDeg <= 0) {
-    return [forwardDir.clone()];
+// Generate directions for a weapon shot.
+// For single-projectile weapons we apply accuracy -> cone sampling only.
+// For shotguns (multiple pellets with non-zero `projectileSpread`) we apply
+// the accuracy cone once (base aim) and then sample each pellet inside the pellet spread cone.
+function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 0, weaponAccuracy = 1.0) {
+  const acc = clampAccuracy(weaponAccuracy);
+
+  // Single projectile: accuracy drives the cone. No shotgun logic.
+  if (numProjectiles <= 1) {
+    const half = accuracyToConeHalfAngleRad(acc);
+    // If accuracy == 1.0 half==0 and this returns forward exactly (deterministic)
+    return [sampleDirectionInCone(forwardDir, half)];
   }
 
-  const directions = [];
-  // Interpret `spreadDeg` as the full cone angle; use half-angle for sampling
-  const halfAngleRad = THREE.MathUtils.degToRad(spreadDeg) * 0.5;
-
-  // Build orthonormal basis around forward
-  const forward = forwardDir.clone().normalize();
-  let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-  if (right.lengthSq() < 1e-6) {
-    right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  // Multiple projectiles: if spreadDeg > 0 treat as shotgun (pellet spread)
+  if (numProjectiles > 1 && (spreadDeg ?? 0) > 0) {
+    return generateShotgunPelletDirections(forwardDir, numProjectiles, acc, spreadDeg);
   }
-  const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
-  // Sample directions uniformly inside the spherical cap (cone)
+  // Otherwise: multiple projectiles but no shotgun spread -> each projectile is affected by accuracy cone individually
+  const half = accuracyToConeHalfAngleRad(acc);
+  const dirs = [];
   for (let i = 0; i < numProjectiles; i++) {
-    const u = Math.random();
-    const v = Math.random();
-
-    // Uniform spherical-cap sampling
-    const cosTheta = 1 - u * (1 - Math.cos(halfAngleRad));
-    const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
-    const phi = 2 * Math.PI * v;
-
-    const sample = forward.clone().multiplyScalar(cosTheta)
-      .add(right.clone().multiplyScalar(Math.cos(phi) * sinTheta))
-      .add(up.clone().multiplyScalar(Math.sin(phi) * sinTheta))
-      .normalize();
-
-    directions.push(sample);
+    dirs.push(sampleDirectionInCone(forwardDir, half));
   }
-
-  return directions;
-} // end generateSpreadDirections
+  return dirs;
+}
 
 
 function spawnProjectile(origin, direction, damage = 1) {
@@ -587,7 +648,8 @@ function handleFire() {
     const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
 
     // --- Generate spread directions ---
-    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0);
+    // Pass weapon accuracy into spread generator. Accuracy is clamped inside generator.
+    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0, w.accuracy ?? 1.0);
 
     for (const dir of dirs) {
         spawnProjectileUnified(shootOrigin, dir, {
@@ -705,8 +767,8 @@ function triggerFire() {
     const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
     const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
 
-    // Generate spread directions around the aim direction
-    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread);
+    // Generate spread directions around the aim direction (pass accuracy)
+    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread, w.accuracy ?? 1.0);
 
     // Spawn each projectile
     for (const dir of directions) {
@@ -718,6 +780,8 @@ explosionSounds:  w.explosionSounds
 		
 		});
     }
+    // Trigger HUD visual feedback (frame-based) from single hook
+    try { window.hud && window.hud.onWeaponFire && window.hud.onWeaponFire({ retX: displayedRet.x, retY: displayedRet.y, weapon: w, isAuto: (w.fireMode === 'auto') }); } catch(_) {}
 }
 // ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
 // ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
@@ -729,48 +793,30 @@ function updateDynamicReticle({
   maxWeaponInaccuracyRad = 0.008
 }) {
   if (!camera || !weapon) return;
+  // Weapon stats: clamp accuracy only at [0.01, 1.0] per spec
+  const weaponAccuracy = clampAccuracy(weapon.accuracy ?? 1.0);
 
-  // Weapon stats
-  const weaponAccuracy = THREE.MathUtils.clamp(weapon.accuracy ?? 1, 0, 1);
-  // Treat `projectileSpread` as the full cone angle; use half-angle for radius calc
-  const weaponSpreadHalfRad = THREE.MathUtils.degToRad(weapon.projectileSpread ?? 0) * 0.5;
-  const weaponInaccuracyRad = (1 - weaponAccuracy) * maxWeaponInaccuracyRad;
-  const totalHalfConeRad = basePlayerConeRad + weaponSpreadHalfRad + weaponInaccuracyRad;
+  // Compute cone half-angle (radians) from accuracy and MAX_CONE constants
+  const accHalfAngle = accuracyToConeHalfAngleRad(weaponAccuracy);
 
-  // Ray from reticle
+  // Project the accuracy cone to world point at projectionDistance, then to screen to measure radius
   const retNDC = new THREE.Vector2(
     (ret.x / window.innerWidth) * 2 - 1,
     -(ret.y / window.innerHeight) * 2 + 1
   );
 
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(retNDC, camera);
-
+  const tmpRay = new THREE.Raycaster();
+  tmpRay.setFromCamera(retNDC, camera);
   const camPos = camera.position.clone();
-  const forward = raycaster.ray.direction.clone().normalize();
-
-  // Camera basis
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
-
-  // Center point in world space at projection distance
+  const forward = tmpRay.ray.direction.clone().normalize();
   const centerWorld = camPos.clone().add(forward.clone().multiplyScalar(projectionDistance));
 
-  // Compute extreme points of the cone
-  const spreadRadiusWorld = Math.tan(totalHalfConeRad) * projectionDistance;
+  // world-space spread radius from accuracy cone only
+  const spreadRadiusWorld = Math.tan(accHalfAngle) * projectionDistance;
 
-  const extremeDirs = [
-    right.clone(),        // right edge
-    right.clone().negate(),// left edge
-    up.clone(),           // top edge
-    up.clone().negate()   // bottom edge
-  ];
-
-  const edgeWorldPoints = extremeDirs.map(dir =>
-    centerWorld.clone().add(dir.multiplyScalar(spreadRadiusWorld))
-  );
-
-  // Project center and edges to screen space
+  // Project a point at the right edge of the cone to screen and measure pixel radius
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  const edgeWorld = centerWorld.clone().add(right.clone().multiplyScalar(spreadRadiusWorld));
   const projectToScreen = v => {
     const p = v.clone().project(camera);
     return {
@@ -780,23 +826,30 @@ function updateDynamicReticle({
   };
 
   const centerScreen = projectToScreen(centerWorld);
-  const edgeScreens = edgeWorldPoints.map(projectToScreen);
+  const edgeScreen = projectToScreen(edgeWorld);
+  let radiusPx = Math.hypot(edgeScreen.x - centerScreen.x, edgeScreen.y - centerScreen.y);
 
-  // Compute max distance from center
-  let maxDist = 0;
-  for (const e of edgeScreens) {
-    const d = Math.hypot(e.x - centerScreen.x, e.y - centerScreen.y);
-    if (d > maxDist) maxDist = d;
+  // Shotguns: optionally add visual offset for pellet spread (not used for single-shot reticle)
+  if ((weapon.projectileSpread ?? 0) > 0) {
+    const pelletHalfRad = THREE.MathUtils.degToRad(weapon.projectileSpread) * 0.5;
+    const pelletSpreadWorld = Math.tan(pelletHalfRad) * projectionDistance;
+    const pelletEdgeWorld = centerWorld.clone().add(right.clone().multiplyScalar(pelletSpreadWorld));
+    const pelletEdgeScreen = projectToScreen(pelletEdgeWorld);
+    const pelletRadiusPx = Math.hypot(pelletEdgeScreen.x - centerScreen.x, pelletEdgeScreen.y - centerScreen.y);
+    // Visual offset: add pellet spread to reticle so player sees potential pellet extent
+    radiusPx += pelletRadiusPx;
+    document.documentElement.style.setProperty("--reticle-pellet-spread", `${weapon.projectileSpread}`);
+  } else {
+    document.documentElement.style.removeProperty("--reticle-pellet-spread");
   }
 
-  // Clamp radius to reasonable values
+  // Clamp radius to reasonable values to avoid overly large/small visuals
   const clampedRadius = THREE.MathUtils.clamp(
-    maxDist,
-    8,
-    Math.min(window.innerWidth, window.innerHeight) * 0.45
+    radiusPx,
+    MIN_RETICLE_RADIUS_PX,
+    Math.min(window.innerWidth, window.innerHeight) * MAX_RETICLE_RADIUS_PCT
   );
 
-  // Apply to CSS
   document.documentElement.style.setProperty("--reticle-size", `${(clampedRadius * 2).toFixed(1)}px`);
 }
 
@@ -1010,7 +1063,7 @@ function animate(nowMs) {
   requestAnimationFrame(animate);
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
-HUD.update(deltaMs / 1000); // convert ms → seconds
+// HUD.update moved to end of loop so camera rails/scene updates happen first
 
     // **Sync player position with camera**
     player.position.copy(camera.position);
@@ -1041,7 +1094,10 @@ HUD.update(deltaMs / 1000); // convert ms → seconds
   // Update scene loader (enemies AI)
   sceneLoader.update(deltaMs, nowMs);
   updateProjectiles(deltaMs);
-updateEnemyProjectiles(deltaMs);
+  updateEnemyProjectiles(deltaMs);
+
+  // Apply HUD visual/frame-based effects after scene/camera updates
+  HUD.update(deltaMs / 1000);
 
   renderer.render(scene, camera);
 }
