@@ -77,9 +77,9 @@ export const HUD = {
     // -------------------------------------------------
     this._reticleKick = {
       framesRemaining: 0,
-      totalFrames: 6,
+      totalFrames: 3,
       offset: { x: 0, y: 0 },
-      magnitudePx: 6
+      magnitudePx: 2
     };
 
     // -------------------------------------------------
@@ -334,10 +334,10 @@ export const HUD = {
   _triggerReticleKick() {
     const r = this._reticleKick;
     r.framesRemaining = r.totalFrames;
-    const angle = (Math.random() - 0.5) * 2 * 0.6; // lateral randomness factor
-    // upward impulse (negative y because DOM y grows downward)
-    r.offset.x = Math.round((Math.random() - 0.5) * r.magnitudePx * 0.6);
-    r.offset.y = Math.round(-Math.abs(r.magnitudePx) * (0.6 + Math.random() * 0.6));
+    // Small vertical jitter: mostly up/down a few pixels, tiny lateral component
+    r.offset.x = Math.round((Math.random() - 0.5) * r.magnitudePx * 0.4);
+    // vertical jitter between roughly -magnitude..+magnitude px
+    r.offset.y = Math.round((Math.random() - 0.5) * 2 * r.magnitudePx);
   },
 
   _applyCameraRecoil(px) {
