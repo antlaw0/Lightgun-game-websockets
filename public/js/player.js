@@ -47,6 +47,30 @@ this.meleeCooldownMs = 600;
     // Start with weapon 0
     this.currentWeaponIndex = 0;
 
+    // Recoil state (screen-space pixels). Cumulative per shot; decays each frame.
+    // `recoilPx` is the current additional reticle radius added to visuals.
+    this.recoilPx = 0;
+    // Recovery time (ms) to return toward zero (exponential decay time constant).
+    // This is configurable per player and controls how quickly recoil returns to neutral.
+    this.recoilRecoveryMs = 300;
+
+    // helper: add recoil (called when firing)
+    this.addRecoil = (px) => {
+      this.recoilPx = (this.recoilPx || 0) + (px || 0);
+    };
+
+    // helper: per-frame update to decay recoil. Called by game loop.
+    this.updateRecoil = (deltaMs) => {
+      if (!this.recoilPx || this.recoilPx <= 0) {
+        this.recoilPx = 0;
+        return;
+      }
+      const tau = Math.max(1, this.recoilRecoveryMs);
+      const factor = Math.exp(-deltaMs / tau);
+      this.recoilPx *= factor;
+      if (this.recoilPx < 0.01) this.recoilPx = 0;
+    };
+
     // Initialize HUD
     this._emitAmmo();
   }

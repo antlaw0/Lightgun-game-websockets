@@ -23,6 +23,10 @@ function baseWeapon(def) {
     projectileSize: def.projectileSize ?? 0.02,
     projectileLifetime: def.projectileLifetime ?? 2.0,
 
+    // recoil: screen-space pixels added to reticle per shot (visual), and used
+    // to influence actual accuracy while firing. Default 0.
+    recoil: def.recoil ?? 0,
+
     damage: def.damage,
     projectilesPerShot: def.projectilesPerShot,
 
@@ -49,7 +53,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "semi-auto",
     rateOfFire: 250,
-    accuracy: 0.75,
+    accuracy: 0.1,
+    recoil: 2,
     projectileSpread:  0,
     damage: 20,
     projectilesPerShot: 1,
@@ -73,6 +78,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 700,
     accuracy: 0.6,
+    recoil: 28,
     projectileSpread:  12,
 
     damage: 40,
@@ -96,7 +102,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "auto",
     rateOfFire: 100,
-    accuracy: 0.88,
+    accuracy: 0.6,
+    recoil: 6,
     projectileSpread:  0,
 
     damage: 15,
@@ -121,6 +128,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 1200,
     accuracy: 0.95,
+    recoil: 40,
     projectileSpread:  0,
 
     damage: 100,
@@ -147,6 +155,7 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
     fireMode: "semi-auto",
     rateOfFire: 1000,
     accuracy: 0.995,
+    recoil: 1,
     projectileSpread:  0,
 
     damage: 80,

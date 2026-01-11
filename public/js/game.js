@@ -648,8 +648,10 @@ function handleFire() {
     const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
 
     // --- Generate spread directions ---
-    // Pass weapon accuracy into spread generator. Accuracy is clamped inside generator.
-    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0, w.accuracy ?? 1.0);
+    // Factor player recoil into weapon accuracy: recoilPx reduces effective accuracy.
+    const recoilInfluence = Math.min(0.9, (player.recoilPx || 0) / (Math.min(window.innerWidth, window.innerHeight) * 0.5));
+    const effectiveAcc = clampAccuracy((w.accuracy ?? 1.0) - recoilInfluence);
+    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0, effectiveAcc);
 
     for (const dir of dirs) {
         spawnProjectileUnified(shootOrigin, dir, {
@@ -767,8 +769,10 @@ function triggerFire() {
     const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
     const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
 
-    // Generate spread directions around the aim direction (pass accuracy)
-    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread, w.accuracy ?? 1.0);
+    // Generate spread directions around the aim direction (pass accuracy adjusted by recoil)
+    const recoilInfluence2 = Math.min(0.9, (player.recoilPx || 0) / (Math.min(window.innerWidth, window.innerHeight) * 0.5));
+    const effectiveAcc2 = clampAccuracy((w.accuracy ?? 1.0) - recoilInfluence2);
+    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread, effectiveAcc2);
 
     // Spawn each projectile
     for (const dir of directions) {
@@ -780,6 +784,9 @@ explosionSounds:  w.explosionSounds
 		
 		});
     }
+    // Apply weapon recoil to player (visual reticle expansion + accuracy influence)
+    try { player.addRecoil && player.addRecoil(w.recoil || 0); } catch(_) {}
+
     // Trigger HUD visual feedback (frame-based) from single hook
     try { window.hud && window.hud.onWeaponFire && window.hud.onWeaponFire({ retX: displayedRet.x, retY: displayedRet.y, weapon: w, isAuto: (w.fireMode === 'auto') }); } catch(_) {}
 }
@@ -850,7 +857,11 @@ function updateDynamicReticle({
     Math.min(window.innerWidth, window.innerHeight) * MAX_RETICLE_RADIUS_PCT
   );
 
-  document.documentElement.style.setProperty("--reticle-size", `${(clampedRadius * 2).toFixed(1)}px`);
+  // Add player's current recoil (screen-space px) to the reticle visual radius
+  const extraRecoilPx = (player && player.recoilPx) ? player.recoilPx : 0;
+  const finalRadius = clampedRadius + extraRecoilPx;
+
+  document.documentElement.style.setProperty("--reticle-size", `${(finalRadius * 2).toFixed(1)}px`);
 }
 
 /**
@@ -1085,6 +1096,9 @@ function animate(nowMs) {
     camera,
     weapon: player.currentWeapon
   });
+
+  // Update player recoil decay each frame (deltaMs)
+  try { player.updateRecoil && player.updateRecoil(deltaMs); } catch(_) {}
 
   // Ducking & zoom
   camera.position.y = 1.7 - (ducking ? 0.8 : 0);
