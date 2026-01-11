@@ -24,12 +24,12 @@ export const Scene_W1_1 = {
       {
         type: "moveTo",
         position: { x: 8.0, y: 1.7, z: -8.0 },
-        duration: 8000
+        duration: 7000
         
       },
-	    { type: "lookAt", target: { x: 8.5, y: 1.7, z: -8.1 }, duration: 1000 }, 
-			{ type: 'rotate', rotation:  -90, duration:  3000},
-	  {  type:  'pause', duration:  3000, triggerNextScene:  true}
+	    
+			{ type: 'rotate', rotation:  -90, duration:  1000},
+	  {  type:  'pause', duration:  1000, triggerNextScene:  true}
     ]
   },
 
@@ -279,7 +279,7 @@ material: {
       id: "gruntE",
       type: "Grunt",
       hp: 40,
-      position: { x: 0, y: 0.9, z: 3 },
+      position: { x: 0, y: 0.9, z: 0.5 },
       behavior: {
         pattern: "path",
         params: {

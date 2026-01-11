@@ -54,7 +54,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 250,
     accuracy: 0.1,
-    recoil: 2,
+    recoil: 20,
     projectileSpread:  0,
     damage: 20,
     projectilesPerShot: 1,
@@ -78,7 +78,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 700,
     accuracy: 0.6,
-    recoil: 28,
+    recoil: 48,
     projectileSpread:  12,
 
     damage: 40,
@@ -102,8 +102,8 @@ export const WEAPON_DEFS = {
 
     fireMode: "auto",
     rateOfFire: 100,
-    accuracy: 0.6,
-    recoil: 6,
+    accuracy: 0.5,
+    recoil: 22,
     projectileSpread:  0,
 
     damage: 15,
@@ -128,7 +128,7 @@ export const WEAPON_DEFS = {
     fireMode: "semi-auto",
     rateOfFire: 1200,
     accuracy: 0.95,
-    recoil: 40,
+    recoil: 80,
     projectileSpread:  0,
 
     damage: 100,
@@ -155,7 +155,7 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
     fireMode: "semi-auto",
     rateOfFire: 1000,
     accuracy: 0.995,
-    recoil: 1,
+    recoil: 160,
     projectileSpread:  0,
 
     damage: 80,

@@ -52,7 +52,7 @@ this.meleeCooldownMs = 600;
     this.recoilPx = 0;
     // Recovery time (ms) to return toward zero (exponential decay time constant).
     // This is configurable per player and controls how quickly recoil returns to neutral.
-    this.recoilRecoveryMs = 300;
+    this.recoilRecoveryMs = 1200;
 
     // helper: add recoil (called when firing)
     this.addRecoil = (px) => {

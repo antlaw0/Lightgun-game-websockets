@@ -7,7 +7,7 @@ import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
-import { ENEMY_AI_ENABLED, setEnemyAIEnabled } from './enemy.js';
+import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
 import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
@@ -1074,6 +1074,11 @@ function animate(nowMs) {
   requestAnimationFrame(animate);
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
+  // Update enemy animation mixers (advance three.js AnimationMixers)
+  try {
+    const deltaSec = deltaMs / 1000;
+    ENEMY_INSTANCES.forEach(e => { if (e.mixer) try { e.mixer.update(deltaSec); } catch(_){} });
+  } catch (e) {}
 // HUD.update moved to end of loop so camera rails/scene updates happen first
 
     // **Sync player position with camera**

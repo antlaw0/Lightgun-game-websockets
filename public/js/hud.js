@@ -79,7 +79,7 @@ export const HUD = {
       framesRemaining: 0,
       totalFrames: 3,
       offset: { x: 0, y: 0 },
-      magnitudePx: 2
+      magnitudePx: 1
     };
 
     // -------------------------------------------------

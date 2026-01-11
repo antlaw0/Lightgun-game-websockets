@@ -1,5 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { getWeapon } from "./weapons.js";
+import { createMannequin } from './humanoid.js';
+import { createWalkRunAnimations } from './animations.js';
 export let ENEMY_AI_ENABLED = true;
 
 export function setEnemyAIEnabled(enabled) {
@@ -252,17 +254,143 @@ this.coverObjectId = instanceConfig.coverObject || null;
     if (!this.coverType && this.coverIndex !== null) this.coverType = "low";
 
     //
-    // Mesh (single-sprite)
-    //
-    const plane = new THREE.PlaneGeometry(1.2, 1.8);
-    const tex = new THREE.TextureLoader().load(mergedDef.sprite);
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-    this.mesh = new THREE.Mesh(plane, mat);
+    // Mesh (sprite fallback OR 3D mannequin for Grunt)
+    // If this is a Grunt type, create the skinned mannequin
+    this.mixer = null;
+    this._walkAction = null;
+    this._runAction = null;
 
-    // place mesh at given position
-    this.mesh.position.copy(this.position);
-    this.basePosition = this.mesh.position.clone(); // used for lerping back
-    this.baseRotationY = this.facing;
+    if (mergedDef.displayName === "Grunt Soldier") {
+      const { skinnedMesh, skeleton, bones } = createMannequin();
+      this.mesh = skinnedMesh;
+      // place mesh at given position
+      this.mesh.position.copy(this.position);
+      this.basePosition = this.mesh.position.clone();
+      this.baseRotationY = this.facing;
+      this._lastBasePosition = this.basePosition.clone();
+      // Apply weapon/arm recoil decay and bone offsets each frame
+      try {
+        if (this.weaponMesh && typeof this._weaponRecoil === 'number') {
+          // exponential decay per-frame
+          this._weaponRecoil *= Math.pow(0.85, Math.max(1, deltaMs / 16));
+          // apply local z offset (push weapon back)
+          const origZ = this._weaponOriginalPos ? this._weaponOriginalPos.z : (this.weaponMesh.position.z || 0);
+          this.weaponMesh.position.z = origZ - (this._weaponRecoil || 0);
+        }
+
+        if (this.bones && typeof this._boneRecoil === 'number') {
+          this._boneRecoil *= Math.pow(0.8, Math.max(1, deltaMs / 16));
+          const upper = this.bones['upper_arm_r'];
+          const lower = this.bones['lower_arm_r'];
+          if (upper) upper.rotation.x = (this._boneBaseRot['upper_arm_r'] || 0) - (this._boneRecoil * 0.45);
+          if (lower) lower.rotation.x = (this._boneBaseRot['lower_arm_r'] || 0) - (this._boneRecoil * 0.6);
+          // slight brace on left arm
+          const upperL = this.bones['upper_arm_l'];
+          if (upperL) upperL.rotation.x = (this._boneBaseRot['upper_arm_l'] || 0) + (this._boneRecoil * 0.12);
+        }
+      } catch (e) {}
+
+      // Setup animations
+      try {
+        const { walkClip, runClip } = createWalkRunAnimations(bones);
+        this.mixer = new THREE.AnimationMixer(this.mesh);
+        this._walkAction = this.mixer.clipAction(walkClip);
+        this._walkAction.loop = THREE.LoopRepeat;
+        this._runAction = this.mixer.clipAction(runClip);
+        this._runAction.loop = THREE.LoopRepeat;
+        // start paused; we'll play when moving
+        // actions created but not started; we'll play/stop during update
+      } catch (e) {
+        console.warn("Failed to create grunt animations", e);
+      }
+
+      // Attach a simple weapon placeholder to right hand for visualization
+      try {
+        // build a simple pistol-like mesh (group) with black gunmetal material
+        const pistolMat = new THREE.MeshStandardMaterial({ color: 0x111219, metalness: 0.95, roughness: 0.25 });
+        const weaponMesh = new THREE.Group();
+        weaponMesh.name = 'enemy_weapon_mesh';
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.18), pistolMat);
+        body.position.set(0.02, -0.02, 0.0);
+        weaponMesh.add(body);
+
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.24, 8), pistolMat);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0.02, 0, 0.14);
+        weaponMesh.add(barrel);
+
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.03), pistolMat);
+        grip.position.set(-0.04, -0.06, -0.02);
+        grip.rotation.z = 0.35;
+        weaponMesh.add(grip);
+
+        weaponMesh.position.set(0.08, -0.04, 0.08);
+        weaponMesh.rotation.x = -0.15;
+
+        // small muzzle flash object (hidden initially)
+        const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), flashMat);
+        flash.name = 'muzzle_flash';
+        flash.visible = false;
+        flash.position.set(0.02, 0, 0.26);
+        weaponMesh.add(flash);
+
+        // attach to hand_r if available
+        const handBone = this.mesh.skeleton?.bones?.find(b => b.name === 'hand_r');
+        if (handBone) {
+          handBone.add(weaponMesh);
+        } else {
+          this.mesh.add(weaponMesh);
+        }
+
+        this.weaponMesh = weaponMesh;
+        this.weaponMuzzle = flash;
+        this._weaponOriginalPos = weaponMesh.position.clone();
+        this._weaponRecoil = 0;
+        this._boneRecoil = 0;
+      } catch (e) {}
+
+      // store skeleton and bones for later manipulation
+      this.skeleton = skeleton;
+      this.bones = bones;
+      // store base bone rotations so recoil can be applied additively and decayed
+      this._boneBaseRot = {};
+      Object.keys(bones).forEach(k => {
+        try { this._boneBaseRot[k] = bones[k].rotation.x || 0; } catch(_) { this._boneBaseRot[k] = 0; }
+      });
+
+      // Apply optional stance overrides (e.g., wide gun stance)
+      const stance = this.behavior?.params?.stance || instanceConfig.stance || null;
+      if (stance === 'wideGun') {
+        try {
+          const ul = this.bones['upper_leg_l'];
+          const ur = this.bones['upper_leg_r'];
+          if (ul) {
+            ul.rotation.z = 0.22; // tilt outward
+            ul.position.x = -0.28; // wider
+          }
+          if (ur) {
+            ur.rotation.z = -0.22;
+            ur.position.x = 0.28;
+          }
+          if (this.bones['spine']) this.bones['spine'].rotation.x = -0.08; // slight forward lean
+        } catch (e) {}
+      }
+
+    } else {
+      // fallback sprite
+      const plane = new THREE.PlaneGeometry(1.2, 1.8);
+      const tex = new THREE.TextureLoader().load(mergedDef.sprite);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+      this.mesh = new THREE.Mesh(plane, mat);
+
+      // place mesh at given position
+      this.mesh.position.copy(this.position);
+      this.basePosition = this.mesh.position.clone(); // used for lerping back
+      this.baseRotationY = this.facing;
+      this._lastBasePosition = this.basePosition.clone();
+    }
 // NOW path behavior can safely initialize
 if (this.behavior.pattern === "path") {
   this._initPathBehavior(this.behavior.params || {});
@@ -281,6 +409,9 @@ if (this.behavior.pattern === "path") {
     this._lastUpdateMs = performance.now();
     this._isDead = false;
 this._isFullyPoppedTarget = false;
+    // gait/footfall state
+    this._gaitPhase = 0; // radians
+    this._gaitOffset = 0; // current bob offset
 
     // Pop/out timing configuration with jitter
     const p = this.behavior.params || {};
@@ -479,6 +610,61 @@ if (
     } else {
       this._updateStand(deltaMs, nowMs, p);
     }
+
+    // Movement detection -> update animation state and facing
+    try {
+      const last = this._lastBasePosition || new THREE.Vector3();
+      const moved = this.basePosition.distanceTo(last) > 0.001;
+
+      // Face direction of intended movement (unless strafing logic applied elsewhere)
+      if (moved) {
+        const dir = this.basePosition.clone().sub(last);
+        if (dir.lengthSq() > 1e-6) {
+          const angle = Math.atan2(dir.x, dir.z);
+          this._targetRotationY = angle;
+        }
+      }
+
+      // toggle walk/run animations
+      if (this.mixer && this._walkAction) {
+        if (moved) {
+          // resume walk action
+          if (this._runAction && this.weapon && this.weapon.fireRateMs < 300) {
+            // use run
+            try { this._walkAction && this._walkAction.stop(); } catch(_){}
+            try { this._runAction && this._runAction.play(); } catch(_){}
+          } else {
+            try { this._runAction && this._runAction.stop(); } catch(_){}
+            try { this._walkAction && this._walkAction.play(); } catch(_){}
+          }
+        } else {
+          // pause actions when idle
+          try { this._walkAction && this._walkAction.stop(); } catch(_){}
+          try { this._runAction && this._runAction.stop(); } catch(_){}
+        }
+      }
+      // Footfall bob: add vertical offset driven by gait phase when moving
+      try {
+        const movedDist = this.basePosition.distanceTo(last);
+        if (movedDist > 0.001) {
+          const speed = movedDist / Math.max(1e-6, deltaMs / 1000); // units/sec
+          const freq = Math.min(4.0, Math.max(1.2, speed * 1.5));
+          this._gaitPhase = (this._gaitPhase || 0) + (deltaMs / 1000) * freq * Math.PI * 2;
+          const amp = THREE.MathUtils.clamp(0.02 + speed * 0.005, 0.02, 0.12);
+          const bob = Math.sin(this._gaitPhase) * amp;
+          if (!this._targetOffset) this._targetOffset = new THREE.Vector3(0, 0, 0);
+          this._targetOffset.y = (this._targetOffset.y || 0) + bob;
+          this._gaitOffset = bob;
+        } else {
+          // decay
+          this._gaitPhase = 0;
+          this._gaitOffset = (this._gaitOffset || 0) * 0.75;
+          if (this._targetOffset) this._targetOffset.y = (this._targetOffset.y || 0) * 0.75;
+        }
+      } catch (e) {}
+
+      this._lastBasePosition = this.basePosition.clone();
+    } catch (e) {}
 
     // always apply smoothing interpolation to the mesh transform toward target offset/rotation/scale
     this._applyAnimationSmoothing(deltaMs);
@@ -698,8 +884,22 @@ const dir = targetPos.clone().sub(origin).normalize();
 	if (nowMs < this._nextAllowedFireMs) return;
   if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
-  const muzzle = this.mesh.position.clone();
-  muzzle.y += 0.9;
+  // Compute muzzle from weapon mesh if available so projectiles originate from barrel
+  let muzzle = this.mesh.position.clone();
+  if (this.weaponMesh) {
+    try {
+      muzzle = new THREE.Vector3();
+      this.weaponMesh.getWorldPosition(muzzle);
+      // translate forward along weapon's world forward (z) if possible
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.weaponMesh.getWorldQuaternion(new THREE.Quaternion()));
+      muzzle.add(forward.multiplyScalar(0.12));
+    } catch (e) {
+      muzzle = this.mesh.position.clone();
+      muzzle.y += 0.9;
+    }
+  } else {
+    muzzle.y += 0.9;
+  }
 
   const targetPos =
     this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
@@ -736,6 +936,20 @@ const dir = targetPos.clone().sub(origin).normalize();
     muzzle.clone().add(deviatedDir.multiplyScalar(28)),
     28
   );
+
+  // Visual muzzle flash
+  try {
+    if (this.weaponMuzzle) {
+      this.weaponMuzzle.visible = true;
+      setTimeout(() => { try { this.weaponMuzzle && (this.weaponMuzzle.visible = false); } catch(_){} }, 80);
+    }
+  } catch (e) {}
+
+  // Apply weapon recoil impulse (local displacement) and bone recoil
+  try {
+    this._weaponRecoil = Math.max(this._weaponRecoil || 0, 0.06);
+    this._boneRecoil = Math.max(this._boneRecoil || 0, 0.35);
+  } catch (e) {}
 
   // Optional immediate-hit logic
   const angleBetween = idealDir.angleTo(deviatedDir);

@@ -32,7 +32,9 @@ export class Projectile {
     this.dir = direction.clone().normalize();
 
     if (type === "enemy") {
-      //this._applyAccuracyError(accuracy);
+      // Apply accuracy cone to enemy projectiles. When accuracy == 1.0 this
+      // produces zero deviation (deterministic straight shot).
+      this._applyAccuracyError(accuracy);
     }
 
     // Mesh
@@ -51,19 +53,37 @@ export class Projectile {
   // Apply accuracy cone to enemy projectiles
   //------------------------------------------------------------
   _applyAccuracyError(acc) {
-    const maxAngle = THREE.MathUtils.degToRad(10);  // Max deviation at acc=0
-    const deviation = maxAngle * (1 - acc);
+    // Clamp accuracy only at [0.01, 1.0] per spec
+    const accuracy = THREE.MathUtils.clamp(acc ?? 1.0, 0.01, 1.0);
 
-    if (deviation > 0.0001) {
-      const randAxis = new THREE.Vector3(
-        Math.random() - 0.5,
-        Math.random() - 0.5,
-        Math.random() - 0.5
-      ).normalize();
+    // Convert accuracy -> cone half-angle (radians). MAX_CONE_ANGLE_DEG is the
+    // full cone angle at worst accuracy (acc==0.01 -> near max).
+    const MAX_CONE_ANGLE_DEG = 10; // clearly defined local constant for projectile sampling
+    const inaccuracy = 1.0 - accuracy;
+    const coneFullDeg = inaccuracy * MAX_CONE_ANGLE_DEG;
+    const halfAngleRad = THREE.MathUtils.degToRad(coneFullDeg * 0.5);
 
-      this.dir.applyAxisAngle(randAxis, (Math.random() - 0.5) * deviation);
-      this.dir.normalize();
-    }
+    // If accuracy==1.0, halfAngleRad == 0 and direction is unchanged (deterministic)
+    if (halfAngleRad <= 0) return;
+
+    // Sample uniformly inside the cone (spherical cap) around current direction
+    const forwardN = this.dir.clone().normalize();
+    let right = new THREE.Vector3().crossVectors(forwardN, new THREE.Vector3(0, 1, 0)).normalize();
+    if (right.lengthSq() < 1e-6) right = new THREE.Vector3(1, 0, 0).normalize();
+    const up = new THREE.Vector3().crossVectors(right, forwardN).normalize();
+
+    const u = Math.random();
+    const v = Math.random();
+    const cosTheta = 1 - u * (1 - Math.cos(halfAngleRad));
+    const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
+    const phi = 2 * Math.PI * v;
+
+    const sample = forwardN.clone().multiplyScalar(cosTheta)
+      .add(right.clone().multiplyScalar(Math.cos(phi) * sinTheta))
+      .add(up.clone().multiplyScalar(Math.sin(phi) * sinTheta))
+      .normalize();
+
+    this.dir.copy(sample);
   }
 
   //------------------------------------------------------------
