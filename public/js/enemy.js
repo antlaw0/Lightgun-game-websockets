@@ -456,14 +456,39 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
             // after scaling, align feet to basePosition.y so model sits on the floor
             try {
-              const box2 = new THREE.Box3().setFromObject(this.mesh);
-              const minY = box2.min.y;
-              // position.y is enemy base (e.g., 0.9 in scene defs)
-              const targetY = (this.basePosition?.y ?? old.position?.y ?? 0);
-              // shift the mesh vertically so its bottom (minY) matches targetY
-              const dy = targetY - minY;
-              this.mesh.position.y = (this.mesh.position.y || 0) + dy;
-              this.mesh.updateMatrixWorld(true);
+                // compute bounding box robustly (fall back to per-geometry boxes if needed)
+                let box2 = new THREE.Box3().setFromObject(this.mesh);
+                if (!isFinite(box2.min.x) || !isFinite(box2.min.y) || !isFinite(box2.min.z)) {
+                  // fallback: union individual geometry bounding boxes
+                  box2 = new THREE.Box3();
+                  this.mesh.traverse(o => {
+                    if (o.isMesh && o.geometry) {
+                      try {
+                        o.geometry.computeBoundingBox();
+                        const b = o.geometry.boundingBox.clone();
+                        b.applyMatrix4(o.matrixWorld);
+                        box2.union(b);
+                      } catch (e) {}
+                    }
+                  });
+                }
+
+                let minY = box2.min.y;
+                if (!isFinite(minY)) minY = 0;
+                // position.y is enemy base (e.g., 0.9 in scene defs)
+                const targetY = (this.basePosition?.y ?? old.position?.y ?? 0);
+                // shift the mesh vertically so its bottom (minY) matches targetY
+                let dy = targetY - minY;
+                // clamp excessive shifts (likely from malformed bbox) to avoid moving models off-screen
+                if (!isFinite(dy) || Math.abs(dy) > 10) {
+                  console.warn(`Enemy ${this.id} alignment dy=${dy} suspicious — clamping to within +/-10`);
+                  dy = THREE.MathUtils.clamp(isFinite(dy) ? dy : 0, -10, 10);
+                }
+                this.mesh.position.y = (this.mesh.position.y || 0) + dy;
+                this.mesh.updateMatrixWorld(true);
+                // Ensure model is visible and not frustum-culled incorrectly
+                this.mesh.visible = true;
+                this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; } });
             } catch (e) {}
           } catch (e) {}
           this.mesh.userData.enemyId = this.id;
