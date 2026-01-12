@@ -56,6 +56,10 @@ export const scene_test = {
       id: "grunt_1",
       type: "Grunt",
       hp: 40,
+      // Quick GLTF test model (falls back to procedural mannequin if unreachable)
+      modelUrl: "assets/models/male_base_mesh.glb",
+      // explicit scalar scale override (adjusted to match model bbox -> ~1.7m tall)
+      modelScale: 0.003345,
       position: { x: -3, y: 0.9, z: -6 },
       behavior: {
         pattern: "path",
@@ -102,6 +106,8 @@ export const scene_test = {
       id: "grunt_shooter",
       type: "Grunt",
       hp: 40,
+      modelUrl: "assets/models/male_base_mesh.glb",
+      modelScale: 0.003345,
       position: { x: 2.5, y: 0.9, z: -6 },
       behavior: {
         pattern: "standInOpen",

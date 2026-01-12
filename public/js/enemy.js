@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
 import { getWeapon } from "./weapons.js";
 import { createMannequin } from './humanoid.js';
 import { createWalkRunAnimations } from './animations.js';
+import { loadCharacter } from './characterLoader.js';
 export let ENEMY_AI_ENABLED = true;
 
 export function setEnemyAIEnabled(enabled) {
@@ -290,16 +291,20 @@ this.coverObjectId = instanceConfig.coverObject || null;
         }
       } catch (e) {}
 
-      // Setup animations
+      // Setup animations (procedural fallback)
       try {
-        const { walkClip, runClip } = createWalkRunAnimations(bones);
+        const { walkClip, runClip, idleClip, aimClip, shootClip } = createWalkRunAnimations(bones);
         this.mixer = new THREE.AnimationMixer(this.mesh);
-        this._walkAction = this.mixer.clipAction(walkClip);
-        this._walkAction.loop = THREE.LoopRepeat;
-        this._runAction = this.mixer.clipAction(runClip);
-        this._runAction.loop = THREE.LoopRepeat;
-        // start paused; we'll play when moving
-        // actions created but not started; we'll play/stop during update
+        this._walkAction = walkClip ? this.mixer.clipAction(walkClip) : null;
+        if (this._walkAction) this._walkAction.loop = THREE.LoopRepeat;
+        this._runAction = runClip ? this.mixer.clipAction(runClip) : null;
+        if (this._runAction) this._runAction.loop = THREE.LoopRepeat;
+        this._idleAction = idleClip ? this.mixer.clipAction(idleClip) : null;
+        if (this._idleAction) this._idleAction.loop = THREE.LoopRepeat;
+        this._aimAction = aimClip ? this.mixer.clipAction(aimClip) : null;
+        if (this._aimAction) this._aimAction.loop = THREE.LoopRepeat;
+        this._shootAction = shootClip ? this.mixer.clipAction(shootClip) : null;
+        if (this._shootAction) { this._shootAction.loop = THREE.LoopOnce; this._shootAction.clampWhenFinished = true; }
       } catch (e) {
         console.warn("Failed to create grunt animations", e);
       }
@@ -376,6 +381,137 @@ this.coverObjectId = instanceConfig.coverObject || null;
           }
           if (this.bones['spine']) this.bones['spine'].rotation.x = -0.08; // slight forward lean
         } catch (e) {}
+      }
+
+      // Action map + crossfade helper
+      this._actions = {};
+      if (this._walkAction) this._actions.walk = this._walkAction;
+      if (this._runAction) this._actions.run = this._runAction;
+      if (this._idleAction) this._actions.idle = this._idleAction;
+      if (this._aimAction) this._actions.aim = this._aimAction;
+      if (this._shootAction) this._actions.shoot = this._shootAction;
+      this._currentAction = null;
+      this._activateAction = (name, fade = 0.18) => {
+        if (!this.mixer || !this._actions) return;
+        const next = this._actions[name];
+        if (!next) return;
+        const prev = this._currentAction;
+        if (prev === next) return;
+        try { next.reset(); next.play(); } catch (e) {}
+        if (prev) {
+          try { prev.crossFadeTo(next, fade, false); } catch (e) {}
+        }
+        this._currentAction = next;
+      };
+
+      // If a model URL is provided, try to load the glTF and swap in its model/clips
+      if (mergedDef.modelUrl) {
+        loadCharacter({ url: mergedDef.modelUrl }).then(res => {
+          if (!res || !res.model) return;
+          try { this.sceneGroup.remove(this.mesh); } catch(_){}
+          const old = this.mesh;
+          this.mesh = res.model;
+          // preserve transforms
+          try { this.mesh.position.copy(this.basePosition || old.position); } catch(_){}
+          try { this.mesh.rotation.y = this.baseRotationY; } catch(_){}
+          // Apply model scaling: prefer explicit `modelScale` on the enemy definition,
+          // otherwise auto-scale the glTF to a reasonable target height so it matches
+          // the previous procedural mannequin size and doesn't appear gigantic.
+          try {
+            const desiredHeight = 1.7; // target height in world units
+            // allow scene author to override with either an exact scalar or percent
+            const explicitScale = mergedDef.modelScale || instanceConfig.modelScale || null;
+            const explicitPercent = mergedDef.modelScalePercent ?? instanceConfig.modelScalePercent ?? null;
+
+            // Robust auto-scaling behavior:
+            // - If `modelScale` is provided, use it directly (explicit override).
+            // - Otherwise compute an auto-scale so model height == `desiredHeight`.
+            // - If `modelScalePercent` is provided, interpret it as a multiplier of the auto-scale
+            //   (e.g., 50 -> half the auto-scale, 100 -> auto-scale, 200 -> double the auto-scale).
+            try {
+              // measure native bounds at scale 1 to compute auto-scale
+              this.mesh.scale.setScalar(1);
+              this.mesh.updateMatrixWorld(true);
+              const box = new THREE.Box3().setFromObject(this.mesh);
+              const size = new THREE.Vector3();
+              box.getSize(size);
+              const height = size.y || 1.0;
+
+              const autoScale = (height > 0.001) ? (desiredHeight / height) : 0.02;
+
+              let finalScale = autoScale;
+              if (explicitScale !== null && explicitScale !== undefined) {
+                finalScale = explicitScale;
+              } else if (explicitPercent !== null && explicitPercent !== undefined) {
+                const p = Number(explicitPercent) || 0;
+                const percentScalar = p / 100;
+                finalScale = autoScale * percentScalar;
+              }
+
+              this.mesh.scale.setScalar(finalScale);
+              this.mesh.updateMatrixWorld(true);
+            } catch (e) {
+              // if scaling computation fails, leave mesh scale unchanged
+            }
+
+            // after scaling, align feet to basePosition.y so model sits on the floor
+            try {
+              const box2 = new THREE.Box3().setFromObject(this.mesh);
+              const minY = box2.min.y;
+              // position.y is enemy base (e.g., 0.9 in scene defs)
+              const targetY = (this.basePosition?.y ?? old.position?.y ?? 0);
+              // shift the mesh vertically so its bottom (minY) matches targetY
+              const dy = targetY - minY;
+              this.mesh.position.y = (this.mesh.position.y || 0) + dy;
+              this.mesh.updateMatrixWorld(true);
+            } catch (e) {}
+          } catch (e) {}
+          this.mesh.userData.enemyId = this.id;
+          this.mesh.name = `enemy_${this.id}`;
+          this.sceneGroup.add(this.mesh);
+          // Update stored base scale so smoothing won't revert the model size
+          try {
+            this.baseScale = this.mesh.scale.clone();
+            this._targetScale = this.baseScale.clone();
+          } catch (e) {}
+
+          // extract bones map if not provided
+          this.bones = res.bones || {};
+          if (!res.bones) {
+            this.bones = {};
+            this.mesh.traverse(o => { if (o.isBone) this.bones[o.name] = o; });
+          }
+
+          // adopt mixer (or create one) and map clips
+          this.mixer = res.mixer || new THREE.AnimationMixer(this.mesh);
+          this._actions = this._actions || {};
+          (res.clips || []).forEach(clip => {
+            const n = (clip.name || '').toLowerCase();
+            const a = this.mixer.clipAction(clip);
+            if (n.includes('walk')) { a.loop = THREE.LoopRepeat; this._actions.walk = a; }
+            else if (n.includes('run')) { a.loop = THREE.LoopRepeat; this._actions.run = a; }
+            else if (n.includes('idle')) { a.loop = THREE.LoopRepeat; this._actions.idle = a; }
+            else if (n.includes('aim')) { a.loop = THREE.LoopRepeat; this._actions.aim = a; }
+            else if (n.includes('shoot')) { a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
+          });
+
+          // ensure fallback procedural clips exist on the new mixer if missing
+          try {
+            const fallback = createWalkRunAnimations(this.bones || {});
+            if (fallback.walkClip && !this._actions.walk) { const a = this.mixer.clipAction(fallback.walkClip); a.loop = THREE.LoopRepeat; this._actions.walk = a; }
+            if (fallback.runClip && !this._actions.run) { const a = this.mixer.clipAction(fallback.runClip); a.loop = THREE.LoopRepeat; this._actions.run = a; }
+            if (fallback.idleClip && !this._actions.idle) { const a = this.mixer.clipAction(fallback.idleClip); a.loop = THREE.LoopRepeat; this._actions.idle = a; }
+            if (fallback.aimClip && !this._actions.aim) { const a = this.mixer.clipAction(fallback.aimClip); a.loop = THREE.LoopRepeat; this._actions.aim = a; }
+            if (fallback.shootClip && !this._actions.shoot) { const a = this.mixer.clipAction(fallback.shootClip); a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
+          } catch (e) {}
+
+          // reattach weapon mesh to new hand bone if present
+          if (this.weaponMesh) {
+            try { this.weaponMesh.parent && this.weaponMesh.parent.remove(this.weaponMesh); } catch(_){}
+            const handBone = (this.mesh.skeleton && this.mesh.skeleton.bones) ? this.mesh.skeleton.bones.find(b => b.name === 'hand_r') : this.mesh.getObjectByName('hand_r');
+            if (handBone) handBone.add(this.weaponMesh); else this.mesh.add(this.weaponMesh);
+          }
+        }).catch(e => { console.warn('Failed to load character glTF', e); });
       }
 
     } else {
@@ -625,24 +761,23 @@ if (
         }
       }
 
-      // toggle walk/run animations
-      if (this.mixer && this._walkAction) {
-        if (moved) {
-          // resume walk action
-          if (this._runAction && this.weapon && this.weapon.fireRateMs < 300) {
-            // use run
-            try { this._walkAction && this._walkAction.stop(); } catch(_){}
-            try { this._runAction && this._runAction.play(); } catch(_){}
+      // toggle actions with smooth crossfade
+      try {
+        if (this.mixer && this._actions) {
+          if (moved) {
+            // choose run vs walk based on weapon rate
+            if (this._actions.run && this.weapon && this.weapon.fireRateMs < 300) {
+              this._activateAction('run', 0.12);
+            } else if (this._actions.walk) {
+              this._activateAction('walk', 0.12);
+            }
           } else {
-            try { this._runAction && this._runAction.stop(); } catch(_){}
-            try { this._walkAction && this._walkAction.play(); } catch(_){}
+            // idle when not moving
+            if (this._actions.idle) this._activateAction('idle', 0.18);
+            else if (this._actions.aim) this._activateAction('aim', 0.18);
           }
-        } else {
-          // pause actions when idle
-          try { this._walkAction && this._walkAction.stop(); } catch(_){}
-          try { this._runAction && this._runAction.stop(); } catch(_){}
         }
-      }
+      } catch (e) {}
       // Footfall bob: add vertical offset driven by gait phase when moving
       try {
         const movedDist = this.basePosition.distanceTo(last);
@@ -949,6 +1084,21 @@ const dir = targetPos.clone().sub(origin).normalize();
   try {
     this._weaponRecoil = Math.max(this._weaponRecoil || 0, 0.06);
     this._boneRecoil = Math.max(this._boneRecoil || 0, 0.35);
+  } catch (e) {}
+
+  // Trigger shoot/aim actions if available (smooth fallback)
+  try {
+    if (this._actions && this._actions.shoot) {
+      const s = this._actions.shoot;
+      try { s.reset(); s.play(); } catch(_){}
+      const dur = (s._clip && s._clip.duration) ? s._clip.duration * 1000 : 250;
+      setTimeout(() => {
+        if (this._actions.aim) this._activateAction('aim', 0.12);
+        else if (this._actions.idle) this._activateAction('idle', 0.12);
+      }, dur);
+    } else if (this._actions && this._actions.aim) {
+      this._activateAction('aim', 0.08);
+    }
   } catch (e) {}
 
   // Optional immediate-hit logic
