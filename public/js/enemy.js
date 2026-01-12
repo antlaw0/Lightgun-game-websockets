@@ -411,6 +411,50 @@ this.coverObjectId = instanceConfig.coverObject || null;
           try { this.sceneGroup.remove(this.mesh); } catch(_){}
           const old = this.mesh;
           this.mesh = res.model;
+          // Diagnostic: print model hierarchy and ensure skinned meshes are viewable
+          try {
+            const lines = [];
+            const indent = (n) => '  '.repeat(n);
+            const listNode = (o, depth=0) => {
+              let info = `${indent(depth)}- ${o.type || o.constructor.name}`;
+              if (o.name) info += ` name='${o.name}'`;
+              if (o.isMesh) info += ` (mesh)`;
+              if (o.isSkinnedMesh) info += ` (skinned)`;
+              if (o.isBone) info += ` (bone)`;
+              info += ` pos=${(o.position?.x||0).toFixed(2)},${(o.position?.y||0).toFixed(2)},${(o.position?.z||0).toFixed(2)}`;
+              if (o.scale) info += ` scale=${o.scale.x.toFixed(3)},${o.scale.y.toFixed(3)},${o.scale.z.toFixed(3)}`;
+              lines.push(info);
+              // force skinned meshes to be visible and enable skinning on materials
+              try {
+                if (o.isSkinnedMesh) {
+                  if (o.material) {
+                    if (Array.isArray(o.material)) o.material.forEach(m => { if (m) m.skinning = true; });
+                    else o.material.skinning = true;
+                  }
+                  o.frustumCulled = false;
+                  o.visible = true;
+                }
+                if (o.isMesh && o.material) {
+                  o.frustumCulled = false;
+                  o.visible = true;
+                }
+              } catch (e) {}
+              o.children.forEach(c => listNode(c, depth+1));
+            };
+            listNode(this.mesh, 0);
+            console.log(`[Enemy ${this.id}] model hierarchy:\n` + lines.join('\n'));
+            // per-mesh bbox (world)
+            this.mesh.traverse(o => {
+              if (o.isMesh) {
+                try {
+                  const b = new THREE.Box3().setFromObject(o);
+                  const s = new THREE.Vector3();
+                  b.getSize(s);
+                  console.log(`[Enemy ${this.id}] mesh '${o.name || o.type}' size=${s.x.toFixed(3)},${s.y.toFixed(3)},${s.z.toFixed(3)}`);
+                } catch (e) {}
+              }
+            });
+          } catch (e) { console.warn('Enemy model diagnostic failed', e); }
           // preserve transforms
           try { this.mesh.position.copy(this.basePosition || old.position); } catch(_){}
           try { this.mesh.rotation.y = this.baseRotationY; } catch(_){}
@@ -494,6 +538,80 @@ this.coverObjectId = instanceConfig.coverObject || null;
           this.mesh.userData.enemyId = this.id;
           this.mesh.name = `enemy_${this.id}`;
           this.sceneGroup.add(this.mesh);
+          // Debug: add a visible marker at the enemy root position to verify placement
+          try {
+            const dbgMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+            const dbgGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+            const dbg = new THREE.Mesh(dbgGeo, dbgMat);
+            dbg.name = `debug_marker_${this.id}`;
+            // place at mesh root (world/local)
+            dbg.position.copy(this.mesh.position || new THREE.Vector3());
+            this.sceneGroup.add(dbg);
+            // log world position for debugging
+            const wp = new THREE.Vector3();
+            this.mesh.getWorldPosition(wp);
+            console.log(`[Enemy ${this.id}] worldPosition=${wp.x.toFixed(3)},${wp.y.toFixed(3)},${wp.z.toFixed(3)}, meshScale=${this.mesh.scale.x.toFixed(4)}`);
+          } catch (e) {}
+
+          // Visual proxy fallback: for skinned meshes that fail to render, add a static
+          // MeshBasicMaterial proxy to ensure something visible appears at the same place.
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isSkinnedMesh) return;
+              try {
+                // compute world transform
+                const worldPos = new THREE.Vector3();
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                o.getWorldPosition(worldPos);
+                o.getWorldQuaternion(worldQuat);
+                o.getWorldScale(worldScale);
+
+                const proxyMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, wireframe: false });
+                const proxyGeom = o.geometry.clone();
+                const proxy = new THREE.Mesh(proxyGeom, proxyMat);
+                proxy.name = `proxy_${o.name || 'skinned'}_${this.id}`;
+                // place proxy in world space by adding to scene and setting world transform
+                this.sceneGroup.add(proxy);
+                proxy.position.copy(worldPos);
+                proxy.quaternion.copy(worldQuat);
+                proxy.scale.copy(worldScale.multiplyScalar(this.mesh.scale.x));
+                proxy.updateMatrixWorld(true);
+              } catch (e) {}
+            });
+          } catch (e) {}
+          // Ensure materials are renderable: replace problematic materials with a simple
+          // fallback while preserving existing texture maps where available.
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isMesh) return;
+              try {
+                // prefer existing texture if present
+                const hasMap = !!(o.material && (o.material.map || (Array.isArray(o.material) && o.material.some(m => m && m.map))));
+                if (Array.isArray(o.material)) {
+                  o.material = o.material.map(m => {
+                    if (!m) return m;
+                    if (m.map) { m.skinning = !!o.isSkinnedMesh; return m; }
+                    return new THREE.MeshStandardMaterial({ color: 0x999999, skinning: !!o.isSkinnedMesh });
+                  });
+                } else {
+                  const m = o.material;
+                  if (!m || (!hasMap && (m.opacity === 0 || m.transparent))) {
+                    o.material = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, skinning: !!o.isSkinnedMesh });
+                  } else if (m) {
+                    // try to enable skinning if needed
+                    if (o.isSkinnedMesh) m.skinning = true;
+                    m.side = m.side || THREE.FrontSide;
+                    m.transparent = false;
+                  }
+                }
+                o.visible = true;
+                o.frustumCulled = false;
+                o.castShadow = true;
+                o.receiveShadow = true;
+              } catch (e) {}
+            });
+          } catch (e) {}
           // Update stored base scale so smoothing won't revert the model size
           try {
             this.baseScale = this.mesh.scale.clone();
