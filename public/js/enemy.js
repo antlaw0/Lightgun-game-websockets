@@ -1161,6 +1161,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
               else if (n.includes('run')) { a.loop = THREE.LoopRepeat; this._actions.run = a; }
               else if (n.includes('idle')) { a.loop = THREE.LoopRepeat; this._actions.idle = a; }
               else if (n.includes('aim')) { a.loop = THREE.LoopRepeat; this._actions.aim = a; }
+              else if (n.includes('strafe') || n.includes('side')) {
+                // map strafe clips; prefer explicit left/right naming
+                if (n.includes('left')) { a.loop = THREE.LoopRepeat; this._actions.strafe_left = a; }
+                else if (n.includes('right')) { a.loop = THREE.LoopRepeat; this._actions.strafe_right = a; }
+                else { a.loop = THREE.LoopRepeat; this._actions.strafe = a; }
+              }
               else if (n.includes('shoot') || n.includes('fire')) { a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
             } catch (e) { console.warn('[Enemy] embedded clip mapping failed', e); }
           });
@@ -1202,6 +1208,11 @@ this.coverObjectId = instanceConfig.coverObject || null;
                       else if (k.includes('run') || clipName.includes('run')) { action.loop = THREE.LoopRepeat; this._actions.run = action; mapped = 'run'; }
                       else if (k.includes('idle') || clipName.includes('idle')) { action.loop = THREE.LoopRepeat; this._actions.idle = action; mapped = 'idle'; }
                       else if (k.includes('aim') || clipName.includes('aim')) { action.loop = THREE.LoopRepeat; this._actions.aim = action; mapped = 'aim'; }
+                      else if (k.includes('strafe') || clipName.includes('strafe') || k.includes('side') || clipName.includes('side')) {
+                        if (k.includes('left') || clipName.includes('left')) { action.loop = THREE.LoopRepeat; this._actions.strafe_left = action; mapped = 'strafe_left'; }
+                        else if (k.includes('right') || clipName.includes('right')) { action.loop = THREE.LoopRepeat; this._actions.strafe_right = action; mapped = 'strafe_right'; }
+                        else { action.loop = THREE.LoopRepeat; this._actions.strafe = action; mapped = 'strafe'; }
+                      }
                       else if (k.includes('shoot') || k.includes('fire') || clipName.includes('shoot') || clipName.includes('fire')) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; this._actions.shoot = action; mapped = 'shoot'; }
                       else { action.loop = THREE.LoopRepeat; this._actions[k] = action; mapped = k; }
                       try {
@@ -1327,9 +1338,13 @@ if (this.behavior.pattern === "path") {
     this.sceneGroup = sceneGroup;
     this.sceneGroup.add(this.mesh);
 
+    // track last known mesh/world position for movement detection (useful for patrol/path)
+    this._lastMeshPosition = this.mesh.position.clone();
+
     // animation/pop state variables
     this._lastUpdateMs = performance.now();
     this._isDead = false;
+    this._isDying = false; // true while death animation is playing
 this._isFullyPoppedTarget = false;
     // gait/footfall state
     this._gaitPhase = 0; // radians
@@ -1422,7 +1437,7 @@ _randomTauntDelay() {
   // Accepts optional damageType
   //
   takeDamage(amount, damageType = "normal") {
-    if (this._isDead) return;
+    if (this._isDead || this._isDying) return;
     //console.log("current HP:  "+this.hp+", damage dealt is "+amount)
 	this.hp -= amount;
 
@@ -1463,27 +1478,89 @@ _randomTauntDelay() {
   }
 
   die() {
-    if (this._isDead) return;  // prevent double death
-    this._isDead = true;
-  this._playRandom(this.deathSounds);
-    // Hide the mesh immediately
-    if (this.mesh) this.mesh.visible = false;
+    if (this._isDead || this._isDying) return;  // prevent double death
+
+    // mark as dying so AI/firing stops and future damage is ignored
+    this._isDying = true;
+    this._playRandom(this.deathSounds);
 
     // Remove from enemyMeshes so raycasting no longer hits it
-    if (this.mesh) {
+    try {
+      if (this.mesh) {
         this.mesh.traverse(obj => {
-            if (obj.isMesh) {
-                const idx = window.sceneLoader.enemyMeshes.indexOf(obj);
-                if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
-            }
+          if (obj.isMesh && window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+            const idx = window.sceneLoader.enemyMeshes.indexOf(obj);
+            if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+          }
         });
-    }
+      }
+    } catch (e) {}
 
-    // Trigger death callback (objective check)
-    if (typeof this.onDeath === "function") this.onDeath(this.id);
+    // Trigger death callback (objective check) immediately (keeps existing flow)
+    try { if (typeof this.onDeath === "function") this.onDeath(this.id); } catch (e) {}
+
+    // Try to play a mapped death animation if present; otherwise remove immediately
+    try {
+      if (this._actions) {
+        const candidates = ['dying_rifle','dying','death','die'];
+        let deathAction = null;
+        let deathKey = null;
+        for (let k of candidates) {
+          if (this._actions[k]) { deathAction = this._actions[k]; deathKey = k; break; }
+        }
+        // also accept a generic 'death' action present under other keys
+        if (!deathAction) {
+          for (let k of Object.keys(this._actions || {})) {
+            if (/death|die|dying/i.test(k)) { deathAction = this._actions[k]; deathKey = k; break; }
+          }
+        }
+
+        if (deathAction && this.mixer) {
+          try {
+            deathAction.loop = THREE.LoopOnce;
+            deathAction.clampWhenFinished = true;
+            deathAction.reset();
+            deathAction.play();
+
+            const onFinished = (e) => {
+              try {
+                if (e.action !== deathAction) return;
+                try { this.mixer.removeEventListener('finished', onFinished); } catch(_) {}
+                // final cleanup: remove mesh and mark dead
+                try { if (this.sceneGroup && this.mesh) this.sceneGroup.remove(this.mesh); } catch(_) {}
+                this._isDead = true;
+                this._isDying = false;
+              } catch (ex) {}
+            };
+
+            this.mixer.addEventListener('finished', onFinished);
+            // ensure update loop will keep animating while dying (do not set _isDead yet)
+            return;
+          } catch (e) {
+            // fall through to immediate removal on failure
+          }
+        }
+      }
+    } catch (e) {}
+
+    // fallback immediate removal
+    try { if (this.mesh) this.mesh.visible = false; } catch (_) {}
+    try {
+      if (this.mesh) {
+        this.mesh.traverse(obj => {
+          if (obj.isMesh && window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+            const idx = window.sceneLoader.enemyMeshes.indexOf(obj);
+            if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+          }
+        });
+      }
+    } catch (e) {}
+    try { if (this.sceneGroup && this.mesh) this.sceneGroup.remove(this.mesh); } catch (_) {}
+    this._isDead = true;
+    this._isDying = false;
 
     console.log("Enemy died:", this.id, "Enemies remaining:", 
-        window.sceneLoader.enemies.filter(e => !e._isDead).length
+      window.sceneLoader.enemies.filter(e => !e._isDead).length
     );
 }
 
@@ -1535,15 +1612,30 @@ if (
 
     // Movement detection -> update animation state and facing
     try {
-      const last = this._lastBasePosition || new THREE.Vector3();
-      const moved = this.basePosition.distanceTo(last) > 0.001;
+      // Use actual mesh position delta (works for patrol/path where mesh.position is animated)
+      const lastMesh = this._lastMeshPosition || this.mesh.position.clone();
+      const moved = this.mesh.position.distanceTo(lastMesh) > 0.001;
 
-      // Face direction of intended movement (unless strafing logic applied elsewhere)
-      if (moved) {
-        const dir = this.basePosition.clone().sub(last);
-        if (dir.lengthSq() > 1e-6) {
-          const angle = Math.atan2(dir.x, dir.z);
-          this._targetRotationY = angle;
+      // If moving, compute movement vector from mesh positions
+          if (moved) {
+        const moveVec = this.mesh.position.clone().sub(lastMesh);
+        try {
+          const toPlayer = (player && player.position) ? player.position.clone().sub(this.mesh.position) : null;
+          // If lateral motion dominates and strafe actions are present, let the animation drive pose
+          const isLateral = Math.abs(moveVec.x) > Math.abs(moveVec.z);
+          const hasStrafe = !!(this._actions && (this._actions.strafe_left || this._actions.strafe_right || this._actions.strafe));
+          if (isLateral && hasStrafe) {
+            // do not override rotation; keep animator-controlled orientation
+          } else {
+            // Face the player when moving primarily forward/back, or when no strafe clips available
+            if (toPlayer && toPlayer.lengthSq() > 1e-6) {
+              this._targetRotationY = Math.atan2(toPlayer.x, toPlayer.z);
+            } else if (moveVec.lengthSq() > 1e-6) {
+              this._targetRotationY = Math.atan2(moveVec.x, moveVec.z);
+            }
+          }
+        } catch (e) {
+          if (moveVec.lengthSq() > 1e-6) this._targetRotationY = Math.atan2(moveVec.x, moveVec.z);
         }
       }
 
@@ -1551,11 +1643,35 @@ if (
       try {
         if (this.mixer && this._actions) {
           if (moved) {
-            // choose run vs walk based on weapon rate
-            if (this._actions.run && this.weapon && this.weapon.fireRateMs < 300) {
-              this._activateAction('run', 0.12);
-            } else if (this._actions.walk) {
-              this._activateAction('walk', 0.12);
+            // compute movement vector (world-space) using mesh position delta
+            const moveVec = this.mesh.position.clone().sub(lastMesh);
+            // If lateral motion dominates, prefer strafe animations when available
+            try {
+              if (Math.abs(moveVec.x) > Math.abs(moveVec.z) && (this._actions.strafe_left || this._actions.strafe_right || this._actions.strafe)) {
+                if (moveVec.x < 0 && this._actions.strafe_left) {
+                  this._activateAction('strafe_left', 0.12);
+                } else if (moveVec.x > 0 && this._actions.strafe_right) {
+                  this._activateAction('strafe_right', 0.12);
+                } else if (this._actions.strafe) {
+                  this._activateAction('strafe', 0.12);
+                } else if (this._actions.walk) {
+                  this._activateAction('walk', 0.12);
+                }
+              } else {
+                // choose run vs walk based on weapon rate
+                if (this._actions.run && this.weapon && this.weapon.fireRateMs < 300) {
+                  this._activateAction('run', 0.12);
+                } else if (this._actions.walk) {
+                  this._activateAction('walk', 0.12);
+                }
+              }
+            } catch (e) {
+              // fallback to previous logic
+              if (this._actions.run && this.weapon && this.weapon.fireRateMs < 300) {
+                this._activateAction('run', 0.12);
+              } else if (this._actions.walk) {
+                this._activateAction('walk', 0.12);
+              }
             }
           } else {
             // idle when not moving
@@ -1566,7 +1682,7 @@ if (
       } catch (e) {}
       // Footfall bob: add vertical offset driven by gait phase when moving
       try {
-        const movedDist = this.basePosition.distanceTo(last);
+        const movedDist = this.mesh.position.distanceTo(lastMesh);
         if (movedDist > 0.001) {
           const speed = movedDist / Math.max(1e-6, deltaMs / 1000); // units/sec
           const freq = Math.min(4.0, Math.max(1.2, speed * 1.5));
@@ -1584,6 +1700,8 @@ if (
         }
       } catch (e) {}
 
+      // update last-tracked positions
+      this._lastMeshPosition = this.mesh.position.clone();
       this._lastBasePosition = this.basePosition.clone();
     } catch (e) {}
 
@@ -1799,10 +1917,11 @@ const dir = targetPos.clone().sub(origin).normalize();
   // Fire projectile using SceneLoader callback
   //
   _attemptFire(nowMs) {
-	    if (!ENEMY_AI_ENABLED) return; // HARD STOP
-    
-	
-	if (nowMs < this._nextAllowedFireMs) return;
+      if (!ENEMY_AI_ENABLED) return; // HARD STOP
+
+      if (this._isDying) return; // prevent firing while death animation plays
+
+  if (nowMs < this._nextAllowedFireMs) return;
   if (!this.weapon.canFire(nowMs) || !this.player || !this.fireCallback) return;
 
   // Compute muzzle from weapon mesh if available so projectiles originate from barrel

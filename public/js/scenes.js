@@ -86,7 +86,16 @@ export const LEVELS = {
             id: "gruntC",
             type: "Grunt",
             position: { x: 0, y: 2.7, z: -8 },
-            behavior: { pattern: "standInOpen", params: { fireIntervalMs: 1200 } }
+            // Make this a moving enemy that uses the exo_red model and strafing clips
+            modelUrl: "assets/models/exo_red.fbx",
+            animationUrls: {
+              shoot: "assets/animations/exo_red_pistol_shooting.fbx",
+              dying_rifle: "assets/animations/exo_red_dying_rifle.fbx",
+              strafe_left: "assets/animations/exo_red_pistol_strafe_left.fbx",
+              strafe_right: "assets/animations/exo_red_pistol_strafe_right.fbx",
+              aim: "assets/animations/exo_red_pistol_aiming.fbx"
+            },
+            behavior: { pattern: "patrol", params: { minX: -1.2, maxX: 1.2, speed: 0.004, fireIntervalMs: 1200 } }
           }
 
           // You can add enemies referencing the new wall cover indices too:
@@ -115,11 +124,16 @@ export const ENEMY_DEFS = {
     hp: 40,
     // Optional: specify a 3D model and external animation files.
     // Place model and animations under `public/assets/...` and set these paths.
-    modelUrl: "assets/models/model.fbx",
+    modelUrl: "assets/models/exo_red.fbx",
     animationUrls: {
       // using your uploaded pistol animations
       walk: "assets/animations/walk_pistol.fbx",
-      shoot: "assets/animations/stand_pistol.fbx"
+      shoot: "assets/animations/stand_pistol.fbx",
+      // default strafes (if present these will be mapped to strafe actions)
+      strafe_left: "assets/animations/exo_red_pistol_strafe_left.fbx",
+      strafe_right: "assets/animations/exo_red_pistol_strafe_right.fbx",
+      aim: "assets/animations/exo_red_pistol_aiming.fbx",
+      dying_rifle: "assets/animations/exo_red_dying_rifle.fbx"
     },
 
     weapon: {
