@@ -114,8 +114,9 @@ export function createMannequin() {
     head: 0xffffff // white
   };
 
-  const mat = new THREE.MeshStandardMaterial({ color: COLOR.torso, skinning: true, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ color: COLOR.torso, flatShading: true });
   const skinnedMesh = new THREE.SkinnedMesh(torsoGeo, mat);
+  try { skinnedMesh.material.skinning = true; } catch (e) {}
   skinnedMesh.name = 'mannequin_skin';
 
   // Create skeleton and bind

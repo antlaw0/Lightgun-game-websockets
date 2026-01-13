@@ -1078,6 +1078,23 @@ function animate(nowMs) {
   try {
     const deltaSec = deltaMs / 1000;
     ENEMY_INSTANCES.forEach(e => { if (e.mixer) try { e.mixer.update(deltaSec); } catch(_){} });
+    // Debug: once per second, log first enemy hip quaternion to verify animations
+    try {
+      if (!window._debug_last_bone_log) window._debug_last_bone_log = 0;
+      if (nowMs - window._debug_last_bone_log > 1000) {
+        window._debug_last_bone_log = nowMs;
+        const en = ENEMY_INSTANCES[0];
+        if (en && en.mesh) {
+          let hip = null;
+          try { hip = (en.mesh.skeleton && en.mesh.skeleton.bones) ? en.mesh.skeleton.bones.find(b => /hip/i.test(b.name)) : en.mesh.getObjectByName && en.mesh.getObjectByName('mixamorig9Hips'); } catch(_) { hip = null; }
+          if (hip) {
+            try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
+          } else {
+            console.log('[DEBUG] hip bone not found on first enemy');
+          }
+        }
+      }
+    } catch (e) {}
   } catch (e) {}
 // HUD.update moved to end of loop so camera rails/scene updates happen first
 

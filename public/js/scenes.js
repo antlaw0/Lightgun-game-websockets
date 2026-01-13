@@ -113,6 +113,14 @@ export const ENEMY_DEFS = {
     displayName: "Grunt Soldier",
     sprite: "assets/sprites/grunt.png",
     hp: 40,
+    // Optional: specify a 3D model and external animation files.
+    // Place model and animations under `public/assets/...` and set these paths.
+    modelUrl: "assets/models/model.fbx",
+    animationUrls: {
+      // using your uploaded pistol animations
+      walk: "assets/animations/walk_pistol.fbx",
+      shoot: "assets/animations/stand_pistol.fbx"
+    },
 
     weapon: {
       name: "Pistol",

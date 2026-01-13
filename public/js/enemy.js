@@ -2,7 +2,8 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
 import { getWeapon } from "./weapons.js";
 import { createMannequin } from './humanoid.js';
 import { createWalkRunAnimations } from './animations.js';
-import { loadCharacter } from './characterLoader.js';
+import { loadCharacter, loadAnimationClips } from './characterLoader.js';
+import { equipApparelList } from './clothing/index.js';
 export let ENEMY_AI_ENABLED = true;
 
 export function setEnemyAIEnabled(enabled) {
@@ -233,6 +234,9 @@ this._nextTauntTime = null;
     // Register this enemy globally for debugging / mass actions
     ENEMY_INSTANCES.push(this);
 
+    // store sceneGroup early so async loaders can attach models immediately
+    this.sceneGroup = sceneGroup;
+
     this.player = player;
     this.fireCallback = fireCallback;
 
@@ -397,7 +401,17 @@ this.coverObjectId = instanceConfig.coverObject || null;
         if (!next) return;
         const prev = this._currentAction;
         if (prev === next) return;
-        try { next.reset(); next.play(); } catch (e) {}
+        try {
+          next.reset();
+          try { next.enabled = true; } catch(_) {}
+          try { next.setEffectiveWeight(1.0); } catch(_) {}
+          next.play();
+          try {
+            const clip = next.getClip ? next.getClip() : null;
+            const tracks = clip && clip.tracks ? clip.tracks.length : 0;
+            console.log(`[Enemy ${this.id}] _activateAction -> name='${name}' enabled=${next.enabled} weight=${next.getEffectiveWeight ? next.getEffectiveWeight() : 'n/a'} clipTracks=${tracks}`);
+          } catch (e) {}
+        } catch (e) {}
         if (prev) {
           try { prev.crossFadeTo(next, fade, false); } catch (e) {}
         }
@@ -406,11 +420,96 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
       // If a model URL is provided, try to load the glTF and swap in its model/clips
       if (mergedDef.modelUrl) {
-        loadCharacter({ url: mergedDef.modelUrl }).then(res => {
+        loadCharacter({ url: mergedDef.modelUrl }).then(async res => {
           if (!res || !res.model) return;
           try { this.sceneGroup.remove(this.mesh); } catch(_){}
           const old = this.mesh;
           this.mesh = res.model;
+          // --- Diagnostic checks (1..9) to systematically find why animations leave the model in T-pose ---
+          try {
+            // 1) Verify the model is skinned: traverse and log first SkinnedMesh
+            let firstSkinned = null;
+            this.mesh.traverse(o => { if (!firstSkinned && o.isSkinnedMesh) firstSkinned = o; });
+            if (!firstSkinned) {
+              console.error(`[DIAG Enemy ${this.id}] No SkinnedMesh found in loaded model`);
+              // continue diagnostics but do not throw to avoid aborting load flow
+            }
+            console.log(`[DIAG Enemy ${this.id}] first SkinnedMesh='${firstSkinned.name || '(unnamed)'}' skeletonBones=${(firstSkinned.skeleton && firstSkinned.skeleton.bones) ? firstSkinned.skeleton.bones.length : 0}`);
+
+            // 2) Verify animation clips exist on the loaded resource
+            const animClips = (res.clips || res.animations || []);
+            if (!animClips || animClips.length === 0) {
+              console.error(`[DIAG Enemy ${this.id}] No animation clips found on loaded model`);
+              // continue diagnostics but do not throw
+            }
+            console.log(`[DIAG Enemy ${this.id}] animationClips.length=${animClips.length} names=${animClips.map(c=>c.name||c.uuid).join(',')}`);
+
+            // 3) Verify bone name compatibility: log skeleton bone names and track names
+            const boneNames = (firstSkinned.skeleton && Array.isArray(firstSkinned.skeleton.bones)) ? firstSkinned.skeleton.bones.map(b => b.name) : [];
+            console.log(`[DIAG Enemy ${this.id}] skeleton boneNames count=${boneNames.length}`);
+            try { console.log(boneNames.join(',')); } catch(e){}
+
+            const trackRoots = new Set();
+            animClips.forEach(c => { (c.tracks||[]).forEach(t => { const root = (t.name||t.path||'').split('.')[0]; if (root) trackRoots.add(root); }); });
+            const trackRootsArr = Array.from(trackRoots);
+            console.log(`[DIAG Enemy ${this.id}] animation track root names count=${trackRootsArr.length}`);
+            try { console.log(trackRootsArr.join(',')); } catch(e){}
+
+            // check mapping of track roots to bone names (exact or mixamorig->mixamorig9 variant)
+            const mappingReport = trackRootsArr.map(root => {
+              const exact = boneNames.includes(root);
+              const with9 = boneNames.includes(root.replace(/mixamorig(?!9)/i, 'mixamorig9'));
+              const foundByGet = !!this.mesh.getObjectByName(root);
+              return { root, exact, with9, foundByGet };
+            });
+            console.log(`[DIAG Enemy ${this.id}] track->bone mapping:`, mappingReport);
+
+            // 4) Create the AnimationMixer correctly: MUST be created with the model root
+            try {
+              console.log(`[DIAG Enemy ${this.id}] creating AnimationMixer: new THREE.AnimationMixer(this.mesh)`);
+              this.mixer = new THREE.AnimationMixer(this.mesh); // explicit constructor call
+            } catch (e) { console.error(`[DIAG Enemy ${this.id}] failed creating mixer`, e); throw e; }
+
+            // 5) Bind and play the first clip as a smoke-test: clipAction, reset, play
+            try {
+              const testClip = animClips[0];
+              console.log(`[DIAG Enemy ${this.id}] testing clip play: '${testClip.name||testClip.uuid}'`);
+              const testAction = this.mixer.clipAction(testClip);
+              testAction.reset();
+              testAction.play();
+              console.log(`[DIAG Enemy ${this.id}] action.isRunning=${typeof testAction.isRunning==='function'?testAction.isRunning():"n/a"} timeScale=${testAction.timeScale}`);
+            } catch (e) { console.error(`[DIAG Enemy ${this.id}] failed to bind/play test clip`, e); }
+
+            // 6) Confirm mixer updates every frame: log where mixers are updated in game loop (see game.js)
+            console.log(`[DIAG Enemy ${this.id}] mixer assigned; the game loop should call this.mixer.update(deltaSec) each frame for ENEMY_INSTANCES`);
+
+            // 7) Force a pose change via setTime and check hip quaternion change
+            try {
+              // choose hip bone name heuristically
+              const hip = firstSkinned.skeleton.bones.find(b => /hip|hips/i.test(b.name)) || firstSkinned.skeleton.bones[0];
+              const before = hip.quaternion.clone();
+              try { this.mixer.setTime(1.0); } catch(e) { /* setTime might not be supported on mixer in some versions */ }
+              // force update to apply poses
+              try { this.mixer.update(0); } catch(e) {}
+              const after = hip.quaternion;
+              console.log(`[DIAG Enemy ${this.id}] hip quat before=${before.toArray().map(n=>n.toFixed(4)).join(',')} after=${after.toArray().map(n=>n.toFixed(4)).join(',')}`);
+              if (before.equals(after)) {
+                console.warn(`[DIAG Enemy ${this.id}] hip quaternion unchanged after mixer.setTime -> indicates clips did not bind to skeleton or actions have no effect`);
+              }
+            } catch (e) { console.error(`[DIAG Enemy ${this.id}] failed forcing pose change`, e); }
+
+            // 8) Confirm the animated object is attached to the scene
+            try {
+              console.log(`[DIAG Enemy ${this.id}] mesh.parent =`, this.mesh.parent ? (this.mesh.parent.name || this.mesh.parent.type) : null);
+              if (!this.mesh.parent) { console.error(`[DIAG Enemy ${this.id}] mesh.parent is null; model is not attached to scene`); /* do not throw */ }
+            } catch (e) { console.error(e); }
+
+            // Diagnostic block complete
+            console.log(`[DIAG Enemy ${this.id}] diagnostics completed successfully`);
+          } catch (diagErr) {
+            console.error(`[DIAG Enemy ${this.id}] diagnostics failed:`, diagErr);
+            // continue without throwing so model load flow can finish
+          }
           // Diagnostic: print model hierarchy and ensure skinned meshes are viewable
           try {
             const lines = [];
@@ -533,25 +632,218 @@ this.coverObjectId = instanceConfig.coverObject || null;
                 // Ensure model is visible and not frustum-culled incorrectly
                 this.mesh.visible = true;
                 this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; } });
+
+                // Colorize parts to simulate clothing: legs (dark blue), torso/arms (dark gray), feet (brown)
+                try {
+                  const modelBox = (() => {
+                    try { return new THREE.Box3().setFromObject(this.mesh); } catch (e) { return null; }
+                  })();
+                  if (modelBox) {
+                    const minY = isFinite(modelBox.min.y) ? modelBox.min.y : 0;
+                    const maxY = isFinite(modelBox.max.y) ? modelBox.max.y : minY + 1.7;
+                    const height = Math.max(0.001, maxY - minY);
+                    const legsThreshold = minY + height * 0.45; // below -> legs
+                    const feetThreshold = minY + height * 0.18; // below -> feet
+                    const torsoThreshold = minY + height * 0.65; // between legs and torso
+
+                    const COLOR = {
+                      legs: 0x0b3b8c, // dark blue
+                      torso: 0x444444, // dark gray
+                      feet: 0x8b5a2b,  // brown
+                      flesh: 0xffd7c4  // light flesh tone
+                    };
+
+                    this.mesh.traverse(o => {
+                      if (!o.isMesh) return;
+                      try {
+                        // If this mesh already has a texture map, preserve it and don't overwrite
+                        try {
+                          const hasOrigMap = !!(o.material && (o.material.map || (Array.isArray(o.material) && o.material.some(m => m && m.map))));
+                          if (hasOrigMap) {
+                            try {
+                              if (Array.isArray(o.material)) {
+                                o.material.forEach(m => { try { if ('skinning' in m) m.skinning = !!o.isSkinnedMesh; if (!m.side) m.side = THREE.FrontSide; m.needsUpdate = true; } catch(_) {} });
+                              } else if (o.material) {
+                                try { if ('skinning' in o.material) o.material.skinning = !!o.isSkinnedMesh; } catch(_) {}
+                                o.material.side = o.material.side || THREE.FrontSide;
+                                o.material.needsUpdate = true;
+                              }
+                              o.castShadow = true; o.receiveShadow = true;
+                            } catch(_) {}
+                            return;
+                          }
+                        } catch(_) {}
+
+                        // try name-based detection for head/hands first
+                        const name = (o.name || '').toLowerCase();
+                        const isHead = /head|face|skull|ceph|mixamorighead/.test(name);
+                        const isHand = /hand|thumb|index|middle|ring|pinky/.test(name);
+
+                        if (isHead || isHand) {
+                          const hasV = !!(o.geometry && o.geometry.attributes && o.geometry.attributes.color);
+                          if (hasV) {
+                            try {
+                              if (o.material) {
+                                try { o.material.vertexColors = true; } catch(_) {}
+                                o.material.needsUpdate = true;
+                              } else {
+                                const mm = new THREE.MeshBasicMaterial({ vertexColors: true });
+                                try { if (o.isSkinnedMesh) mm.skinning = true; } catch(_) {}
+                                o.material = mm;
+                              }
+                              o.castShadow = true; o.receiveShadow = true;
+                            } catch (e) {}
+                            return;
+                          }
+
+                          const m = new THREE.MeshStandardMaterial({ color: COLOR.flesh });
+                          try { m.skinning = !!o.isSkinnedMesh; } catch (_) {}
+                          o.material = m;
+                          o.castShadow = true;
+                          o.receiveShadow = true;
+                          o.material.needsUpdate = true;
+                          return;
+                        }
+
+                        // compute bounding box center safely
+                        let box;
+                        try { box = new THREE.Box3().setFromObject(o); } catch (e) { box = null; }
+                        if (!box) return;
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        const cy = center.y;
+
+                        let color = null;
+                        if (cy <= feetThreshold) color = COLOR.feet;
+                        else if (cy <= legsThreshold) color = COLOR.legs;
+                        else if (cy <= torsoThreshold) color = COLOR.torso;
+                        else {
+                          // head/upper torso region: leave flesh for recognized head meshes, otherwise keep original
+                          // but avoid overwriting accessories/textures
+                          return;
+                        }
+
+                        // Create a shader-augmented material that picks color by world Y position
+                        try {
+                          const hexToVec = (h) => {
+                            const r = ((h >> 16) & 255) / 255;
+                            const g = ((h >> 8) & 255) / 255;
+                            const b = (h & 255) / 255;
+                            return `${r.toFixed(3)}, ${g.toFixed(3)}, ${b.toFixed(3)}`;
+                          };
+                          const feetColor = hexToVec(COLOR.feet);
+                          const legsColor = hexToVec(COLOR.legs);
+                          const torsoColor = hexToVec(COLOR.torso);
+
+                          const hasV = !!(o.geometry && o.geometry.attributes && o.geometry.attributes.color);
+                          if (hasV) {
+                            // Use vertex colors directly when present
+                            const vm = new THREE.MeshBasicMaterial({ vertexColors: true });
+                            try { if (o.isSkinnedMesh) vm.skinning = true; } catch(_) {}
+                            o.material = vm;
+                            o.castShadow = true;
+                            o.receiveShadow = true;
+                            o.material.needsUpdate = true;
+                          } else {
+                            const baseMat = new THREE.MeshStandardMaterial({ color: color });
+                            // enable skinning if mesh is skinned
+                            if (o.isSkinnedMesh) baseMat.skinning = true;
+
+                            baseMat.onBeforeCompile = (shader) => {
+                              shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader;
+                              shader.vertexShader = shader.vertexShader.replace('\n#define BEGIN_LIGHTING', '\n#define BEGIN_LIGHTING\n vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+                              shader.fragmentShader = 'varying vec3 vWorldPos;\n' + shader.fragmentShader;
+                              const inject = `
+                                vec3 feetC = vec3(${feetColor});
+                                vec3 legsC = vec3(${legsColor});
+                                vec3 torsoC = vec3(${torsoColor});
+                                float y = vWorldPos.y;
+                                vec3 c = vec3(${color>>16 & 255}/255.0, ${color>>8 & 255}/255.0, ${color & 255}/255.0);
+                                if (y <= ${feetThreshold.toFixed(3)}) c = feetC;
+                                else if (y <= ${legsThreshold.toFixed(3)}) c = legsC;
+                                else if (y <= ${torsoThreshold.toFixed(3)}) c = torsoC;
+                                diffuseColor = vec4(c, opacity);
+                              `;
+                              shader.fragmentShader = shader.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );', inject);
+                            };
+
+                            o.material = baseMat;
+                            o.castShadow = true;
+                            o.receiveShadow = true;
+                            o.material.needsUpdate = true;
+                          }
+                        } catch (e) {
+                          const m = new THREE.MeshStandardMaterial({ color });
+                          try { m.skinning = !!o.isSkinnedMesh; } catch (_) {}
+                          o.material = m;
+                          o.material.needsUpdate = true;
+                        }
+                      } catch (e) {}
+                    });
+                  }
+                } catch (e) { console.warn('Apparel colorize failed', e); }
             } catch (e) {}
           } catch (e) {}
           this.mesh.userData.enemyId = this.id;
           this.mesh.name = `enemy_${this.id}`;
           this.sceneGroup.add(this.mesh);
-          // Debug: add a visible marker at the enemy root position to verify placement
           try {
-            const dbgMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
-            const dbgGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
-            const dbg = new THREE.Mesh(dbgGeo, dbgMat);
-            dbg.name = `debug_marker_${this.id}`;
-            // place at mesh root (world/local)
-            dbg.position.copy(this.mesh.position || new THREE.Vector3());
-            this.sceneGroup.add(dbg);
-            // log world position for debugging
-            const wp = new THREE.Vector3();
-            this.mesh.getWorldPosition(wp);
-            console.log(`[Enemy ${this.id}] worldPosition=${wp.x.toFixed(3)},${wp.y.toFixed(3)},${wp.z.toFixed(3)}, meshScale=${this.mesh.scale.x.toFixed(4)}`);
+            this.sceneGroup.castShadow = true;
+            this.sceneGroup.receiveShadow = true;
+            if (this.mesh) { this.mesh.castShadow = true; this.mesh.receiveShadow = true; }
           } catch (e) {}
+          // Register skinned/mesh parts for projectile hit detection and adjust visual scale/grounding
+          try {
+            // Add all mesh parts to SceneLoader.enemyMeshes for raycast hit tests
+            if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+              this.mesh.traverse(o => {
+                if (o.isMesh) {
+                  if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
+                  // tag for easy lookup
+                  o.userData.enemyId = this.id;
+                }
+              });
+            }
+
+            // Scale model so head/eyes sit approximately at camera eye height (1.7)
+            const desiredEyeY = 1.7;
+            let head = this.mesh.getObjectByName('mixamorig9Head') || this.mesh.getObjectByName('mixamorigHead');
+            if (!head && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+              head = this.mesh.skeleton.bones.find(b => /head/i.test(b.name));
+            }
+            if (head) {
+              const p = new THREE.Vector3();
+              head.getWorldPosition(p);
+              const currentHeadY = p.y;
+              if (currentHeadY > 0.01) {
+                const currentScale = (this.mesh.scale && this.mesh.scale.x) ? this.mesh.scale.x : 1;
+                let scaleFactor = desiredEyeY / currentHeadY;
+                // clamp to avoid extreme resizes
+                scaleFactor = THREE.MathUtils.clamp(scaleFactor, 0.5, 1.25);
+                if (Math.abs(scaleFactor - 1.0) > 0.01) {
+                  this.mesh.scale.setScalar(currentScale * scaleFactor);
+                  this.mesh.updateMatrixWorld(true);
+                }
+              }
+            }
+
+            // Ground feet: shift mesh so its bbox.min.y equals desired basePosition.y
+            try {
+              this.mesh.updateMatrixWorld(true);
+              const box = new THREE.Box3().setFromObject(this.mesh);
+              if (box && isFinite(box.min.y)) {
+                const minY = box.min.y;
+                const desiredY = (this.basePosition && typeof this.basePosition.y === 'number') ? this.basePosition.y : 0;
+                const dy = desiredY - minY;
+                if (Math.abs(dy) > 1e-4) {
+                  this.mesh.position.y += dy;
+                  this.mesh.updateMatrixWorld(true);
+                }
+              }
+            } catch (e) {}
+          } catch (e) { console.warn('[Enemy] registration/scale/grounding failed', e); }
+
+          // removed visual debug proxies (capsule/box) — meshes now registered for hit tests above
 
           // Visual proxy fallback: for skinned meshes that fail to render, add a static
           // MeshBasicMaterial proxy to ensure something visible appears at the same place.
@@ -559,6 +851,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
             this.mesh.traverse(o => {
               if (!o.isSkinnedMesh) return;
               try {
+                // If the skinned mesh already has a readable material (texture or vertex colors),
+                // skip creating the visual proxy to avoid drawing a flat overlay on top.
+                try {
+                  const hasTexOrVC = !!(o.material && (o.material.map || o.material.vertexColors || (Array.isArray(o.material) && o.material.some(m => m && (m.map || m.vertexColors)))));
+                  if (hasTexOrVC) return;
+                } catch (e) {}
                 // compute world transform
                 const worldPos = new THREE.Vector3();
                 const worldQuat = new THREE.Quaternion();
@@ -586,37 +884,160 @@ this.coverObjectId = instanceConfig.coverObject || null;
             this.mesh.traverse(o => {
               if (!o.isMesh) return;
               try {
-                // prefer existing texture if present
+                // preserve any useful texture maps while ensuring the material supports skinning
                 const hasMap = !!(o.material && (o.material.map || (Array.isArray(o.material) && o.material.some(m => m && m.map))));
+
+                const replaceWithStandard = (srcMat, skinned) => {
+                  try {
+                    const hasVertexColors = !!(o.geometry && o.geometry.attributes && o.geometry.attributes.color);
+                    try { console.log(`[Enemy ${this.id}] replaceWithStandard mesh='${o.name}' vertexColors=${hasVertexColors}`); } catch(_) {}
+                    const nmParams = {
+                      color: (srcMat && srcMat.color) ? srcMat.color : 0xffffff,
+                      normalMap: srcMat && srcMat.normalMap ? srcMat.normalMap : null,
+                      metalnessMap: srcMat && srcMat.metalnessMap ? srcMat.metalnessMap : null,
+                      roughnessMap: srcMat && srcMat.roughnessMap ? srcMat.roughnessMap : null,
+                      aoMap: srcMat && srcMat.aoMap ? srcMat.aoMap : null
+                    };
+                    if (hasVertexColors) {
+                      // prefer unlit material for vertex colors so they display reliably
+                      const bm = new THREE.MeshBasicMaterial({ vertexColors: true });
+                      try { if ('skinning' in bm) bm.skinning = !!skinned; } catch(_) {}
+                      bm.side = srcMat && srcMat.side ? srcMat.side : THREE.FrontSide;
+                      bm.needsUpdate = true;
+                      return bm;
+                    } else {
+                      nmParams.map = srcMat && srcMat.map ? srcMat.map : null;
+                      const nm = new THREE.MeshStandardMaterial(nmParams);
+                      try { if ('skinning' in nm) nm.skinning = !!skinned; } catch(_) {}
+                      nm.side = srcMat && srcMat.side ? srcMat.side : THREE.FrontSide;
+                      nm.transparent = false;
+                      nm.needsUpdate = true;
+                      return nm;
+                    }
+                  } catch (e) {
+                    return new THREE.MeshStandardMaterial({ color: 0xcccccc });
+                  }
+                };
+
                 if (Array.isArray(o.material)) {
                   o.material = o.material.map(m => {
                     if (!m) return m;
-                    if (m.map) { m.skinning = !!o.isSkinnedMesh; return m; }
-                    return new THREE.MeshStandardMaterial({ color: 0x999999, skinning: !!o.isSkinnedMesh });
+                    if (m.map) return replaceWithStandard(m, o.isSkinnedMesh);
+                    return replaceWithStandard(m, o.isSkinnedMesh);
                   });
                 } else {
                   const m = o.material;
                   if (!m || (!hasMap && (m.opacity === 0 || m.transparent))) {
-                    o.material = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, skinning: !!o.isSkinnedMesh });
+                    o.material = replaceWithStandard(m || {}, o.isSkinnedMesh);
                   } else if (m) {
-                    // try to enable skinning if needed
-                    if (o.isSkinnedMesh) m.skinning = true;
-                    m.side = m.side || THREE.FrontSide;
-                    m.transparent = false;
+                    if (o.isSkinnedMesh) {
+                      // recreate material to ensure skinning is present and maps preserved
+                      const newMat = replaceWithStandard(m, true);
+                      o.material = newMat;
+                    } else {
+                      try { if ('skinning' in m) m.skinning = false; } catch(_) {}
+                      m.side = m.side || THREE.FrontSide;
+                      m.transparent = false;
+                      m.needsUpdate = true;
+                    }
                   }
                 }
+
                 o.visible = true;
                 o.frustumCulled = false;
                 o.castShadow = true;
                 o.receiveShadow = true;
-              } catch (e) {}
+              } catch (e) {
+                console.warn('[Enemy] material traversal error', e);
+              }
             });
-          } catch (e) {}
+          } catch (e) { console.warn('[Enemy] material replacement failed', e); }
           // Update stored base scale so smoothing won't revert the model size
           try {
             this.baseScale = this.mesh.scale.clone();
             this._targetScale = this.baseScale.clone();
           } catch (e) {}
+
+          // Final recolor pass: enforce simple cloth/skin colors using world Y thresholds.
+          try {
+            const COLOR2 = {
+              legs: 0x0b3b8c,
+              torso: 0x444444,
+              feet: 0x8b5a2b,
+              flesh: 0xffd7c4
+            };
+            const box = new THREE.Box3().setFromObject(this.mesh);
+            if (box && isFinite(box.min.y) && isFinite(box.max.y)) {
+              const minY2 = box.min.y;
+              const maxY2 = box.max.y;
+              const h2 = Math.max(0.001, maxY2 - minY2);
+              const feetT = minY2 + h2 * 0.18;
+              const legsT = minY2 + h2 * 0.45;
+              const torsoT = minY2 + h2 * 0.65;
+
+              this.mesh.traverse(o => {
+                if (!o.isMesh) return;
+                try {
+                  const name = (o.name || '').toLowerCase();
+                  const isHead = /head|face|skull|ceph|mixamorighead/.test(name);
+                  const isHand = /hand|thumb|index|middle|ring|pinky/.test(name);
+
+                  let chosen = null;
+                  if (isHead || isHand) chosen = COLOR2.flesh;
+                  else {
+                    let b = null;
+                    try { b = new THREE.Box3().setFromObject(o); } catch(_) { b = null; }
+                    if (!b) return;
+                    const c = new THREE.Vector3(); b.getCenter(c);
+                    const cy = c.y;
+                    if (cy <= feetT) chosen = COLOR2.feet;
+                    else if (cy <= legsT) chosen = COLOR2.legs;
+                    else if (cy <= torsoT) chosen = COLOR2.torso;
+                    else return;
+                  }
+
+                  if (chosen !== null) {
+                    // If this mesh already has a texture map, don't overwrite it with recolor.
+                    const hasExistingMap = !!(o.material && o.material.map);
+                    if (hasExistingMap) return;
+                    const hasV = !!(o.geometry && o.geometry.attributes && o.geometry.attributes.color);
+                    if (hasV) {
+                      try {
+                        try { console.log(`[Enemy ${this.id}] finalPass using vertexColors for mesh='${o.name}'`); } catch(_) {}
+                        if (o.material) {
+                          try { o.material.vertexColors = true; } catch(_) {}
+                          o.material.needsUpdate = true;
+                        } else {
+                          const vm = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.0, roughness: 0.85 });
+                          try { if (o.isSkinnedMesh) vm.skinning = true; } catch(_) {}
+                          o.material = vm;
+                        }
+                        // log first vertex color if available
+                        try {
+                          const ca = o.geometry.attributes.color;
+                          if (ca) {
+                            const r = ca.getX(0), g = ca.getY(0), b = ca.getZ(0);
+                            console.log(`[Enemy ${this.id}] mesh='${o.name}' vertex color[0]=${r.toFixed(3)},${g.toFixed(3)},${b.toFixed(3)}`);
+                          }
+                        } catch(_) {}
+                        o.castShadow = true; o.receiveShadow = true;
+                        try { console.log(`[Enemy ${this.id}] material after finalPass mesh='${o.name}' type=${o.material?.type} vertexColors=${o.material?.vertexColors} map=${!!o.material?.map} visible=${o.visible}`); } catch(_) {}
+                      } catch (e) {}
+                    } else {
+                      const nm = new THREE.MeshStandardMaterial({ color: chosen, metalness: 0.0, roughness: 0.85 });
+                      try { if (o.isSkinnedMesh) nm.skinning = true; } catch(_) {}
+                      try { nm.emissive = new THREE.Color(chosen); nm.emissiveIntensity = 0.18; } catch(_) {}
+                      o.material = nm;
+                      o.castShadow = true;
+                      o.receiveShadow = true;
+                      try { console.log(`[Enemy ${this.id}] material after finalPass mesh='${o.name}' type=${o.material?.type} vertexColors=${o.material?.vertexColors} map=${!!o.material?.map} visible=${o.visible}`); } catch(_) {}
+                      o.material.needsUpdate = true;
+                    }
+                  }
+                } catch (e) {}
+              });
+            }
+          } catch (e) { console.warn('Final recolor pass failed', e); }
 
           // extract bones map if not provided
           this.bones = res.bones || {};
@@ -625,18 +1046,156 @@ this.coverObjectId = instanceConfig.coverObject || null;
             this.mesh.traverse(o => { if (o.isBone) this.bones[o.name] = o; });
           }
 
-          // adopt mixer (or create one) and map clips
-          this.mixer = res.mixer || new THREE.AnimationMixer(this.mesh);
+          // Equip apparel now that bones map exists
+          try {
+            const rawApparel = mergedDef.apparel || instanceConfig.apparel || null;
+            if (rawApparel && this.bones) {
+              // normalize entries and apply model scale so apparel matches model size
+              const modelScaleScalar = (this.mesh && this.mesh.scale && this.mesh.scale.x) ? this.mesh.scale.x : 1;
+              const mapped = (Array.isArray(rawApparel) ? rawApparel : [rawApparel]).map(e => {
+                if (typeof e === 'string') return { name: e, options: { scale: modelScaleScalar } };
+                const copy = { name: e.name, options: Object.assign({}, e.options || {}) };
+                copy.options.scale = copy.options.scale || modelScaleScalar;
+                return copy;
+              });
+              try { equipApparelList(this.bones, this.sceneGroup, mapped); }
+              catch (e) { console.warn('Failed to equip apparel', e); }
+            }
+          } catch (e) {}
+
+          // adopt mixer: ALWAYS create a new AnimationMixer bound to the model root
+          // (avoids mixers created against the original FBX/scene which won't update this.mesh)
+          try {
+            console.log(`[Enemy ${this.id}] creating AnimationMixer for model root`);
+            this.mixer = new THREE.AnimationMixer(this.mesh); // exact constructor call
+          } catch (e) {
+            console.error(`[Enemy ${this.id}] failed to create AnimationMixer`, e);
+            this.mixer = null;
+          }
           this._actions = this._actions || {};
+
+          // start with clips embedded in the model (strip position/root tracks to avoid root-motion mismatches)
           (res.clips || []).forEach(clip => {
-            const n = (clip.name || '').toLowerCase();
-            const a = this.mixer.clipAction(clip);
-            if (n.includes('walk')) { a.loop = THREE.LoopRepeat; this._actions.walk = a; }
-            else if (n.includes('run')) { a.loop = THREE.LoopRepeat; this._actions.run = a; }
-            else if (n.includes('idle')) { a.loop = THREE.LoopRepeat; this._actions.idle = a; }
-            else if (n.includes('aim')) { a.loop = THREE.LoopRepeat; this._actions.aim = a; }
-            else if (n.includes('shoot')) { a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
+            try {
+              const tracks = (clip.tracks || []).filter(t => !/\.position$/i.test(t.name));
+              // normalize track target names to match skeleton (mixamorig -> mixamorig9)
+              const mappedTracks = tracks.map(t => {
+                try {
+                  const nt = t.clone ? t.clone() : Object.assign({}, t);
+                  const fullname = nt.name || '';
+                  const parts = fullname.split('.');
+                  let node = parts[0] || '';
+                  const rest = parts.slice(1).join('.') || '';
+                  if (/mixamorig(?!9)/i.test(node) && this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+                    const has9 = this.mesh.skeleton.bones.some(b => /mixamorig9/i.test(b.name));
+                    if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
+                  }
+                  nt.name = rest ? `${node}.${rest}` : node;
+                  return nt;
+                } catch (e) { return t; }
+              });
+              const safeClip = new THREE.AnimationClip(clip.name || clip.uuid || 'embedded', clip.duration || -1, mappedTracks);
+              const n = (safeClip.name || '').toLowerCase();
+              const a = this.mixer.clipAction(safeClip);
+              if (n.includes('walk')) { a.loop = THREE.LoopRepeat; this._actions.walk = a; }
+              else if (n.includes('run')) { a.loop = THREE.LoopRepeat; this._actions.run = a; }
+              else if (n.includes('idle')) { a.loop = THREE.LoopRepeat; this._actions.idle = a; }
+              else if (n.includes('aim')) { a.loop = THREE.LoopRepeat; this._actions.aim = a; }
+              else if (n.includes('shoot') || n.includes('fire')) { a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
+            } catch (e) { console.warn('[Enemy] embedded clip mapping failed', e); }
           });
+
+          // If the scene/def provides external animation URLs, load and append them.
+          try {
+            const animUrls = mergedDef.animationUrls || instanceConfig.animationUrls || null;
+            if (animUrls && typeof animUrls === 'object') {
+              const keys = Object.keys(animUrls);
+              const loads = keys.map(k => loadAnimationClips(animUrls[k]).then(clips => ({ key: k, clips })).catch((err) => ({ key: k, clips: [], err })));
+                const results = await Promise.all(loads);
+                results.forEach(r => {
+                  try { console.log(`[Enemy ${this.id}] loaded external anim key='${r.key}' clips=${(r.clips||[]).map(c=>c.name||c.uuid).join(',')}`); } catch(_) {}
+                  (r.clips || []).forEach(clip => {
+                    try {
+                      // create a safe copy without position/root tracks to avoid root-motion and scaling mismatch
+                      const tracks = (clip.tracks || []).filter(t => !/\.position$/i.test(t.name));
+                      const mappedTracks = tracks.map(t => {
+                        try {
+                          const nt = t.clone ? t.clone() : Object.assign({}, t);
+                          const fullname = nt.name || '';
+                          const parts = fullname.split('.');
+                          let node = parts[0] || '';
+                          const rest = parts.slice(1).join('.') || '';
+                          if (/mixamorig(?!9)/i.test(node) && this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+                            const has9 = this.mesh.skeleton.bones.some(b => /mixamorig9/i.test(b.name));
+                            if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
+                          }
+                          nt.name = rest ? `${node}.${rest}` : node;
+                          return nt;
+                        } catch (e) { return t; }
+                      });
+                      const safeClip = new THREE.AnimationClip(clip.name || clip.uuid || r.key, clip.duration || -1, mappedTracks);
+                      const clipName = (safeClip.name || '').toLowerCase();
+                      const action = this.mixer.clipAction(safeClip);
+                      const k = r.key.toLowerCase();
+                      let mapped = null;
+                      if (k.includes('walk') || clipName.includes('walk')) { action.loop = THREE.LoopRepeat; this._actions.walk = action; mapped = 'walk'; }
+                      else if (k.includes('run') || clipName.includes('run')) { action.loop = THREE.LoopRepeat; this._actions.run = action; mapped = 'run'; }
+                      else if (k.includes('idle') || clipName.includes('idle')) { action.loop = THREE.LoopRepeat; this._actions.idle = action; mapped = 'idle'; }
+                      else if (k.includes('aim') || clipName.includes('aim')) { action.loop = THREE.LoopRepeat; this._actions.aim = action; mapped = 'aim'; }
+                      else if (k.includes('shoot') || k.includes('fire') || clipName.includes('shoot') || clipName.includes('fire')) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; this._actions.shoot = action; mapped = 'shoot'; }
+                      else { action.loop = THREE.LoopRepeat; this._actions[k] = action; mapped = k; }
+                      try {
+                        const tracksCount = (safeClip.tracks||[]).length;
+                        console.log(`[Enemy ${this.id}] mapped external clip '${safeClip.name||safeClip.uuid}' -> action='${mapped}' tracks=${tracksCount}`);
+                        // log a sample from the first track for debugging
+                        if (safeClip.tracks && safeClip.tracks.length) {
+                          try {
+                            const t0 = safeClip.tracks[0];
+                            const name = t0.name || t0.path || '(track)';
+                            const times = t0.times || [];
+                            const values = t0.values || [];
+                            const sample = values.slice(0, Math.min(values.length, 6));
+                            console.log(`[Enemy ${this.id}] clipSample track='${name}' times=${times.length>0?times[0]:'<none>'} valuesSample=[${sample.join(',')}]`);
+                          } catch(_) {}
+                        }
+                      } catch(_) {}
+                    } catch (e) { console.warn('[Enemy] external clip mapping error', e); }
+                  });
+                  if (r.err) console.warn(`[Enemy ${this.id}] failed loading anim key='${r.key}':`, r.err);
+                });
+            }
+          } catch (e) { console.warn('Failed to load external animationUrls', e); }
+
+          // If only a single Mixamo clip exists, create distinct walk/idle actions
+          // by cloning the clip so we can crossfade between separate actions.
+          try {
+            const clips = res.clips || [];
+            const hasWalk = !!this._actions.walk;
+            const hasIdle = !!this._actions.idle;
+            if (clips.length && !(hasWalk && hasIdle)) {
+              const primary = clips[0];
+              // create a walk action if missing
+              if (!this._actions.walk) {
+                try {
+                  const walkClip = primary.clone ? primary.clone() : Object.assign({}, primary);
+                  const wa = this.mixer.clipAction(walkClip);
+                  wa.loop = THREE.LoopRepeat;
+                  wa.timeScale = 1.0;
+                  this._actions.walk = wa;
+                } catch (e) {}
+              }
+              // create an idle action if missing (slower timeScale)
+              if (!this._actions.idle) {
+                try {
+                  const idleClip = primary.clone ? primary.clone() : Object.assign({}, primary);
+                  const ia = this.mixer.clipAction(idleClip);
+                  ia.loop = THREE.LoopRepeat;
+                  ia.timeScale = 0.6;
+                  this._actions.idle = ia;
+                } catch (e) {}
+              }
+            }
+          } catch (e) {}
 
           // ensure fallback procedural clips exist on the new mixer if missing
           try {
@@ -646,6 +1205,30 @@ this.coverObjectId = instanceConfig.coverObject || null;
             if (fallback.idleClip && !this._actions.idle) { const a = this.mixer.clipAction(fallback.idleClip); a.loop = THREE.LoopRepeat; this._actions.idle = a; }
             if (fallback.aimClip && !this._actions.aim) { const a = this.mixer.clipAction(fallback.aimClip); a.loop = THREE.LoopRepeat; this._actions.aim = a; }
             if (fallback.shootClip && !this._actions.shoot) { const a = this.mixer.clipAction(fallback.shootClip); a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
+          } catch (e) {}
+
+          // If no action has been activated yet, autoplay the first available action
+          try {
+            if (!this._currentAction && this._actions) {
+              const keys = Object.keys(this._actions || {});
+              if (keys.length) {
+                const first = this._actions[keys[0]];
+                try { first.reset(); first.play(); this._currentAction = first; } catch (_) {}
+                console.log(`[Enemy ${this.id}] autoplayed action=${keys[0]}`);
+              }
+            }
+          } catch (e) {}
+
+          // Log mapped actions and explicitly set an initial action based on behavior
+          try {
+            const mapped = Object.keys(this._actions || {});
+            console.log(`[Enemy ${this.id}] mapped actions:`, mapped);
+            const preferred = (this.behavior && this.behavior.pattern === 'path') ? 'walk' : 'idle';
+            if (this._actions && this._actions[preferred]) {
+              try { this._activateAction(preferred, 0.0); console.log(`[Enemy ${this.id}] activated initial action=${preferred}`); } catch(e) { console.warn(e); }
+            } else if (mapped.length) {
+              try { this._activateAction(mapped[0], 0.0); console.log(`[Enemy ${this.id}] activated fallback action=${mapped[0]}`); } catch(e) {}
+            }
           } catch (e) {}
 
           // reattach weapon mesh to new hand bone if present

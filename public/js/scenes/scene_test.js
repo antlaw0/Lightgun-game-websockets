@@ -37,6 +37,19 @@ export const scene_test = {
       color: 0xffffff,
       intensity: 0.8
     }
+    ,
+    {
+      type: "directional",
+      color: 0xffffff,
+      intensity: 1.6,
+      position: { x: 5, y: 10, z: 5 },
+      target: { x: 0, y: 1.4, z: -6 },
+      castShadow: true,
+      shadow: {
+        mapSize: { width: 2048, height: 2048 },
+        camera: { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 50 }
+      }
+    }
   ],
 
   // Only a floor texture, everything else intentionally absent
@@ -56,10 +69,10 @@ export const scene_test = {
       id: "grunt_1",
       type: "Grunt",
       hp: 40,
-      // Quick GLTF test model (falls back to procedural mannequin if unreachable)
-      modelUrl: "assets/models/male_base_mesh.glb",
-      // explicit scalar scale override (adjusted to match model bbox -> ~1.7m tall)
-      modelScale: 0.003345,
+      // Quick model (falls back to procedural mannequin if unreachable)
+      modelUrl: "assets/models/model.fbx",
+      // allow automatic auto-scaling based on the GLTF bounding box
+      modelScale: null,
       position: { x: -3, y: 0.9, z: -6 },
       behavior: {
         pattern: "path",
@@ -101,13 +114,16 @@ export const scene_test = {
         "assets/sfx/grunt/death1.ogg",
         "assets/sfx/grunt/death2.ogg"
       ]
+      ,
+      // apparel temporarily disabled (using colorization instead)
+      // apparel: ["pants","tshirt"]
     },
     {
       id: "grunt_shooter",
       type: "Grunt",
       hp: 40,
-      modelUrl: "assets/models/male_base_mesh.glb",
-      modelScale: 0.003345,
+      modelUrl: "assets/models/model.fbx",
+      modelScale: null,
       position: { x: 2.5, y: 0.9, z: -6 },
       behavior: {
         pattern: "standInOpen",
@@ -124,6 +140,9 @@ export const scene_test = {
       },
       hitSounds: ["assets/sfx/grunt/hit1.ogg"],
       deathSounds: ["assets/sfx/grunt/death1.ogg"]
+      ,
+      // apparel temporarily disabled (using colorization instead)
+      // apparel: ["pants","tshirt"]
     }
   ],
 

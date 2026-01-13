@@ -1,0 +1,13 @@
+{
+    "name": "models",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "colorize_vertex.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@gltf-transform/core": "^3.0.0",
+        "@gltf-transform/extensions": "^3.0.0"
+    }
+}
