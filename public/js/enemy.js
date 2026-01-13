@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { getWeapon } from "./weapons.js";
 import { createMannequin } from './humanoid.js';
 import { createWalkRunAnimations } from './animations.js';
@@ -359,6 +360,65 @@ this.coverObjectId = instanceConfig.coverObject || null;
         this._weaponRecoil = 0;
         this._boneRecoil = 0;
       } catch (e) {}
+
+      // If this enemy's resolved weapon looks like a rifle, try to load an AK model
+      try {
+        const weaponName = (weaponDef && weaponDef.name) ? String(weaponDef.name).toLowerCase() : '';
+        const rifleKeywords = ['rifle', 'assault', 'ak47', 'ak-47', 'ak'];
+        const shouldLoadAk = rifleKeywords.some(k => weaponName.includes(k));
+        const akPath = 'assets/models/ak47.glb';
+        if (shouldLoadAk) {
+          const loader = new GLTFLoader();
+          loader.load(akPath,
+            (gltf) => {
+              try {
+                const weaponModel = gltf.scene || gltf.scenes?.[0];
+                if (!weaponModel) return;
+                weaponModel.name = 'ak47_model';
+                weaponModel.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = false; } });
+
+                // heuristic: find a right-hand bone to attach to
+                let handBone = null;
+                try {
+                  if (this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+                    handBone = this.mesh.skeleton.bones.find(b => /hand|righthand|hand_r|RightHand/i.test(b.name));
+                  }
+                } catch (e) { handBone = null; }
+
+                // remove placeholder weaponMesh if present
+                try { if (this.weaponMesh && this.weaponMesh.parent) this.weaponMesh.parent.remove(this.weaponMesh); } catch (e) {}
+
+                // adjust scale/offset so model looks roughly right in the hand
+                let modelScale = 1.0;
+                // try to compute a small scale relative to mesh bbox
+                try {
+                  const bbox = new THREE.Box3().setFromObject(weaponModel);
+                  const size = new THREE.Vector3(); bbox.getSize(size);
+                  const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
+                  // target approx 0.5m length on model -> scale factor
+                  modelScale = 0.5 / maxDim;
+                } catch (e) { modelScale = 0.01; }
+                modelScale = THREE.MathUtils.clamp(modelScale, 0.005, 0.5);
+                weaponModel.scale.setScalar(modelScale);
+
+                // default local transform tweak (tweakable later)
+                weaponModel.position.set(0.06, -0.04, 0.08);
+                weaponModel.rotation.set(-0.15, 0, 0);
+
+                if (handBone) {
+                  handBone.add(weaponModel);
+                } else if (this.mesh) {
+                  this.mesh.add(weaponModel);
+                }
+
+                this.weaponMesh = weaponModel;
+              } catch (e) { console.warn('Failed to attach ak47.glb to enemy:', e); }
+            },
+            undefined,
+            (err) => { /* ignore load errors silently */ }
+          );
+        }
+      } catch (e) { console.warn('AK attach check failed', e); }
 
       // store skeleton and bones for later manipulation
       this.skeleton = skeleton;
