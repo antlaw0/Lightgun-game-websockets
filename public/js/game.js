@@ -188,8 +188,11 @@ ws.onmessage = (ev) => {
     if (msg.type === 'controller') {
       const p = msg.payload;
       // p.x and p.y are normalized -1..1 from controller
-      ret.x = ((p.x+1)/2)*cw;
-      ret.y = ((p.y+1)/2)*ch;
+      // In FPS mode ignore controller positional updates; keep fire/reload commands
+      if (!isFPSMode) {
+        ret.x = ((p.x+1)/2)*cw;
+        ret.y = ((p.y+1)/2)*ch;
+      }
       if (retXY) retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
       if (abc) abc.textContent = `${p.alpha?.toFixed(1) ?? ''}, ${p.beta?.toFixed(1) ?? ''}, ${p.gamma?.toFixed(1) ?? ''}`;
       isFiring = !!p.fire; // just set firing state
@@ -208,6 +211,17 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
 camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
+
+// FPS mode state (toggle with Tab). When true: WASD + mouse look, reticle centered.
+let isFPSMode = false;
+const fpsState = {
+  yaw: camera.rotation.y,
+  pitch: camera.rotation.x,
+  // Increased speed for responsive FPS movement (units per second)
+  speed: 4.0,
+  mouseSensitivity: 0.0025,
+  keys: {}
+};
 
 
 const audioListener = new THREE.AudioListener();
@@ -254,6 +268,76 @@ window.addEventListener("wheel", e => {
   player.cycleWeapon(direction);
 });
 
+// Toggle FPS mode with Tab: pointer lock + mouse look. Press Tab again to exit.
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    isFPSMode = !isFPSMode;
+    if (isFPSMode) {
+      // enter FPS: center reticle and request pointer lock
+      ret.x = cw / 2; ret.y = ch / 2;
+      try { canvas.requestPointerLock(); } catch(_) {}
+      document.body.style.cursor = 'none';
+      fpsState.yaw = camera.rotation.y; fpsState.pitch = camera.rotation.x;
+    } else {
+      try { if (document.exitPointerLock) document.exitPointerLock(); } catch(_) {}
+      document.body.style.cursor = 'auto';
+    }
+  }
+});
+
+// Pointer lock change handler: if pointer lock leaves unexpectedly, disable FPS mode
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== canvas && isFPSMode) {
+    isFPSMode = false;
+    document.body.style.cursor = 'auto';
+  }
+});
+
+// Mouse look when pointer locked (FPS mode)
+document.addEventListener('mousemove', (e) => {
+  if (!isFPSMode) return;
+  if (document.pointerLockElement !== canvas) return;
+  fpsState.yaw -= e.movementX * fpsState.mouseSensitivity;
+  fpsState.pitch -= e.movementY * fpsState.mouseSensitivity;
+  // clamp pitch to avoid flipping
+  const maxPitch = Math.PI / 2 - 0.01;
+  fpsState.pitch = Math.max(-maxPitch, Math.min(maxPitch, fpsState.pitch));
+  camera.rotation.set(fpsState.pitch, fpsState.yaw, 0, 'YXZ');
+});
+
+// Key state for continuous movement in FPS mode
+document.addEventListener('keydown', (e) => {
+  // movement keys: WASD, Q (ascend), Z (descend), X (snap to ground)
+  if (e.code === 'KeyX') {
+    if (isFPSMode) camera.position.y = 1.7; // snap to ground height
+    return;
+  }
+  // When FPS enabled, intercept movement keys
+  if (isFPSMode) {
+    switch (e.code) {
+      case 'KeyW': fpsState.keys.w = true; break;
+      case 'KeyS': fpsState.keys.s = true; break;
+      case 'KeyA': fpsState.keys.a = true; break;
+      case 'KeyD': fpsState.keys.d = true; break;
+      case 'KeyQ': fpsState.keys.q = true; break; // ascend
+      case 'KeyZ': fpsState.keys.z = true; break; // descend
+    }
+  }
+});
+document.addEventListener('keyup', (e) => {
+  if (isFPSMode) {
+    switch (e.code) {
+      case 'KeyW': fpsState.keys.w = false; break;
+      case 'KeyS': fpsState.keys.s = false; break;
+      case 'KeyA': fpsState.keys.a = false; break;
+      case 'KeyD': fpsState.keys.d = false; break;
+      case 'KeyQ': fpsState.keys.q = false; break;
+      case 'KeyZ': fpsState.keys.z = false; break;
+    }
+  }
+});
+
 // =========================
 // Mouse Auto-Fire
 // =========================
@@ -292,6 +376,7 @@ window.addEventListener("keydown", (e) => {
         
 		// Movement
         document.addEventListener('keydown', (e) => {
+      if (isFPSMode) return; // don't run debug free-camera keys while FPS mode active
     switch(e.key.toLowerCase()) {
         case 'w': // forward
             camera.position.z -= camSpeed;
@@ -561,9 +646,10 @@ function spawnProjectile(origin, direction, damage = 1) {
     // MOUSE MOVEMENT
     // ------------------------------
     window.addEventListener("mousemove", (e) => {
-        lastX = (e.clientX / window.innerWidth) * 2 - 1;
-        lastY = (e.clientY / window.innerHeight) * 2 - 1;
-        sendDesktopPayload();   // keep fire state
+      if (isFPSMode) return; // ignore desktop mouse while in FPS mode
+      lastX = (e.clientX / window.innerWidth) * 2 - 1;
+      lastY = (e.clientY / window.innerHeight) * 2 - 1;
+      sendDesktopPayload();   // keep fire state
     });
 
 
@@ -1060,11 +1146,12 @@ let ducking = false;
 let zoomed = false;
 document.addEventListener('keydown', (e) => {
   if(e.key==='Shift') ducking=true;
-  if(e.key==='z' || e.key==='Z') zoomed=true;
+  // Only treat Z as zoom when NOT in FPS mode
+  if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=true;
 });
 document.addEventListener('keyup', (e) => {
   if(e.key==='Shift') ducking=false;
-  if(e.key==='z' || e.key==='Z') zoomed=false;
+  if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=false;
 });
 
 // ------------------ Reticle smoothing & render loop ------------------
@@ -1097,6 +1184,27 @@ function animate(nowMs) {
     } catch (e) {}
   } catch (e) {}
 // HUD.update moved to end of loop so camera rails/scene updates happen first
+// FPS movement: apply continuous movement when enabled
+  if (isFPSMode) {
+    const moveDist = fpsState.speed * (deltaMs / 1000);
+    // Use camera world forward projected to XZ plane for FPS-style movement
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0; forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+    if (fpsState.keys.w) camera.position.addScaledVector(forward, moveDist);
+    if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveDist);
+    if (fpsState.keys.a) camera.position.addScaledVector(right, -moveDist);
+    if (fpsState.keys.d) camera.position.addScaledVector(right, moveDist);
+    // Q ascends, Z descends (keep these consistent with original mapping)
+    if (fpsState.keys.q) camera.position.y += moveDist; // ascend
+    if (fpsState.keys.z) camera.position.y -= moveDist; // descend
+    // Keep camera within reasonable Y (optional clamp)
+    if (camera.position.y < -50) camera.position.y = -50;
+    if (camera.position.y > 200) camera.position.y = 200;
+    // ensure reticle stays centered while in FPS
+    ret.x = cw / 2; ret.y = ch / 2;
+  }
 
     // **Sync player position with camera**
     player.position.copy(camera.position);
@@ -1123,7 +1231,8 @@ function animate(nowMs) {
   try { player.updateRecoil && player.updateRecoil(deltaMs); } catch(_) {}
 
   // Ducking & zoom
-  camera.position.y = 1.7 - (ducking ? 0.8 : 0);
+  // Only enforce default ground height when NOT in FPS mode; in FPS mode vertical movement is controlled by keys
+  if (!isFPSMode) camera.position.y = 1.7 - (ducking ? 0.8 : 0);
   camera.fov = zoomed ? 30 : 60;
   camera.updateProjectionMatrix();
 
