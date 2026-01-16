@@ -247,6 +247,14 @@ this._nextTauntTime = null;
       instanceConfig.position.z || 0
     );
 
+    // Single source-of-truth for ground height used by all enemies.
+    // Priority: explicit instanceConfig.groundY -> sceneLoader.groundY -> 0
+    this._groundY = (typeof instanceConfig.groundY === 'number')
+      ? instanceConfig.groundY
+      : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+        ? window.sceneLoader.groundY
+        : 0;
+
     this.facing = instanceConfig.facing || 0;
     this.coverIndex = instanceConfig.coverIndex ?? null;
 this.coverObjectId = instanceConfig.coverObject || null;
@@ -269,8 +277,9 @@ this.coverObjectId = instanceConfig.coverObject || null;
     if (mergedDef.displayName === "Grunt Soldier") {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
-      // place mesh at given position
+      // place mesh at given position (but snap Y to global ground)
       this.mesh.position.copy(this.position);
+      try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
       this.basePosition = this.mesh.position.clone();
       this.baseRotationY = this.facing;
       this._lastBasePosition = this.basePosition.clone();
@@ -614,9 +623,13 @@ this.coverObjectId = instanceConfig.coverObject || null;
               }
             });
           } catch (e) { console.warn('Enemy model diagnostic failed', e); }
-          // preserve transforms
-          try { this.mesh.position.copy(this.basePosition || old.position); } catch(_){}
-          try { this.mesh.rotation.y = this.baseRotationY; } catch(_){}
+          // preserve transforms (ensure Y aligns to global ground truth)
+          try {
+            const preservePos = (this.basePosition || old.position || new THREE.Vector3()).clone();
+            if (typeof this._groundY === 'number') preservePos.y = this._groundY;
+            this.mesh.position.copy(preservePos);
+          } catch(_){}
+          try { this.mesh.rotation.y = this.baseRotationY; } catch(_){ }
           // Apply model scaling: prefer explicit `modelScale` on the enemy definition,
           // otherwise auto-scale the glTF to a reasonable target height so it matches
           // the previous procedural mannequin size and doesn't appear gigantic.
@@ -678,10 +691,10 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
                 let minY = box2.min.y;
                 if (!isFinite(minY)) minY = 0;
-                // position.y is enemy base (e.g., 0.9 in scene defs)
-                const targetY = (this.basePosition?.y ?? old.position?.y ?? 0);
-                // shift the mesh vertically so its bottom (minY) matches targetY
-                let dy = targetY - minY;
+                // Use single ground truth for alignment
+                const groundY = (typeof this._groundY === 'number') ? this._groundY : (this.basePosition?.y ?? old.position?.y ?? 0);
+                // shift the mesh vertically so its bottom (minY) matches groundY
+                let dy = groundY - minY;
                 // clamp excessive shifts (likely from malformed bbox) to avoid moving models off-screen
                 if (!isFinite(dy) || Math.abs(dy) > 10) {
                   console.warn(`Enemy ${this.id} alignment dy=${dy} suspicious — clamping to within +/-10`);
@@ -689,6 +702,11 @@ this.coverObjectId = instanceConfig.coverObject || null;
                 }
                 this.mesh.position.y = (this.mesh.position.y || 0) + dy;
                 this.mesh.updateMatrixWorld(true);
+                // ensure basePosition Y aligns to ground truth after grounding
+                try {
+                  if (!this.basePosition) this.basePosition = this.mesh.position.clone();
+                  this.basePosition.y = groundY;
+                } catch (e) {}
                 // Ensure model is visible and not frustum-culled incorrectly
                 this.mesh.visible = true;
                 this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; } });
@@ -846,6 +864,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
           } catch (e) {}
           this.mesh.userData.enemyId = this.id;
           this.mesh.name = `enemy_${this.id}`;
+          try { if (this.position) this.mesh.position.copy(this.position); if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
           this.sceneGroup.add(this.mesh);
           try {
             this.sceneGroup.castShadow = true;
@@ -1308,6 +1327,25 @@ this.coverObjectId = instanceConfig.coverObject || null;
             const handBone = (this.mesh.skeleton && this.mesh.skeleton.bones) ? this.mesh.skeleton.bones.find(b => b.name === 'hand_r') : this.mesh.getObjectByName('hand_r');
             if (handBone) handBone.add(this.weaponMesh); else this.mesh.add(this.weaponMesh);
           }
+          // Ensure the loaded model is grounded to the enemy base position to avoid floating/T-poses
+          try {
+            const groundY = (typeof this._groundY === 'number') ? this._groundY : ((this.basePosition && typeof this.basePosition.y === 'number') ? this.basePosition.y : 0);
+            // Force mesh world Y to equal groundY (preserve x/z)
+            if (this.mesh) {
+              this.mesh.position.y = groundY;
+              this.mesh.updateMatrixWorld(true);
+            }
+            // ensure basePosition reflects groundY
+            try { if (!this.basePosition) this.basePosition = this.mesh.position.clone(); this.basePosition.y = groundY; } catch(_){}
+          } catch (e) { }
+          // Ensure basePosition and related targets are initialized for loaded models
+          try {
+            if (!this.basePosition) this.basePosition = this.mesh.position.clone();
+            if (this.baseRotationY === undefined || this.baseRotationY === null) this.baseRotationY = this.mesh.rotation.y || 0;
+            if (!this._targetPosition) this._targetPosition = this.basePosition.clone();
+            if (!this._lastMeshPosition) this._lastMeshPosition = this.mesh.position.clone();
+            if (!this._lastBasePosition) this._lastBasePosition = this.basePosition.clone();
+          } catch (e) {}
         }).catch(e => { console.warn('Failed to load character glTF', e); });
       }
 
@@ -1320,6 +1358,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
       // place mesh at given position
       this.mesh.position.copy(this.position);
+      try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
       this.basePosition = this.mesh.position.clone(); // used for lerping back
       this.baseRotationY = this.facing;
       this._lastBasePosition = this.basePosition.clone();
@@ -1739,9 +1778,11 @@ _updatePath(deltaMs) {
       case "z": path.currentOffset.z += frameDelta; break;
     }
 
-    // Apply authoritative position
+    // Apply authoritative position (ensure Y remains at ground level)
     this.basePosition.copy(path.origin).add(path.currentOffset);
+    if (typeof this._groundY === 'number') this.basePosition.y = this._groundY;
     this._targetPosition.copy(this.basePosition);
+    if (typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
 
     if (path.stepElapsedMs >= step.durationMs) {
       this._advancePathStep();
@@ -1771,15 +1812,16 @@ _initPathBehavior(params) {
     stepIndex: 0,
     stepElapsedMs: 0,
 
-    // Path origin is the enemy's starting base position
-    origin: this.basePosition.clone(),
+    // Path origin is the enemy's starting base position (Y snapped to ground)
+    origin: (() => { const o = this.basePosition.clone(); if (typeof this._groundY === 'number') o.y = this._groundY; return o; })(),
 
     // Accumulated offset from origin
     currentOffset: new THREE.Vector3()
   };
 
-  // Ensure animation targets exist
+  // Ensure animation targets exist (Y snapped to ground)
   this._targetPosition = this.basePosition.clone();
+  if (typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
   this._targetOffset = new THREE.Vector3(0, 0, 0);
 }
 
@@ -1815,6 +1857,20 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
     this._rushTarget = new THREE.Vector3();
   } // closing rushTarget init
 
+  // Ensure basePosition/targetPosition exist to avoid calling .copy on undefined
+  if (!this.basePosition) {
+    try { this.basePosition = this.mesh.position.clone(); } catch (e) { this.basePosition = new THREE.Vector3(); }
+  }
+  if (!this._targetPosition) {
+    try { this._targetPosition = this.basePosition.clone(); } catch (e) { this._targetPosition = new THREE.Vector3(); }
+  }
+
+  // Ensure base Y is locked to ground truth so distance calculations and movement stay horizontal
+  if (typeof this._groundY === 'number') {
+    try { this.basePosition.y = this._groundY; } catch (e) {}
+    try { this._targetPosition.y = this._groundY; } catch (e) {}
+  }
+
   // -------------------------------------------------
   // Parameters
   // -------------------------------------------------
@@ -1828,10 +1884,10 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
 
   const deltaSeconds = deltaMs / 1000;
 
-  // Direction to player
-  const dirToPlayer = this._rushTarget
-    .copy(player.position)
-    .sub(this.basePosition);
+  // Direction to player (use flattened player Y to ground to avoid vertical offsets)
+  const playerFlat = player.position.clone();
+  if (typeof this._groundY === 'number') playerFlat.y = this._groundY;
+  const dirToPlayer = this._rushTarget.copy(playerFlat).sub(this.basePosition);
 
   const distanceToPlayer = dirToPlayer.length();
 
@@ -1852,10 +1908,14 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
       .add(side)
       .normalize()
       .multiplyScalar(p.approachSpeed * deltaSeconds);
+    // keep movement strictly horizontal
+    moveVector.y = 0;
 
-    // Advance enemy
+    // Advance enemy (keep base Y locked to ground)
     this.basePosition.add(moveVector);
+    if (typeof this._groundY === 'number') this.basePosition.y = this._groundY;
     this._targetPosition.copy(this.basePosition);
+    if (typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
   }
 
   // -------------------------------------------------
@@ -2188,8 +2248,13 @@ if (this._isFullyPoppedTarget &&
     // smoothing factor scaled by deltaMs to look consistent across framerates
     const t = Math.min(1, deltaMs / 120); // adapt speed; tweak as needed
 
-    // position: basePosition + offset
-    const desiredPos = this._targetPosition.clone().add(this._targetOffset);
+    // position: basePosition + offset (lock Y to ground + offset)
+    const desiredPos = this._targetPosition.clone();
+    // ensure desiredPos.y is computed from global ground plus any visual offset
+    const groundY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y;
+    desiredPos.y = groundY + (this._targetOffset?.y || 0);
+    desiredPos.x += (this._targetOffset?.x || 0);
+    desiredPos.z += (this._targetOffset?.z || 0);
     this.mesh.position.lerp(desiredPos, t);
 
     // Apply knockback offset on top of smooth pose

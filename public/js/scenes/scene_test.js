@@ -144,6 +144,32 @@ export const scene_test = {
       // apparel temporarily disabled (using colorization instead)
       // apparel: ["pants","tshirt"]
     }
+    ,
+    {
+      id: "melee_exo",
+      type: "Grunt",
+      hp: 60,
+      // use the exo_red model like other exo enemies
+      modelUrl: "assets/models/exo_red.fbx",
+      // prefer the exo-specific walk clip for correct bone mapping (place this file in animations)
+      animationUrls: {
+        walk: "assets/animations/walk_pistol.fbx"
+      },
+      // start farther away so it can slowly approach the player/camera
+      position: { x: 0, y: 0.9, z: -12 },
+      behavior: {
+        pattern: "meleeRush",
+        params: {
+          approachSpeed: 0.9,
+          meleeRange: 1.6,
+          sideOffset: 0.2,
+          attackCooldownMs: 900
+        }
+      },
+      sprite: "assets/sprites/grunt.png",
+      hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
+      deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"]
+    }
   ],
 
   objective: {
