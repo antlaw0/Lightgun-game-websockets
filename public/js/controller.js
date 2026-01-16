@@ -1,4 +1,3 @@
-// public/js/controller.js
 // Phone/controller side. Captures deviceorientation and sends normalized x/y via WebSocket.
 // Buttons: enable orientation (iOS permission), calibrate, fire, reload
 // Debug div shows sent values, ws status, and diagnostic numbers.
@@ -13,13 +12,16 @@
   const reloadBtn = document.getElementById('reloadBtn');
   const debug = document.getElementById('debug');
 
-  const fireSound = new Audio('sounds/fire.ogg');
-  const reloadSound = new Audio('sounds/reload.ogg');
+  
+  let reloadSound = new Audio('sounds/reload.ogg');
+  let lastOrientation = { alpha:0, beta:0, gamma:0 };
+  let curX = 0, curY = 0;
 
   // Choose ws:// for HTTP or wss:// for HTTPS
-  const WS_URL = window.location.protocol === 'https:' 
-    ? `wss://${window.location.hostname}:8080`
-    : `ws://${window.location.hostname}:8080`;
+  const WS_URL =
+  (window.location.protocol === 'https:' ? 'wss://' : 'ws://') +
+  window.location.host;
+
   console.log('Controller WS URL:', WS_URL);
 
   let ws = null;
@@ -36,6 +38,14 @@
       try {
         const msg = JSON.parse(ev.data);
         console.log('controller got ws message', msg);
+        if (msg.type === 'game' && msg.payload && msg.payload.currentWeapon) {
+          const cw = msg.payload.currentWeapon;
+          try {
+            if (cw.fireSound) fireSound = new Audio(cw.fireSound);
+            if (cw.reloadSound) reloadSound = new Audio(cw.reloadSound);
+            console.log('Controller updated weapon sounds', cw.fireSound, cw.reloadSound);
+          } catch (e) { console.warn('Failed to set controller sounds', e); }
+        }
       } catch (e) {
         console.warn('controller ws onmessage parse', e);
       }
@@ -100,6 +110,10 @@
       payload.reload !== lastSend.reload
     );
 
+    // update cached orientation/position
+    curX = nx; curY = ny;
+    lastOrientation = { alpha, beta, gamma };
+
     if (changed && ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'controller', payload }));
       lastSend = { ...payload };
@@ -107,6 +121,24 @@
       lastSend.fire = false;
       lastSend.reload = false;
       console.log('controller sent', payload);
+    }
+  }
+
+  function sendControllerNow(overrides = {}) {
+    const payload = {
+      x: curX,
+      y: curY,
+      fire: false,
+      reload: false,
+      calibrate: false,
+      alpha: lastOrientation.alpha,
+      beta: lastOrientation.beta,
+      gamma: lastOrientation.gamma,
+      ...overrides
+    };
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'controller', payload }));
+      console.log('controller immediate sent', payload);
     }
   }
 
@@ -150,15 +182,15 @@
         acc.alpha += s.alpha; acc.beta += s.beta; acc.gamma += s.gamma; return acc;
       }, { alpha:0, beta:0, gamma:0 });
 
-      baseline.alpha = sum.alpha / samples.length;
-      baseline.beta  = sum.beta  / samples.length;
-      baseline.gamma = sum.gamma / samples.length;
-      baseline.set = true;
+        baseline.alpha = sum.alpha / samples.length;
+        baseline.beta  = sum.beta  / samples.length;
+        baseline.gamma = sum.gamma / samples.length;
+        baseline.set = true;
 
       appendDebug(`Calibration complete: a=${baseline.alpha.toFixed(1)} b=${baseline.beta.toFixed(1)} g=${baseline.gamma.toFixed(1)}`);
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "controller", payload: { x:0, y:0, fire:false, reload:false, calibrate:true, alpha:baseline.alpha, beta:baseline.beta, gamma:baseline.gamma } }));
+        sendControllerNow({ x:0, y:0, fire:false, reload:false, calibrate:true, alpha:baseline.alpha, beta:baseline.beta, gamma:baseline.gamma });
       }
     }
 
@@ -168,20 +200,55 @@
   });
 
   // Fire button
-  fireBtn.addEventListener('touchstart', (e) => {
+  // Fire button: start firing on touchstart, stop on touchend
+let fireInterval = null;
+const FIRE_RATE_MS = 1; // adjust to desired RPM
+
+fireBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    const fireSound = new Audio('sounds/fire.ogg');
-  fireSound.play();
-	lastSend.fire = true;
-  });
+    if (fireInterval) return; // already firing
+    triggerFire(); // immediate first shot
+    fireInterval = setInterval(triggerFire, FIRE_RATE_MS);
+});
+
+fireBtn.addEventListener('touchend', stopFiring);
+fireBtn.addEventListener('touchcancel', stopFiring);
+fireBtn.addEventListener('touchleave', stopFiring);
+
+function stopFiring() {
+    if (fireInterval) {
+        clearInterval(fireInterval);
+        fireInterval = null;
+    }
+}
+
+function triggerFire() {
+    lastSend.fire = true;
+    sendControllerNow({ fire: true });
+
+    // optional: play sound each shot
+    try {    let fireSound = new Audio('sounds/fire.ogg');
+; fireSound.play().catch(()=>{}); } catch(_) {}
+
+    // reset fire after sending
+    lastSend.fire = false;
+}
+  
+  // Support mouse for debugging in browser
+  fireBtn.addEventListener('mousedown', (e) => { e.preventDefault(); try { fireSound.currentTime = 0; fireSound.play().catch(()=>{}); } catch(_){}; lastSend.fire = true; sendControllerNow({ fire:true }); });
+  fireBtn.addEventListener('mouseup', (e) => { e.preventDefault(); lastSend.fire = false; sendControllerNow({ fire:false }); });
 
   // Reload button
   reloadBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    reloadSound.currentTime = 0;
-    reloadSound.play().catch(()=>{});
+    try { reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(_){}
     lastSend.reload = true;
+    sendControllerNow({ reload: true });
+    // send a quick reset so UI doesn't remain in reloaded state
+    setTimeout(() => sendControllerNow({ reload: false }), 50);
   });
+
+  reloadBtn.addEventListener('mousedown', (e) => { e.preventDefault(); try { reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(_){}; sendControllerNow({ reload:true }); setTimeout(()=>sendControllerNow({ reload:false }), 50); });
 
   appendDebug('Controller script loaded. Click "Enable Orientation" to start.');
 })();

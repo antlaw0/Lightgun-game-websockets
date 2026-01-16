@@ -195,7 +195,21 @@ ws.onmessage = (ev) => {
       }
       if (retXY) retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
       if (abc) abc.textContent = `${p.alpha?.toFixed(1) ?? ''}, ${p.beta?.toFixed(1) ?? ''}, ${p.gamma?.toFixed(1) ?? ''}`;
-      isFiring = !!p.fire; // just set firing state
+      // Handle firing with edge detection so semi-auto fires once per press
+      const pFire = !!p.fire;
+      const w = player.currentWeapon;
+      if (pFire && !window._lastControllerFire) {
+        // rising edge: single-shot for semi-auto, start continuous for auto
+        if (w && w.fireMode === 'semi-auto') {
+          triggerFire();
+        } else {
+          isFiring = true;
+        }
+      } else if (!pFire && window._lastControllerFire) {
+        // falling edge: stop auto fire
+        isFiring = false;
+      }
+      window._lastControllerFire = pFire;
 
       if (p.reload) triggerReload();
     }
@@ -203,6 +217,30 @@ ws.onmessage = (ev) => {
     console.warn("ws message parse failed", e);
   }
 };
+
+// Send current weapon info to controller so it can play weapon sounds locally
+function sendWeaponInfo() {
+  try {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const w = player.currentWeapon;
+    if (!w) return;
+    const payload = {
+      currentWeapon: {
+        id: w.id,
+        name: w.name,
+        fireSound: w.fireSound,
+        reloadSound: w.reloadSound,
+        fireMode: w.fireMode
+      }
+    };
+    ws.send(JSON.stringify({ type: 'game', payload }));
+    console.log('Sent weapon info to controller', payload);
+  } catch (e) { console.warn('sendWeaponInfo failed', e); }
+}
+
+// Send initial weapon info on connect + when player's ammo/weapon changes
+ws.addEventListener('open', () => { setTimeout(sendWeaponInfo, 200); });
+player.addEventListener && player.addEventListener('ammoChanged', sendWeaponInfo);
 
 // ------------------ Three.js Setup ------------------
 const scene = new THREE.Scene();
