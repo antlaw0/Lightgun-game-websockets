@@ -149,11 +149,11 @@ export const scene_test = {
       id: "melee_exo",
       type: "Grunt",
       hp: 60,
-      // use the exo_red model like other exo enemies
-      modelUrl: "assets/models/exo_red.fbx",
-      // prefer the exo-specific walk clip for correct bone mapping (place this file in animations)
+      // use the brute model for this melee enemy (place brute.fbx in assets/models)
+      modelUrl: "assets/models/brute.fbx",
+      // use the brute-specific walk animation (place brute_walk.fbx in assets/animations)
       animationUrls: {
-        walk: "assets/animations/walk_pistol.fbx"
+        walk: "assets/animations/brute_walk.fbx"
       },
       // start farther away so it can slowly approach the player/camera
       position: { x: 0, y: 0.9, z: -12 },

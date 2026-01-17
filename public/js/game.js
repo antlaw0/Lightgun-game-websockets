@@ -40,6 +40,9 @@ export const player = new Player({
   currentWeaponIndex: 0
 });
 
+// Expose for debugging / cross-module access
+window.player = player;
+
 
 // Example usage:
 setTimeout(() => player.takeDamage(30), 2000);
@@ -399,9 +402,21 @@ window.addEventListener("mouseleave", () => {
 });
 
 window.addEventListener("keydown", e => {
-  if (e.code === "KeyV") { // or MouseButton / F key
-    //console.log("Key pressed for melee attack");
-	player.meleeAttack();
+  const code = e.code || '';
+  const key = e.key || '';
+  if (code === 'KeyV' || key === 'v' || key === 'V') {
+    console.log('KeyV pressed -> melee');
+    try {
+      if (typeof player !== 'undefined' && player && typeof player.meleeAttack === 'function') {
+        player.meleeAttack();
+      } else if (window.player && typeof window.player.meleeAttack === 'function') {
+        window.player.meleeAttack();
+      } else {
+        console.warn('meleeAttack not available on player');
+      }
+    } catch (err) {
+      console.error('meleeAttack call failed', err);
+    }
   }
 });
 

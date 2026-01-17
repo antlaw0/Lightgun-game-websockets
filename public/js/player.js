@@ -138,17 +138,48 @@ meleeAttack() {
         console.log("No enemies available to hit");
     }
 
-    for (const enemy of enemies) {
+      console.log(`Melee origin=${origin.x.toFixed(2)},${origin.y.toFixed(2)},${origin.z.toFixed(2)} hitPos=${hitPos.x.toFixed(2)},${hitPos.y.toFixed(2)},${hitPos.z.toFixed(2)} enemies=${enemies.length}`);
+      for (const enemy of enemies) {
         if (!enemy.mesh || enemy._isDead) continue;
-        const dist = enemy.mesh.position.distanceTo(hitPos);
-        if (dist > radius) continue;
+        // Use world position to account for parent transforms
+        const enemyPos = new THREE.Vector3();
+        try {
+          enemy.mesh.getWorldPosition(enemyPos);
+        } catch (_) {
+          enemyPos.copy(enemy.mesh.position || new THREE.Vector3());
+        }
 
-        enemy.takeDamage(damage, "melee");
-        const dir = enemy.mesh.position.clone().sub(origin).normalize();
+        // Compute distance from enemy to the line segment (capsule) from origin->hitPos
+        const segVec = hitPos.clone().sub(origin); // vector from origin to hitPos
+        const segLenSq = segVec.lengthSq() || 1;
+        const toEnemy = enemyPos.clone().sub(origin);
+        let t = segVec.dot(toEnemy) / segLenSq; // projection factor along segment
+        t = Math.max(0, Math.min(1, t));
+        const closest = origin.clone().add(segVec.clone().multiplyScalar(t));
+
+        // 3D distance (for diagnostics)
+        const dist3D = enemyPos.distanceTo(closest);
+        // Horizontal (XZ) distance: ignore vertical offset so camera/player height doesn't prevent hits
+        const dx = enemyPos.x - closest.x;
+        const dz = enemyPos.z - closest.z;
+        const distXZ = Math.hypot(dx, dz);
+
+        console.log(`  enemy=${enemy.id || enemy.name || 'unknown'} pos=${enemyPos.x.toFixed(2)},${enemyPos.y.toFixed(2)},${enemyPos.z.toFixed(2)} closest=${closest.x.toFixed(2)},${closest.y.toFixed(2)},${closest.z.toFixed(2)} dist3D=${dist3D.toFixed(2)} distXZ=${distXZ.toFixed(2)}`);
+
+        if (distXZ > radius) continue;
+
+        // Apply damage and knockback
+        try {
+          enemy.takeDamage(damage, "melee");
+        } catch (err) {
+          console.warn("Error calling takeDamage on enemy:", err);
+        }
+        const dir = enemyPos.clone().sub(origin).normalize();
+        if (!enemy._knockback) enemy._knockback = new THREE.Vector3();
         enemy._knockback.add(dir.multiplyScalar(knockbackForce));
         hitSomething = true;
-        console.log(`Hit enemy: ${enemy.name || enemy.id || "unknown"}, dist=${dist.toFixed(2)}`);
-    }
+        console.log(`Hit enemy: ${enemy.name || enemy.id || "unknown"}, horizDist=${distXZ.toFixed(2)}, 3Ddist=${dist3D.toFixed(2)}`);
+      }
 
     if (hitSomething) {
         this._lastMeleeMs = nowMs;
