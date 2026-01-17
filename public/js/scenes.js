@@ -161,4 +161,19 @@ export const ENEMY_DEFS = {
     accuracy: 0.65,
     reactionTimeMs: 350
   }
+  ,
+  Drone: {
+    displayName: "Drone",
+    sprite: "assets/sprites/drone.png",
+    hp: 30,
+    modelUrl: "assets/models/drone.glb",
+    // Drones have no skeletal animations by default
+    animationUrls: {},
+    // Use pistol-like weapon
+    weapon: "pistol",
+    hitSounds: [],
+    deathSounds: [],
+    accuracy: 0.6,
+    reactionTimeMs: 400
+  }
 };

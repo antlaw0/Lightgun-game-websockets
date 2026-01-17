@@ -446,7 +446,11 @@ if (pdef.type === "prefab" && pdef.prefab) {
     enemyDefs.forEach((edef) => {
       if (!edef.type) return;
       const def = ENEMY_DEFS[edef.type];
-      if (!def) return;
+      // Diagnostic: log enemy entries and whether a type definition exists
+      try {
+        console.log(`SceneLoader: enemy entry id='${edef.id}' type='${edef.type}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
+      } catch (e) { /* ignore logging errors */ }
+      if (!def) { console.warn(`SceneLoader: unknown enemy type '${edef.type}' for id='${edef.id}'`); return; }
 
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;

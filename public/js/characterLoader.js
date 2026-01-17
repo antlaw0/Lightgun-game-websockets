@@ -18,6 +18,9 @@ export async function loadCharacter(opts) {
 
   if (!url) return Promise.reject(new Error('characterLoader.loadCharacter: missing url'));
 
+  const DRONE_DEBUG = /drone\.glb$/i.test(String(url));
+  try { if (DRONE_DEBUG) console.log(`[characterLoader] loadCharacter called for url='${url}' autoPlay=${autoPlay}`); } catch(e) {}
+
   return new Promise((resolve, reject) => {
     const isFBX = /\.fbx$/i.test(url);
 
@@ -26,14 +29,14 @@ export async function loadCharacter(opts) {
     if (isFBX) {
       fbxLoader.load(url, fbx => {
         try {
-          console.log(`✅ FBX loaded successfully: ${url}`);
+          if (DRONE_DEBUG) console.log(`✅ FBX loaded successfully: ${url}`);
           handleLoaded({ scene: fbx, animations: Array.isArray(fbx.animations) ? fbx.animations : [] });
         } catch (e) { onError(e); }
       }, undefined, onError);
     } else {
       gltfLoader.load(url, gltf => {
         try {
-          console.log(`✅ GLB loaded successfully: ${url}`);
+          if (DRONE_DEBUG) console.log(`✅ GLB loaded successfully: ${url}`);
           handleLoaded(gltf);
         } catch (e) { onError(e); }
       }, undefined, onError);
@@ -42,13 +45,21 @@ export async function loadCharacter(opts) {
     function handleLoaded(gltf) {
       try {
         const model = (gltf.scene) ? gltf.scene : new THREE.Group();
+        if (DRONE_DEBUG) {
+          try {
+            const pj = gltf.parser && gltf.parser.json ? gltf.parser.json : null;
+            try { console.log('[characterLoader] gltf.json.materials =', pj && pj.materials ? JSON.stringify(pj.materials, null, 2) : null); } catch(e){ console.log('[characterLoader] gltf.json.materials (raw) =', pj && pj.materials ? pj.materials : null); }
+            try { console.log('[characterLoader] gltf.json.textures =', pj && pj.textures ? JSON.stringify(pj.textures, null, 2) : null); } catch(e){ console.log('[characterLoader] gltf.json.textures (raw) =', pj && pj.textures ? pj.textures : null); }
+            try { console.log('[characterLoader] gltf.json.images =', pj && pj.images ? JSON.stringify(pj.images, null, 2) : null); } catch(e){ console.log('[characterLoader] gltf.json.images (raw) =', pj && pj.images ? pj.images : null); }
+          } catch (e) { console.log('[characterLoader] failed to log gltf.json materials/textures/images', e); }
+        }
 
         // Apply uniform scale if explicitly provided, otherwise auto-scale to targetHeight
         try {
           const desiredHeight = params.targetHeight ?? 1.7;
           if (typeof params.scale === 'number' && isFinite(params.scale)) {
             model.scale.setScalar(params.scale);
-            console.log(`[characterLoader] applied explicit scale=${params.scale}`);
+            if (DRONE_DEBUG) console.log(`[characterLoader] applied explicit scale=${params.scale}`);
           } else {
             model.scale.setScalar(1);
             model.updateMatrixWorld(true);
@@ -57,13 +68,13 @@ export async function loadCharacter(opts) {
             if (box && isFinite(box.min.y) && isFinite(box.max.y)) {
               const size = new THREE.Vector3(); box.getSize(size);
               const height = size.y > 0.0001 ? size.y : null;
-              if (height) {
+                if (height) {
                 const autoScale = desiredHeight / height;
                 const final = THREE.MathUtils.clamp(autoScale, 0.0001, 10);
                 model.scale.setScalar(final);
-                console.log(`[characterLoader] auto-scaled model: nativeHeight=${height.toFixed(3)} -> scale=${final.toFixed(6)}`);
+                if (DRONE_DEBUG) console.log(`[characterLoader] auto-scaled model: nativeHeight=${height.toFixed(3)} -> scale=${final.toFixed(6)}`);
               } else {
-                console.warn('[characterLoader] could not determine model height for auto-scaling; leaving scale=1');
+                if (DRONE_DEBUG) console.warn('[characterLoader] could not determine model height for auto-scaling; leaving scale=1');
               }
             } else {
               console.warn('[characterLoader] bounding box invalid for auto-scaling; leaving scale=1');
@@ -75,12 +86,12 @@ export async function loadCharacter(opts) {
         try {
           model.updateMatrixWorld(true);
           const bb = new THREE.Box3().setFromObject(model);
-          if (bb && isFinite(bb.min.y)) {
+            if (bb && isFinite(bb.min.y)) {
             const offsetY = bb.min.y;
             if (Math.abs(offsetY) > 1e-5) {
               model.position.y -= offsetY;
               model.updateMatrixWorld(true);
-              console.log(`[characterLoader] grounded model by ${offsetY.toFixed(6)} units`);
+              if (DRONE_DEBUG) console.log(`[characterLoader] grounded model by ${offsetY.toFixed(6)} units`);
             }
           }
         } catch (e) { /* non-fatal */ }
@@ -108,7 +119,7 @@ export async function loadCharacter(opts) {
                 }
               });
 
-              try { console.log('[characterLoader] bones:', Object.keys(bones)); } catch (e) {}
+              try { if (DRONE_DEBUG) console.log('[characterLoader] bones:', Object.keys(bones)); } catch (e) {}
               if (mat.alphaTest > 0 || mat.opacity < 1) mat.transparent = true;
               if (!mat.side) mat.side = THREE.DoubleSide;
               mat.needsUpdate = true;
@@ -127,7 +138,15 @@ export async function loadCharacter(opts) {
               const mats = Array.isArray(o.material) ? o.material : [o.material];
               mats.forEach((m, idx) => {
                 if (!m) return;
-                console.log(`[characterLoader] mesh='${o.name}' mat[${idx}] type=${m.type} map=${!!m.map} mapImage=${m.map?.image ? (m.map.image.width+'x'+m.map.image.height) : 'null'}`);
+                    if (DRONE_DEBUG) {
+                      try {
+                        const mapPresent = !!m.map;
+                        const mapImg = m.map?.image ? (m.map.image.width+'x'+m.map.image.height) : 'null';
+                        const colorHex = (m.color && typeof m.color.getHexString === 'function') ? ('#'+m.color.getHexString()) : String(m.color || 'n/a');
+                        const emissiveHex = (m.emissive && typeof m.emissive.getHexString === 'function') ? ('#'+m.emissive.getHexString()) : String(m.emissive || 'n/a');
+                        console.log(`[characterLoader] mesh='${o.name}' mat[${idx}] type=${m.type} map=${mapPresent} mapImage=${mapImg} color=${colorHex} emissive=${emissiveHex} metalness=${m.metalness} roughness=${m.roughness} vertexColors=${!!m.vertexColors}`);
+                      } catch(e) { console.log('[characterLoader] material log error', e); }
+                    }
               });
             } catch (e) {}
 
@@ -144,7 +163,7 @@ export async function loadCharacter(opts) {
             clips.forEach(c => {
               try {
                 const names = (c.tracks || []).map(t => t.name || t.path || '(unknown)');
-                console.log(`[characterLoader] clip='${c.name || c.uuid}' trackCount=${names.length} trackNames=${JSON.stringify(names)}`);
+                if (DRONE_DEBUG) console.log(`[characterLoader] clip='${c.name || c.uuid}' trackCount=${names.length} trackNames=${JSON.stringify(names)}`);
               } catch (e) {}
             });
           } catch (e) {}
@@ -166,7 +185,7 @@ export async function loadCharacter(opts) {
                   if (o.skeleton.bones.find(b => b && b.name === nodeName)) foundInSkeleton = true;
                 }
               });
-              console.log(`[characterLoader] track target='${nodeName}' foundByGet=${foundByGet} foundInSkeleton=${foundInSkeleton}`);
+              if (DRONE_DEBUG) console.log(`[characterLoader] track target='${nodeName}' foundByGet=${foundByGet} foundInSkeleton=${foundInSkeleton}`);
             });
           } catch (e) {}
 
@@ -181,7 +200,7 @@ export async function loadCharacter(opts) {
           } catch (e) { console.warn('[characterLoader] failed to create action for clip', clip.name, e); }
         });
 
-        try { console.log('[characterLoader] clips:', clips.map(c => c.name || c.uuid)); } catch (e) {}
+        try { if (DRONE_DEBUG) console.log('[characterLoader] clips:', clips.map(c => c.name || c.uuid)); } catch (e) {}
 
         if (autoPlay && clips.length) {
           try {

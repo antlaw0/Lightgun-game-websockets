@@ -274,6 +274,87 @@ this.coverObjectId = instanceConfig.coverObject || null;
     this._walkAction = null;
     this._runAction = null;
 
+    // If this is a Drone type, load its GLB model (no animations required)
+    if (mergedDef.displayName === 'Drone' || mergedDef.type === 'Drone' || String(instanceConfig.type || '').toLowerCase() === 'drone') {
+      try {
+        console.log(`[Enemy ${this.id}] Drone: load requested modelUrl='${mergedDef.modelUrl}'`);
+      } catch (e) {}
+      if (mergedDef.modelUrl) {
+        loadCharacter({ url: mergedDef.modelUrl, autoPlay: false }).then(res => {
+          if (!res || !res.model) return;
+          try { this.sceneGroup.remove(this.mesh); } catch(_){}
+          this.mesh = res.model;
+          this.mesh.userData.enemyId = this.id;
+          this.mesh.name = `enemy_${this.id}`;
+          try {
+            if (this.position) this.mesh.position.copy(this.position);
+            // Preserve explicit instance Y for flying entities (e.g., Drone).
+            // Only snap to ground for non-flying enemies.
+            const isDrone = (mergedDef.displayName === 'Drone' || mergedDef.type === 'Drone' || String(instanceConfig.type || '').toLowerCase() === 'drone');
+            if (!isDrone && typeof this._groundY === 'number') this.mesh.position.y = this._groundY;
+          } catch(e) {}
+          // Determine final scale and apply it (respect explicit `modelScale` or percent)
+          try {
+            const desiredHeight = 1.7;
+            const explicitScale = (mergedDef.modelScale !== undefined && mergedDef.modelScale !== null) ? Number(mergedDef.modelScale) : (instanceConfig.modelScale !== undefined ? Number(instanceConfig.modelScale) : null);
+            const explicitPercent = (mergedDef.modelScalePercent !== undefined && mergedDef.modelScalePercent !== null) ? Number(mergedDef.modelScalePercent) : (instanceConfig.modelScalePercent !== undefined ? Number(instanceConfig.modelScalePercent) : null);
+
+            // start from unit scale so measurements are consistent
+            this.mesh.scale.setScalar(1);
+            this.mesh.updateMatrixWorld(true);
+            let finalScale = 1;
+            try {
+              const box = new THREE.Box3().setFromObject(this.mesh);
+              const size = new THREE.Vector3(); box.getSize(size);
+              const height = size.y > 1e-6 ? size.y : null;
+              const autoScale = height ? (desiredHeight / height) : 1;
+
+              if (explicitScale !== null && !Number.isNaN(explicitScale)) {
+                finalScale = explicitScale;
+              } else if (explicitPercent !== null && !Number.isNaN(explicitPercent)) {
+                finalScale = autoScale * (explicitPercent / 100);
+              } else {
+                finalScale = autoScale;
+              }
+
+              finalScale = THREE.MathUtils.clamp(finalScale, 0.0001, 10);
+            } catch (e) {
+              finalScale = (explicitScale !== null && !Number.isNaN(explicitScale)) ? explicitScale : 1;
+            }
+
+            this.mesh.scale.setScalar(finalScale);
+            this.mesh.updateMatrixWorld(true);
+            // record base/target scale and lock it so later generic code won't overwrite Drone scale
+            try { this.baseScale = this.mesh.scale.clone(); this._targetScale = this.baseScale.clone(); this._scaleLocked = true; } catch(e) {}
+          } catch (e) {}
+
+          // make sure visible and not frustum culled, then add to scene
+          try { this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; } }); } catch(e) {}
+          try { this.sceneGroup.add(this.mesh); } catch(e) {}
+          // register meshes for hit tests AFTER scaling so raycasts/bboxes reflect final size
+          try { if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) { this.mesh.traverse(o => { if (o.isMesh) { if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o); o.userData.enemyId = this.id; } }); } } catch(e) {}
+          try { console.log(`[Enemy ${this.id}] Drone model attached: ${mergedDef.modelUrl}`); } catch(e) {}
+          // Log materials for each mesh in the Drone so we can inspect whether
+          // textures or vertex colors are present (helps diagnose white/flat look).
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isMesh) return;
+              try {
+                const mats = Array.isArray(o.material) ? o.material : [o.material];
+                mats.forEach((m, idx) => {
+                  if (!m) return console.log(`[Enemy ${this.id}] mesh='${o.name}' mat[${idx}] = null`);
+                  const mapPresent = !!m.map;
+                  const vc = !!(o.geometry && o.geometry.attributes && o.geometry.attributes.color);
+                  const colorHex = (m.color && typeof m.color.getHexString === 'function') ? m.color.getHexString() : 'n/a';
+                  console.log(`[Enemy ${this.id}] mesh='${o.name}' mat[${idx}] type=${m.type} map=${mapPresent} vertexColors=${vc} color=#${colorHex} metalness=${m.metalness} roughness=${m.roughness}`);
+                });
+              } catch (e) { console.log(`[Enemy ${this.id}] material inspection error`, e); }
+            });
+          } catch (e) { }
+        }).catch(err => { console.error(`[Enemy ${this.id}] Drone model load failed: ${mergedDef.modelUrl}`, err); });
+      }
+    }
+
     if (mergedDef.displayName === "Grunt Soldier") {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
@@ -489,6 +570,9 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
       // If a model URL is provided, try to load the glTF and swap in its model/clips
       if (mergedDef.modelUrl) {
+        try {
+          console.log(`[Enemy ${this.id}] requesting modelUrl='${mergedDef.modelUrl}' (instance id='${instanceConfig.id}')`);
+        } catch (e) {}
         loadCharacter({ url: mergedDef.modelUrl }).then(async res => {
           if (!res || !res.model) return;
           try { this.sceneGroup.remove(this.mesh); } catch(_){}
@@ -1033,8 +1117,10 @@ this.coverObjectId = instanceConfig.coverObject || null;
           } catch (e) { console.warn('[Enemy] material replacement failed', e); }
           // Update stored base scale so smoothing won't revert the model size
           try {
-            this.baseScale = this.mesh.scale.clone();
-            this._targetScale = this.baseScale.clone();
+            if (!this._scaleLocked) {
+              this.baseScale = this.mesh.scale.clone();
+              this._targetScale = this.baseScale.clone();
+            }
           } catch (e) {}
 
           // Final recolor pass: enforce simple cloth/skin colors using world Y thresholds.
@@ -1367,8 +1453,8 @@ this.coverObjectId = instanceConfig.coverObject || null;
 if (this.behavior.pattern === "path") {
   this._initPathBehavior(this.behavior.params || {});
 }
-    // preserve initial scale
-    this.baseScale = this.mesh.scale.clone();
+    // preserve initial scale (respect any previously-locked scale)
+    try { if (!this._scaleLocked) this.baseScale = this.mesh.scale.clone(); } catch(e) {}
 
     this.mesh.rotation.y = this.baseRotationY;
     this.mesh.userData.enemyId = this.id;
@@ -1778,11 +1864,30 @@ _updatePath(deltaMs) {
       case "z": path.currentOffset.z += frameDelta; break;
     }
 
-    // Apply authoritative position (ensure Y remains at ground level)
+    // Drone-only per-frame diagnostics to observe Y-axis changes
+    try {
+      const idStr = String(this.id || '').toLowerCase();
+      if (idStr.indexOf('drone') !== -1) {
+        try {
+          console.log(`[PATH DEBUG ${this.id}] stepIndex=${path.stepIndex} axis=${step.axis} t=${t.toFixed(3)} frameDelta=${frameDelta.toFixed(4)} currentOffset=${path.currentOffset.x.toFixed(3)},${path.currentOffset.y.toFixed(3)},${path.currentOffset.z.toFixed(3)} groundY=${this._groundY}`);
+        } catch (e) { console.log('[PATH DEBUG] formatting error', e); }
+      }
+    } catch (e) {}
+
+    // Apply authoritative position (allow vertical movement if path allows it)
     this.basePosition.copy(path.origin).add(path.currentOffset);
-    if (typeof this._groundY === 'number') this.basePosition.y = this._groundY;
+    // If vertical movement is not allowed by the path, snap Y to groundY
+    if (!path.allowVertical && typeof this._groundY === 'number') this.basePosition.y = this._groundY;
     this._targetPosition.copy(this.basePosition);
-    if (typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
+    if (!path.allowVertical && typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
+
+    // Drone-specific check: log resulting base/target Y after application
+    try {
+      const idStr2 = String(this.id || '').toLowerCase();
+      if (idStr2.indexOf('drone') !== -1) {
+        console.log(`[PATH DEBUG ${this.id}] AFTER apply baseY=${this.basePosition.y.toFixed(4)} targetY=${this._targetPosition.y.toFixed(4)} originY=${(path.origin && path.origin.y!==undefined)?path.origin.y.toFixed(4):'n/a'}`);
+      }
+    } catch (e) {}
 
     if (path.stepElapsedMs >= step.durationMs) {
       this._advancePathStep();
@@ -1805,6 +1910,9 @@ _advancePathStep() {
 _initPathBehavior(params) {
   const steps = Array.isArray(params.steps) ? params.steps : [];
 
+  // detect whether any step uses vertical movement
+  const allowVertical = steps.some(s => s && String(s.axis || '').toLowerCase() === 'y');
+
   this._path = {
     active: true,
     loop: params.loop !== false,
@@ -1812,16 +1920,23 @@ _initPathBehavior(params) {
     stepIndex: 0,
     stepElapsedMs: 0,
 
-    // Path origin is the enemy's starting base position (Y snapped to ground)
-    origin: (() => { const o = this.basePosition.clone(); if (typeof this._groundY === 'number') o.y = this._groundY; return o; })(),
+    // Path origin is the enemy's starting base position. If vertical movement
+    // is expected, preserve the original base Y; otherwise snap origin Y to ground.
+    origin: (() => {
+      const o = this.basePosition.clone();
+      if (!allowVertical && typeof this._groundY === 'number') o.y = this._groundY;
+      return o;
+    })(),
 
     // Accumulated offset from origin
-    currentOffset: new THREE.Vector3()
+    currentOffset: new THREE.Vector3(),
+    allowVertical
   };
 
   // Ensure animation targets exist (Y snapped to ground)
   this._targetPosition = this.basePosition.clone();
-  if (typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
+  // If path allows vertical movement, preserve the base Y; otherwise snap to ground
+  if (!this._path.allowVertical && typeof this._groundY === 'number') this._targetPosition.y = this._groundY;
   this._targetOffset = new THREE.Vector3(0, 0, 0);
 }
 
@@ -2248,11 +2363,17 @@ if (this._isFullyPoppedTarget &&
     // smoothing factor scaled by deltaMs to look consistent across framerates
     const t = Math.min(1, deltaMs / 120); // adapt speed; tweak as needed
 
-    // position: basePosition + offset (lock Y to ground + offset)
+    // position: basePosition + offset
     const desiredPos = this._targetPosition.clone();
-    // ensure desiredPos.y is computed from global ground plus any visual offset
-    const groundY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y;
-    desiredPos.y = groundY + (this._targetOffset?.y || 0);
+    // For Y: if the current path allows vertical movement, honor `_targetPosition.y`.
+    // Otherwise fall back to the global groundY so ground-based enemies stay clamped.
+    let finalY = this._targetPosition.y;
+    try {
+      if (!this._path || !this._path.allowVertical) {
+        finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y;
+      }
+    } catch (e) { finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y; }
+    desiredPos.y = finalY + (this._targetOffset?.y || 0);
     desiredPos.x += (this._targetOffset?.x || 0);
     desiredPos.z += (this._targetOffset?.z || 0);
     this.mesh.position.lerp(desiredPos, t);

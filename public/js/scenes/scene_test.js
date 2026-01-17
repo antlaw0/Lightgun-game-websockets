@@ -35,7 +35,7 @@ export const scene_test = {
     {
       type: "ambient",
       color: 0xffffff,
-      intensity: 0.8
+      intensity: 0.4
     }
     ,
     {
@@ -170,6 +170,38 @@ export const scene_test = {
       hitSounds: ["assets/sfx/grunt/hit1.ogg","assets/sfx/grunt/hit2.ogg"],
       deathSounds: ["assets/sfx/grunt/death1.ogg","assets/sfx/grunt/death2.ogg"]
     }
+      ,
+      {
+        id: "drone_1",
+        type: "Drone",
+        displayName: "Drone",
+        hp: 30,
+        // use the provided drone glb
+        modelUrl: "assets/models/drone.glb",
+        // small hover height and scale so it reads as a flying drone
+        modelScale: 0.3,
+        position: { x: 0, y: 4, z: -8 },
+        behavior: {
+          pattern: "path",
+          params: {
+            loop: true,
+            steps: [
+              { type: "move", axis: "y", distance: 2.2, durationMs: 1200 },
+              { type: "pause", durationMs: 400 },
+              { type: "move", axis: "x", distance: 3.0, durationMs: 2200 },
+              { type: "pause", durationMs: 600 },
+              { type: "move", axis: "x", distance: -3.0, durationMs: 2200 },
+              { type: "pause", durationMs: 600 },
+              { type: "move", axis: "y", distance: -1.2, durationMs: 1200 },
+              { type: "pause", durationMs: 800 }
+            ]
+          }
+        },
+        firePauseMs: 900,
+        weapon: "pistol",
+        hitSounds: [],
+        deathSounds: []
+      }
   ],
 
   objective: {
