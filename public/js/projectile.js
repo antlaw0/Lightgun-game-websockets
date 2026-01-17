@@ -1,5 +1,16 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 
+// Simple helper: does segment AB come within `radius` of `center`?
+function segmentIntersectsSphere(a, b, center, radius) {
+  const ab = b.clone().sub(a);
+  const abLenSq = ab.lengthSq();
+  if (abLenSq === 0) return a.distanceToSquared(center) <= (radius * radius);
+
+  const t = THREE.MathUtils.clamp(center.clone().sub(a).dot(ab) / abLenSq, 0, 1);
+  const closest = a.clone().add(ab.multiplyScalar(t));
+  return closest.distanceToSquared(center) <= (radius * radius);
+}
+
 export class Projectile {
   /**
    * type: "player" or "enemy"
@@ -16,7 +27,10 @@ export class Projectile {
     damage = 1,
     accuracy = 1.0,        // enemy accuracy: 0–1
     onHitPlayer = null,    // callback when player is hit
-    camera = null          // required for enemy projectiles
+    camera = null,         // required for enemy projectiles
+    // player hit detection tuning
+    playerHitRadius = 0.35,
+    playerHitForwardOffset = 0.15
   }) {
     this.id = id;
     this.scene = scene;
@@ -27,6 +41,8 @@ export class Projectile {
     this.damage = damage;
     this.onHitPlayer = onHitPlayer;
     this.camera = camera;
+    this.playerHitRadius = playerHitRadius;
+    this.playerHitForwardOffset = playerHitForwardOffset;
 
     // Direction (possibly modified by enemy accuracy)
     this.dir = direction.clone().normalize();
@@ -133,15 +149,30 @@ checkCollision(intersectables) {
     if (!this.camera) return;
     if (!this.onHitPlayer) return;
 
-    const playerPos = this.camera.position;
-    const dist = this.mesh.position.distanceTo(playerPos);
+    // Swept-segment (prevPosition -> current) against a sphere around the
+    // player's camera to avoid tunneling when projectiles move fast.
+    const a = this.prevPosition ? this.prevPosition.clone() : this.mesh.position.clone();
+    const b = this.mesh.position.clone();
 
-    const HIT_RADIUS = 0.3;  // tweak as needed
+    // Define sphere center slightly forward from camera so hits in front of
+    // the camera register (reduces cases where near-misses occur due to camera origin)
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+    const center = this.camera.position.clone().add(forward.multiplyScalar(this.playerHitForwardOffset));
+    const radius = this.playerHitRadius;
 
-    if (dist < HIT_RADIUS) {
-      // Enemy projectile hits the player
+    if (segmentIntersectsSphere(a, b, center, radius)) {
       this.onHitPlayer(this.damage);
       this.destroyedByHit = true;
+      return;
+    }
+
+    // Optional: small head sphere (slightly above camera) for better 'headshot' feel
+    const headCenter = center.clone().add(new THREE.Vector3(0, 0.18, 0));
+    const headRadius = Math.max(0.12, radius * 0.6);
+    if (segmentIntersectsSphere(a, b, headCenter, headRadius)) {
+      this.onHitPlayer(this.damage);
+      this.destroyedByHit = true;
+      return;
     }
   }
 

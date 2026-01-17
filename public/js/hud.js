@@ -14,6 +14,9 @@ export const HUD = {
 
     this._cameraBasePosition = camera.position.clone();
     this._cameraBaseRotation = camera.rotation.clone();
+    // Track last applied shake so we can remove it before applying new frame
+    this._lastShakeOffset = new THREE.Vector3(0, 0, 0);
+    this._lastShakeRot = { x: 0, y: 0 };
 
     // -------------------------------------------------
     // DOM references
@@ -182,6 +185,15 @@ export const HUD = {
   // =================================================
   _updateCameraShake(delta) {
   if (!this.camera) return;
+  // Remove previous frame's shake so we don't accumulate deltas
+  if (this._lastShakeOffset && (this._lastShakeOffset.lengthSq() > 0 || this._lastShakeRot.x !== 0 || this._lastShakeRot.y !== 0)) {
+    this.camera.position.sub(this._lastShakeOffset);
+    this.camera.rotation.x -= this._lastShakeRot.x;
+    this.camera.rotation.y -= this._lastShakeRot.y;
+    this._lastShakeOffset.set(0, 0, 0);
+    this._lastShakeRot.x = 0;
+    this._lastShakeRot.y = 0;
+  }
 
   this._shakeTime += delta;
 
@@ -223,9 +235,16 @@ export const HUD = {
   }
 
   // Apply as delta so it stacks with camera systems
-  this.camera.position.add(totalOffset);
-  this.camera.rotation.x += rotX;
-  this.camera.rotation.y += rotY;
+  if (totalOffset.lengthSq() !== 0 || rotX !== 0 || rotY !== 0) {
+    this.camera.position.add(totalOffset);
+    this.camera.rotation.x += rotX;
+    this.camera.rotation.y += rotY;
+    // store so next frame we can remove these deltas
+    if (!this._lastShakeOffset) this._lastShakeOffset = new THREE.Vector3();
+    this._lastShakeOffset.copy(totalOffset);
+    this._lastShakeRot.x = rotX;
+    this._lastShakeRot.y = rotY;
+  }
   }, // end _updateCameraShake(),
 
   // -------------------------------------------------

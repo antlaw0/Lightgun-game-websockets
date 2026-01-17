@@ -82,7 +82,19 @@ this.meleeCooldownMs = 600;
   takeDamage(amount) {
     window.hud.shakeCamera(0.3, 0.4);
 	this.hp = Math.max(this.hp - amount, 0);
-    this._emitHealth();
+            try {
+    const s = new Audio("assets/sfx/player/gethit1.ogg");
+    s.currentTime = 0;
+    s.play().catch(() => {
+        // optional: handle play error here
+    });
+} catch (e) {
+    // optional: handle error
+}
+
+			        
+	
+	this._emitHealth();
   }
 
   heal(amount) {

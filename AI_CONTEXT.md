@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a game I'm developing to be a lightgun arcade-style shooter. It runs via node server.js on port 8080 and serves game.html as the main game and should also launch controller.html so smart phones can connect to it as a lightgun controller using smart phone motion sensing. Uses mouse aiming and controls as backup if cannot connect to smart phone controller or if player rather use mouse and for testing purposes. Currently only setup for iPhone but plan to add Android support later. The game currently runs locally but I plan to either host the game or package into a stand-alone executable. 
+This is a game I'm developing to be a lightgun arcade-style shooter. It runs via node server.js on port 8080.   Uses mouse aiming and controls as backup if cannot connect to smart phone controller or if player rather use mouse and for testing purposes. Currently only setup for iPhone but plan to add Android support later. The game currently runs locally but I plan to either host the game or package into a stand-alone executable.run.bat sets everything up by running server.js and ngrok, gets generated ngrok URL, converts to QR code, then puts in lower right corner of game.html so iPhones can connect to local network for use as a lightgun using the phone's onboard motion sensing and websockets to communicate to game.html in order to control and aim the reticle on screen. Mouse control can be used similarly by default or in preference opposed to using the connected phone.  
 Do not make commits or pushes to github unless I explicitely tell you to in a chat message.
 
 ## The current game loop is that intro rails for the scene runs which should move the player/camera into position for the lightgun sequence. The lightgun sequence consists of the player aiming the targeting reticle to use weapons and other items in their inventory to dispatch all enemies in the scene. Once all enemies are killed, the scene's exit rail sequence starts which moves the camera/player to the spot in the current scene where the exit is to the next scene. At the end of the exit rail sequence, the next scene loads and the loop repeats until all scenes in the level are complete. 
@@ -18,6 +18,10 @@ Do not make commits or pushes to github unless I explicitely tell you to in a ch
 - scenes are defined using json data in their respective js files, for example, scene_w1_1.js and scene_w1_2.js. The first level is "Warehouse"
 - Player has melee attack for close enemies.
 - Enemies have different behavior patterns such as "pop out and shoot", "stand in the open and shoot", "move in repeating pattern", and "melee rush". Melee enemies are higher HP enemies that only use melee attacks when within range of the player.
+- can toggle between lightgun mode and FPS mode by pressing TAB key (only for debugging and testing purposes, will be disabled when shipping final game)
+- Uses 3D character models and animations from Mixamo currently. 3D models are in public/assets/models and their corresponding animations are in public/assets/animations and are labeled according to their corresponding 3D model.
+- Using 3D audio for voices and other environmental sounds.
+- Enemies have pre-defined voice sets controlled by enemyVoiceManager.js and defined in each scene file for each enemy.
 
 ##Planned features and updates
 

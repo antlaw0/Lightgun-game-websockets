@@ -1169,8 +1169,15 @@ canvas.addEventListener('mousedown', triggerFireWrapper, false);
 function updateEnemyProjectiles(dt) {
   const toRemove = [];
 
+  // tuning
+  const PLAYER_HIT_RADIUS = 0.35;
+  const PLAYER_HIT_FORWARD_OFFSET = 0.15;
+
   for (const bullet of enemyProjectiles) {
     const dir = bullet.userData.direction;
+
+    // Save previous position for swept test
+    const prevPos = bullet.position.clone();
     bullet.position.addScaledVector(dir, PROJECTILE_SPEED * (dt / 1000));
 
     // Lifetime check
@@ -1179,8 +1186,40 @@ function updateEnemyProjectiles(dt) {
       continue;
     }
 
-    // Collision with player (distance-based)
-    if (bullet.position.distanceTo(camera.position) < 0.3) {
+    // Swept-segment vs camera-sphere to avoid tunneling
+    const a = prevPos;
+    const b = bullet.position.clone();
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const center = camera.position.clone().add(forward.multiplyScalar(PLAYER_HIT_FORWARD_OFFSET));
+
+    // Closest point on segment to center
+    const ab = b.clone().sub(a);
+    const abLenSq = ab.lengthSq();
+    let hit = false;
+    if (abLenSq === 0) {
+      hit = a.distanceToSquared(center) <= (PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS);
+    } else {
+      const t = THREE.MathUtils.clamp(center.clone().sub(a).dot(ab) / abLenSq, 0, 1);
+      const closest = a.clone().add(ab.multiplyScalar(t));
+      if (closest.distanceToSquared(center) <= (PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS)) hit = true;
+    }
+
+    // head sphere
+    if (!hit) {
+      const headCenter = center.clone().add(new THREE.Vector3(0, 0.18, 0));
+      const headRadius = Math.max(0.12, PLAYER_HIT_RADIUS * 0.6);
+      const ab2 = b.clone().sub(a);
+      const ab2LenSq = ab2.lengthSq();
+      if (ab2LenSq === 0) {
+        hit = a.distanceToSquared(headCenter) <= (headRadius * headRadius);
+      } else {
+        const t2 = THREE.MathUtils.clamp(headCenter.clone().sub(a).dot(ab2) / ab2LenSq, 0, 1);
+        const closest2 = a.clone().add(ab2.multiplyScalar(t2));
+        if (closest2.distanceToSquared(headCenter) <= (headRadius * headRadius)) hit = true;
+      }
+    }
+
+    if (hit) {
       player.takeDamage(bullet.userData.damage);
       toRemove.push(bullet);
     }
