@@ -799,6 +799,7 @@ function handleFire() {
             speed: w.projectileSpeed ?? PROJECTILE_SPEED,
             size: w.projectileSize ?? 0.02,
             lifetime: w.projectileLifetime ?? PROJECTILE_LIFETIME,
+        projectileType: w.projectileType ?? "bullet",
             explosive: w.explosive ?? false,
             trail: true,
             isEnemy: false
@@ -915,13 +916,14 @@ function triggerFire() {
 
     // Spawn each projectile
     for (const dir of directions) {
-        spawnProjectileUnified(shootOrigin, dir, { damage: w.damage,
-		explosive: w.explosive,
-    explosionRadius: w.explosionRadius,
-    explosionDamage: w.explosionDamage,
-explosionSounds:  w.explosionSounds    	
-		
-		});
+      spawnProjectileUnified(shootOrigin, dir, {
+        damage: w.damage,
+        explosive: w.explosive,
+        explosionRadius: w.explosionRadius,
+        explosionDamage: w.explosionDamage,
+        explosionSounds: w.explosionSounds,
+        projectileType: w.projectileType ?? "bullet"
+      });
     }
     // Apply weapon recoil to player (visual reticle expansion + accuracy influence)
     try { player.addRecoil && player.addRecoil(w.recoil || 0); } catch(_) {}
@@ -1021,53 +1023,66 @@ function spawnProjectileUnified(origin, direction, options = {}) {
     const {
         damage = 1,
         color = 0xffff00,
-        speed = PROJECTILE_SPEED,
+    speed = PROJECTILE_SPEED,
         isEnemy = false,
         size = 0.02,
         lifetime = PROJECTILE_LIFETIME,
         explosive = false,
         trail = true
+  ,        projectileType = "bullet"
     } = options;
 
     const dir = direction.clone().normalize();
 
-    // Geometry & material
-    const geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
-    const mat = new THREE.MeshBasicMaterial({ color });
-    const bullet = new THREE.Mesh(geo, mat);
-    bullet.position.copy(origin);
+  // Geometry & material
+  let geo, mat;
+  let finalSpeed = speed;
+  if (projectileType === "laser") {
+    const radius = Math.max(0.005, size);
+    const length = 0.5;
+    geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1);
+    geo.rotateX(Math.PI / 2); // make cylinder's axis point along +Z
+    mat = new THREE.MeshBasicMaterial({ color: color ?? 0xffffff });
+    // Make lasers faster by default if caller didn't override speed
+    if (typeof options.speed === 'undefined') finalSpeed = PROJECTILE_SPEED * 4;
+  } else {
+    geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
+    mat = new THREE.MeshBasicMaterial({ color });
+  }
 
-    // Orient capsule (native +Y axis → travel direction)
-    bullet.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        dir
-    );
+  const bullet = new THREE.Mesh(geo, mat);
+  bullet.position.copy(origin);
+
+  // Orient to travel direction
+  if (projectileType === "laser") {
+    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+  } else {
+    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  }
 
     bullet.userData = {
-        direction: dir,
-        bornTime: performance.now(),
-        damage,
-        isEnemy,
-        explosive,
-        speed,
-        trail: null
+      direction: dir,
+      bornTime: performance.now(),
+      damage,
+      isEnemy,
+      explosive,
+      speed: finalSpeed,
+      trail: null,
+      projectileType
     };
 
     // Motion trail
     if (trail) {
-        const trailLength = size * 5;
-        const trailGeo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(0, -trailLength, 0) // ← correct axis
-        ]);
-        const trailMat = new THREE.LineBasicMaterial({
-            color,
-            transparent: true,
-            opacity: 0.7
-        });
-        const line = new THREE.Line(trailGeo, trailMat);
-        bullet.add(line);
-        bullet.userData.trail = line;
+      const trailLength = Math.max(0.02, size * 5);
+      let points;
+      if (projectileType === "laser") points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -trailLength)];
+      else points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -trailLength, 0)];
+
+      const trailGeo = new THREE.BufferGeometry().setFromPoints(points);
+      const trailMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+      const line = new THREE.Line(trailGeo, trailMat);
+      bullet.add(line);
+      bullet.userData.trail = line;
     }
 
     scene.add(bullet);

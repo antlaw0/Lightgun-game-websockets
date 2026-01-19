@@ -198,9 +198,14 @@ export const scene_test = {
           }
         },
         firePauseMs: 900,
-        weapon: "pistol",
-        hitSounds: [],
-        deathSounds: []
+        weapon: "laser_pistol",
+        voice:  {
+		loop:  [ "assets/sfx/drone/drone_loop.ogg" ],
+		pain:  [ "assets/sfx/drone/drone_pain1.ogg" ],	
+		taunt: [ "assets/sfx/drone/drone_taunt1.ogg" ]
+		},
+        hitSounds: ["assets/sfx/drone/drone_hit1.ogg", "assets/sfx/drone/drone_hit2.ogg" ],
+        deathSounds: ["assets/sfx/drone/drone_die1.ogg", "assets/sfx/drone/drone_die2.ogg" ]
       }
   ],
 

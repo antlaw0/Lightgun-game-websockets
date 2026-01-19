@@ -5,6 +5,13 @@ export const AMMO_DEFS = {
     startingCount: 120, // total ammo carried by default
     icon: '/assets/images/ammo/9mm.png' // optional icon for HUD
   },
+  
+  'EnergyCell': {
+    name: 'Energy Cells',
+    startingCount: 120, // total ammo carried by default
+    icon: '/assets/images/ammo/9mm.png' // optional icon for HUD
+  },
+
 
   'shotgun_shells': {
     name: 'Shotgun Shells',

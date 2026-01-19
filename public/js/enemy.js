@@ -1545,6 +1545,13 @@ if (this.coverType === "full") {
   if (this._hasEngagedPlayer) return;
   this._hasEngagedPlayer = true;
   this._playVoice("engage");
+  // Auto-start looped voice if defined (e.g., drones)
+  try {
+    const loopClips = this.voice?.loop;
+    if (loopClips && loopClips.length > 0 && window.enemyVoiceManager) {
+      window.enemyVoiceManager.request({ enemy: this, type: 'loop', clips: loopClips });
+    }
+  } catch (e) {}
 }
 
 
@@ -1647,14 +1654,17 @@ _randomTauntDelay() {
             deathAction.reset();
             deathAction.play();
 
+            const self = this;
             const onFinished = (e) => {
               try {
                 if (e.action !== deathAction) return;
-                try { this.mixer.removeEventListener('finished', onFinished); } catch(_) {}
+                try { self.mixer.removeEventListener('finished', onFinished); } catch(_) {}
+                // stop any looping voice attached to this enemy
+                try { if (window.enemyVoiceManager && typeof window.enemyVoiceManager.stopLoop === 'function') window.enemyVoiceManager.stopLoop(self); } catch(_) {}
                 // final cleanup: remove mesh and mark dead
-                try { if (this.sceneGroup && this.mesh) this.sceneGroup.remove(this.mesh); } catch(_) {}
-                this._isDead = true;
-                this._isDying = false;
+                try { if (self.sceneGroup && self.mesh) self.sceneGroup.remove(self.mesh); } catch(_) {}
+                self._isDead = true;
+                self._isDying = false;
               } catch (ex) {}
             };
 
@@ -1681,6 +1691,8 @@ _randomTauntDelay() {
       }
     } catch (e) {}
     try { if (this.sceneGroup && this.mesh) this.sceneGroup.remove(this.mesh); } catch (_) {}
+    // Stop any looped voice now that the enemy is being removed immediately
+    try { if (window.enemyVoiceManager && typeof window.enemyVoiceManager.stopLoop === 'function') window.enemyVoiceManager.stopLoop(this); } catch(_) {}
     this._isDead = true;
     this._isDying = false;
 

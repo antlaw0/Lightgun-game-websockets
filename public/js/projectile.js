@@ -24,6 +24,7 @@ export class Projectile {
     speed = 10,
     lifetime = 2000,
     type = "player",
+    projectileType = "bullet",
     damage = 1,
     accuracy = 1.0,        // enemy accuracy: 0–1
     onHitPlayer = null,    // callback when player is hit
@@ -53,14 +54,33 @@ export class Projectile {
       this._applyAccuracyError(accuracy);
     }
 
-    // Mesh
-    const geo = new THREE.SphereGeometry(0.2, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({
-      color: type === "enemy" ? 0xffff00 : 0xff0000
-    });
+    // Mesh: support different visual types (bullet, laser, rocket, ...)
+    this.projectileType = projectileType || "bullet";
+    let geo, mat;
+    if (this.projectileType === "laser") {
+      // Thin cylinder, length 0.5, small radius
+      const radius = 0.01;
+      const length = 0.5;
+      geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1);
+      // Orient cylinder's axis to Z so we can align it to travel dir via quaternion
+      geo.rotateX(Math.PI / 2);
+      mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    } else {
+      // default: small sphere for bullets/fallback
+      geo = new THREE.SphereGeometry(0.12, 8, 8);
+      mat = new THREE.MeshBasicMaterial({ color: type === "enemy" ? 0xffff00 : 0xff0000 });
+    }
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.copy(startPos);
     this.mesh.userData.projectileId = id;
+
+    // Align visual to travel direction for lasers and elongated projectiles
+    try {
+      if (this.projectileType === "laser") {
+        const forward = new THREE.Vector3(0, 0, 1);
+        this.mesh.quaternion.setFromUnitVectors(forward, this.dir.clone().normalize());
+      }
+    } catch (e) {}
 
     scene.add(this.mesh);
   }

@@ -68,7 +68,29 @@ export const WEAPON_DEFS = {
     clipSize: 12,
     totalAmmo: 60
   }),
+  laser_pistol: baseWeapon({
+    name: "Laser Pistol",
+    fireSound: "assets/sfx/weapons/laser_pistol.ogg",
+    reloadSound: "assets/sfx/weapons/pistol_reload.ogg",
+    reloadTime: 1200,
 
+    fireMode: "semi-auto",
+    rateOfFire: 250,
+    accuracy: 0.3,
+    recoil: 0,
+    projectileSpread:  0,
+    damage: 20,
+    projectilesPerShot: 1,
+
+    projectileType: "laser",
+    ammoType: "EnergyCell",
+
+    explosive: false,
+
+    weaponIcon: "assets/images/weapons/pistol.png",
+    clipSize: 60,
+    totalAmmo: 600
+  }),
   shotgun: baseWeapon({
     name: "Shotgun",
     fireSound: "assets/sfx/weapons/shotgun_fire.ogg",

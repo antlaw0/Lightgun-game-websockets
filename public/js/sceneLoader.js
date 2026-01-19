@@ -717,7 +717,18 @@ _createRoom() {
   // -----------------------------
   // Projectiles (unchanged)
   // -----------------------------
-  spawnProjectile(startPos, targetPos, speed = 1) {
+  spawnProjectile(startPos, targetPos, opts = {}) {
+    // opts may be a number (speed) for backward compatibility, or an object
+    let speed = 1;
+    let projectileType = "bullet";
+    let lifetime = undefined;
+    if (typeof opts === 'number') speed = opts;
+    else {
+      speed = opts.speed ?? 1;
+      projectileType = opts.projectileType ?? "bullet";
+      lifetime = opts.lifetime;
+    }
+
     const id = "proj_" + (this.nextProjectileId++);
     const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
 
@@ -726,7 +737,9 @@ _createRoom() {
       scene: this.scene,
       startPos: startPos.clone(),
       direction: dir,
-      speed
+      speed,
+      lifetime,
+      projectileType
     });
 
     this.projectiles[id] = p;
