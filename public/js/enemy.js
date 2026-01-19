@@ -1905,6 +1905,21 @@ _updatePath(deltaMs) {
       this._advancePathStep();
     }
   }
+  // Allow path-following enemies to fire periodically. The interval can be set
+  // via `behavior.params.fireIntervalMs`; otherwise fall back to `this.firePauseMs`
+  // if it's a positive value. This enables flying enemies that follow a path
+  // (e.g., Drone) to actively shoot while moving.
+  try {
+    const nowMs = performance.now();
+    const configuredInterval = (this.behavior && this.behavior.params && this.behavior.params.fireIntervalMs) ? Number(this.behavior.params.fireIntervalMs) : (this.firePauseMs > 0 ? this.firePauseMs : null);
+    if (configuredInterval) {
+      if (!this._lastPathFire) this._lastPathFire = 0;
+      if (nowMs - this._lastPathFire >= configuredInterval) {
+        this._attemptFire(nowMs);
+        this._lastPathFire = nowMs;
+      }
+    }
+  } catch (e) {}
 }
 _advancePathStep() {
   const path = this._path;
