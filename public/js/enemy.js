@@ -1505,6 +1505,10 @@ this._targetOffset = new THREE.Vector3(0, 0, 0);
     
 this._leanSide = 1; // default right
 
+    // crouch bone blending state (0 = standing, 1 = fully crouched)
+    this._currentCrouchAlpha = 0;
+    this._targetCrouchAlpha = 0;
+
 // Explicit override from behavior params
 if (this.behavior?.params?.leanSide) {
   this._leanSide = (this.behavior.params.leanSide === "left") ? -1 : 1;
@@ -2352,6 +2356,11 @@ if (this._isFullyPoppedTarget &&
 
   // No positional offset accumulation here
   this._targetOffset.set(0, 0, 0);
+  // When popped, stand up
+  try {
+    this._targetScale = this.baseScale ? this.baseScale.clone() : new THREE.Vector3(1,1,1);
+  } catch(e) { this._targetScale = new THREE.Vector3(1,1,1); }
+  this._targetCrouchAlpha = 0;
 }
 
   // compute pose target when hidden (behind cover)
@@ -2367,8 +2376,22 @@ if (this._isFullyPoppedTarget &&
     this._targetPosition.x += tuck;
   }
 
+  // For low cover, lower the mesh so it hides behind low obstacles (crouch)
+  if (this.coverType === "low") {
+    try {
+      const offsetY = (cp.crouchOffsetY !== undefined) ? cp.crouchOffsetY : -1.05;
+      this._targetPosition.y = (this.basePosition && typeof this.basePosition.y === 'number') ? (this.basePosition.y + offsetY) : (this._targetPosition.y + offsetY);
+    } catch (e) {}
+  }
+
   // Reset offsets cleanly
   this._targetOffset.set(0, 0, 0);
+  // When hidden behind cover, crouch / shrink slightly
+  try {
+    const s = (this.baseScale ? this.baseScale.clone() : new THREE.Vector3(1,1,1));
+    this._targetScale = s.multiplyScalar(cp.crouchScale ?? 0.92);
+  } catch (e) { this._targetScale = new THREE.Vector3(0.92,0.92,0.92); }
+  this._targetCrouchAlpha = 1;
 }
 
   // Smoothly lerp actual mesh transform toward target transforms each frame
@@ -2425,6 +2448,13 @@ if (this._isFullyPoppedTarget &&
 
     // scale lerp
     this.mesh.scale.lerp(this._targetScale, t);
+
+    // crouch alpha blending (bones)
+    try {
+      const target = (this._targetCrouchAlpha !== undefined) ? this._targetCrouchAlpha : 0;
+      this._currentCrouchAlpha = THREE.MathUtils.lerp(this._currentCrouchAlpha || 0, target, t);
+      this._applyBoneCrouch(this._currentCrouchAlpha);
+    } catch (e) {}
   }
 
   dispose() {
@@ -2434,6 +2464,34 @@ if (this._isFullyPoppedTarget &&
       if (this.mesh.material.map) this.mesh.material.map.dispose();
       this.mesh.material.dispose();
     }
+  }
+
+  // apply additive bone rotations/poses to approximate a crouch
+  _applyBoneCrouch(alpha) {
+    if (!this.bones || alpha === undefined) return;
+    try {
+      // alpha: 0 = standing, 1 = fully crouched
+      // target additive rotations (radians)
+      const spineBend = -0.35 * alpha; // bend forward
+      const hipsBend = 0.25 * alpha;   // tilt pelvis
+      const upperLegBend = 0.6 * alpha; // bend at hip
+      const lowerLegBend = -0.8 * alpha; // knee bend
+
+      const applyIf = (name, fn) => { const b = this.bones[name]; if (b) fn(b); };
+
+      applyIf('spine', b => { b.rotation.x = (this._boneBaseRot['spine'] || 0) + spineBend; });
+      applyIf('spine1', b => { b.rotation.x = (this._boneBaseRot['spine1'] || 0) + spineBend * 0.8; });
+      applyIf('spine2', b => { b.rotation.x = (this._boneBaseRot['spine2'] || 0) + spineBend * 0.6; });
+      applyIf('hips', b => { b.rotation.x = (this._boneBaseRot['hips'] || 0) + hipsBend; });
+
+      applyIf('upper_leg_l', b => { b.rotation.x = (this._boneBaseRot['upper_leg_l'] || 0) + upperLegBend; });
+      applyIf('upper_leg_r', b => { b.rotation.x = (this._boneBaseRot['upper_leg_r'] || 0) + upperLegBend; });
+      applyIf('lower_leg_l', b => { b.rotation.x = (this._boneBaseRot['lower_leg_l'] || 0) + lowerLegBend; });
+      applyIf('lower_leg_r', b => { b.rotation.x = (this._boneBaseRot['lower_leg_r'] || 0) + lowerLegBend; });
+
+      // small neck tuck when crouching
+      applyIf('neck', b => { b.rotation.x = (this._boneBaseRot['neck'] || 0) + (0.12 * alpha); });
+    } catch (e) {}
   }
 }
 export function killAllEnemies() {

@@ -61,11 +61,44 @@ export const scene_test = {
   },
 
   environment: {
-    staticObjects: []
+    staticObjects: [
+      {
+        id: "crate_test",
+        type: "crate",
+        position: { x: 0, y: 0.5, z: -5 },
+        size: { x: 1, y: 1, z: 1 },
+        hp: 100,
+        maxHp: 100,
+        coverType: "low",
+        material: {
+          map: "assets/props/crate.png",
+          color: 0xffffff,
+          roughness: 0.75,
+          metalness: 0.0
+        },
+        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
+        deathSounds: ["assets/sfx/props/crate_break.ogg"],
+        deathAction: "break"
+      }
+    ]
   },
 
   enemies: [
-    ],
+    {
+      id: "grunt_test",
+      type: "Grunt",
+      displayName: "Grunt Soldier",
+	  hp:  80,
+      modelUrl: "assets/models/exo_red.fbx",
+      // sit slightly behind the crate so crate is between camera and enemy
+      position: { x: 0, y: 0, z: -6 },
+      facing: 0,
+      coverObject: "crate_test",
+      coverType: "low",
+      // increase crouch depth so model can hide behind 0.5m crate
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
+    }
+  ],
 
   objective: {
     type: "eliminateAllEnemies",

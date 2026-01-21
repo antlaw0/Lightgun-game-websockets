@@ -348,18 +348,55 @@ if (pdef.type === "prefab" && pdef.prefab) {
         if (obj.isMesh) {
           obj.castShadow = true;
           obj.receiveShadow = true;
-          obj.userData = {
+          obj.userData = Object.assign({}, obj.userData || {}, {
             propId: pdef.id,
             solid: true
-          };
+          });
         }
       });
 
-      this.addProp({
+      // Create a small prop wrapper that respects hp/indestructible
+      const hpVal = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
+      const ind = !!pdef.indestructible;
+      const hitSounds = Array.isArray(pdef.hitSounds) ? pdef.hitSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
+      const deathSounds = Array.isArray(pdef.deathSounds) ? pdef.deathSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
+
+      const propWrapper = {
         id: pdef.id,
         mesh: model,
-        takeDamage: () => false
-      });
+        position: pdef.position ?? { x: 0, y: 0, z: 0 },
+        size: pdef.size ?? { x: 1, y: 1, z: 1 },
+        hp: hpVal,
+        maxHp: hpVal,
+        indestructible: ind,
+        hitSounds,
+        deathSounds,
+        explosion: pdef.explosion ?? null,
+        takeDamage(amount) {
+          try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
+          if (this.indestructible) return false;
+          this.hp -= amount;
+          if (this.hp <= 0) {
+            // die
+            try { if (this.deathSounds && this.deathSounds.length) { const s = this.deathSounds[Math.floor(Math.random()*this.deathSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
+            // spawn explosion if defined
+            if (this.explosion && window.spawnTestExplosion) {
+              const worldPos = new THREE.Vector3();
+              this.mesh.getWorldPosition(worldPos);
+              window.spawnTestExplosion({ x: worldPos.x, y: worldPos.y, z: worldPos.z, blastRadius: this.explosion.blastRadius, maxDamage: this.explosion.maxDamage, explosionSounds: this.explosion.explosionSounds });
+            }
+            // remove mesh from scene
+            if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+            return true;
+          }
+          return false;
+        },
+        dispose() {
+          try { if (this.mesh) { this.mesh.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); if (o.material?.map) o.material.map.dispose(); o.material?.dispose(); } }); } } catch(e){}
+        }
+      };
+
+      this.addProp(propWrapper);
     });
 
     continue;
@@ -402,12 +439,34 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     this.scene.add(door);
 
-    this.addProp({
+    // Doors may optionally be destructible via pdef.hp / pdef.indestructible
+    const doorHp = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
+    const doorInd = !!pdef.indestructible;
+    const doorWrapper = {
       id: pdef.id,
       mesh: door,
       size: { x: width, y: height, z: depth },
-      takeDamage: () => false
-    });
+      hp: doorHp,
+      maxHp: doorHp,
+      indestructible: doorInd,
+      hitSounds: pdef.hitSounds ?? [],
+      deathSounds: pdef.deathSounds ?? [],
+      takeDamage(amount) {
+        try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; const a = new Audio(s); a.play().catch(()=>{}); } } catch(e){}
+        if (this.indestructible) return false;
+        this.hp -= amount;
+        if (this.hp <= 0) {
+          if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+          return true;
+        }
+        return false;
+      },
+      dispose() {
+        try { if (this.mesh) { this.mesh.geometry?.dispose(); if (this.mesh.material?.map) this.mesh.material.map.dispose(); this.mesh.material?.dispose(); } } catch(e){}
+      }
+    };
+
+    this.addProp(doorWrapper);
 
     const transitions = this.sceneDef.transitionObjects;
     if (Array.isArray(transitions)) {
@@ -786,12 +845,32 @@ this.staticObjects = [];
   }
 
 _createPrefabProp(pdef, prefab) {
+  const hpVal = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
+  const ind = !!pdef.indestructible;
+  const hitSounds = Array.isArray(pdef.hitSounds) ? pdef.hitSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
+  const deathSounds = Array.isArray(pdef.deathSounds) ? pdef.deathSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
+
   return {
     id: pdef.id,
     mesh: prefab,
     size: pdef.size ?? { x: 1, y: 1, z: 1 },
     position: pdef.position ?? { x: 0, y: 0, z: 0 },
-    takeDamage: () => false,
+    hp: hpVal,
+    maxHp: hpVal,
+    indestructible: ind,
+    hitSounds,
+    deathSounds,
+    takeDamage(amount) {
+      try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
+      if (this.indestructible) return false;
+      this.hp -= amount;
+      if (this.hp <= 0) {
+        try { if (this.deathSounds && this.deathSounds.length) { const s = this.deathSounds[Math.floor(Math.random()*this.deathSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
+        if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+        return true;
+      }
+      return false;
+    },
     dispose() {
       prefab.traverse(obj => {
         if (obj.isMesh) {
