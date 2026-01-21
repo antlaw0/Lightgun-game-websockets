@@ -18,8 +18,17 @@ import { SceneLoader } from "./sceneLoader.js";
 // js/game.js
 import { Player } from './player.js';
 import { HUD } from './hud.js';
+const canvas = document.getElementById('canvas');
+
+let cw = canvas.width = window.innerWidth;
+let ch = canvas.height = window.innerHeight;
+
+const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.01, 200);
+camera.position.set(0, 1.7, 5);
+camera.lookAt(0, 1.7, 0);
 
 export const player = new Player({
+  camera: camera,
   maxHp: 10000,
   hp: 10000,
   weapons: [
@@ -146,15 +155,12 @@ function generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy,
 
 
 // ---- UI elements assumed in page ----
-const canvas = document.getElementById('canvas');
 const reticleDiv = document.getElementById('reticle');
 const connStatus = document.getElementById('connStatus');
 const retXY = document.getElementById('retXY');
 const abc = document.getElementById('abc');
 const debugConsole = document.getElementById('debugConsole');
 
-let cw = canvas.width = window.innerWidth;
-let ch = canvas.height = window.innerHeight;
 
 
 function sendDesktopPayload(overrides = {}) {
@@ -250,10 +256,7 @@ player.addEventListener && player.addEventListener('ammoChanged', sendWeaponInfo
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
-const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
-camera.position.set(0, 1.7, 5);
-camera.lookAt(0, 1.7, 0);
-
+scene.add(camera)
 // FPS mode state (toggle with Tab). When true: WASD + mouse look, reticle centered.
 let isFPSMode = false;
 const fpsState = {
@@ -1288,7 +1291,7 @@ function animate(nowMs) {
           if (hip) {
             try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
           } else {
-            console.log('[DEBUG] hip bone not found on first enemy');
+            //console.log('[DEBUG] hip bone not found on first enemy');
           }
         }
       }
@@ -1323,7 +1326,7 @@ function animate(nowMs) {
   
       handleFire(); // <-- centralized firing
   updateSparks(deltaMs);
-
+player.updateArm(deltaMs);
   // Update displayed reticle
   displayedRet.x += (ret.x - displayedRet.x) * LERP;
   displayedRet.y += (ret.y - displayedRet.y) * LERP;

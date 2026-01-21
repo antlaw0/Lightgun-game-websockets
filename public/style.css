@@ -1,0 +1,221 @@
+/* =========================
+   GLOBAL RESET
+   ========================= */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: black;
+}
+
+/* =========================
+   WEBGL CANVAS (TRUE BACKGROUND)
+   ========================= */
+#canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: black;
+  z-index: 0;              /* CRITICAL: lowest layer */
+  pointer-events: auto;
+}
+
+/* =========================
+   HUD & OVERLAY ROOT
+   ========================= */
+.hud-container {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;    /* HUD never blocks 3D view */
+}
+
+/* =========================
+   RETICLE (CENTERED, FLOATING)
+   ========================= */
+:root {
+  --reticle-size: 24px;
+  --reticle-border: 2px;
+  --cross-color: lime;
+  --cross-thickness: 3px;
+  --cross-length: 10vw;
+}
+
+#reticle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: var(--reticle-size);
+  height: var(--reticle-size);
+  border: var(--reticle-border) solid var(--cross-color);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+#reticle::before,
+#reticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--cross-color);
+  transform: translate(-50%, -50%);
+}
+
+#reticle::before {
+  width: var(--cross-length);
+  height: var(--cross-thickness);
+}
+
+#reticle::after {
+  height: var(--cross-length);
+  width: var(--cross-thickness);
+}
+
+/* =========================
+   TOP-LEFT HUD
+   ========================= */
+#hud {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,0.6);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* =========================
+   DEBUG CONSOLE
+   ========================= */
+#debugConsole {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.6);
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.hud-camera-debug {
+  position: fixed;
+  top: 80px;
+  left: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #00ffcc;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre;
+  z-index: 300;
+  pointer-events: none;
+}
+
+/* =========================
+   HEALTH BAR (BOTTOM CENTER)
+   ========================= */
+.hud-health {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50vw;
+  max-width: 720px;
+  min-width: 280px;
+  height: 36px;
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.health-track {
+  flex: 1;
+  height: 100%;
+  background: rgba(255,255,255,0.06);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.health-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #4caf50, #3ea34f);
+  transition: width 250ms linear;
+}
+
+.health-text {
+  min-width: 98px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* =========================
+   WEAPON HUD (BOTTOM LEFT)
+   ========================= */
+.hud-weapon {
+  position: fixed;
+  left: 8px;
+  bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: white;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* =========================
+   NGROK QR OVERLAY
+   ========================= */
+#ngrokQR {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  width: 160px;
+  height: 160px;
+  background: rgba(0,0,0,0.6);
+  padding: 6px;
+  border-radius: 8px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 500;
+  pointer-events: auto; /* clickable */
+}
+
+#ngrokQR img {
+  width: 140px;
+  height: 140px;
+}
+
+#ngrokQR .ngrok-url {
+  font-size: 11px;
+  color: #fff;
+  word-break: break-all;
+  text-align: center;
+}

@@ -61,7 +61,7 @@ export const HUD = {
       mixBlendMode: 'screen',
       transition: 'opacity 0s linear',
       opacity: '0',
-      zIndex: '9999'
+      zIndex: '5'
     });
     document.body.appendChild(this._muzzleFlashEl);
 
