@@ -51,6 +51,9 @@ window.sceneLoader = this;
     this.padding = 2;
 
     this.sceneLights = [];
+    // audio helpers
+    this._audioLoader = new THREE.AudioLoader();
+    this._audioBufferCache = {};
   }
 
   // -------------------------
@@ -898,16 +901,35 @@ if (hit) {
   const hitObj = hit.object;
   const hitPoint = hit.point ?? proj.position;
 
-  // Play a random impact sound if the object defines one
-  const sounds = hitObj.userData?.hitSounds;
-  if (Array.isArray(sounds) && sounds.length > 0) {
-    const sound =
-      sounds[Math.floor(Math.random() * sounds.length)];
-    this.playImpactSound(sound, hitPoint);
+  // Play bullet ricochet as positional audio only for room surfaces.
+  // Do NOT play ricochet when hitting props or enemies (handled elsewhere).
+  if (proj.projectileType === "bullet") {
+    // climb to find a parent that identifies as room/prop/enemy
+    let obj = hitObj;
+    while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId && obj.userData.type !== "room") {
+      obj = obj.parent;
+    }
+    if (obj && obj.userData && obj.userData.type === "room") {
+      const paths = [
+        "assets/sfx/ric1.ogg",
+        "assets/sfx/ric2.ogg",
+        "assets/sfx/ric3.ogg",
+        "assets/sfx/ric4.ogg",
+        "assets/sfx/ric5.ogg"
+      ];
+      this.playPositionalImpactSound(paths, hitPoint, 0.9, 6);
+    }
+  } else {
+    // Non-bullet projectiles: keep existing mesh-defined hit sound behavior
+    const sounds = hitObj.userData?.hitSounds;
+    if (Array.isArray(sounds) && sounds.length > 0) {
+      const sound = sounds[Math.floor(Math.random() * sounds.length)];
+      this.playImpactSound(sound, hitPoint);
+    }
   }
 
   // Apply damage to enemy or prop (room surfaces usually ignore damage)
-  this.applyDamageToMesh(hitObj, proj.damage);
+  this.applyDamageToMesh(hitObj, proj.damage, { suppressRoomSound: proj.projectileType === "bullet" });
 
   proj.dispose();
   delete this.projectiles[id];
@@ -968,10 +990,90 @@ playImpactSound(soundPath, position, volume = 0.7) {
 }
 
 
+// Find an AudioListener attached to the camera (or fallback to window.audioListener)
+_getAudioListener() {
+  try {
+    if (this.camera && this.camera.children && this.camera.children.length) {
+      for (const c of this.camera.children) {
+        if (!c) continue;
+        if (c.isAudioListener || c.type === 'AudioListener') return c;
+      }
+    }
+  } catch (e) {}
+  if (window.audioListener) return window.audioListener;
+  return null;
+}
+
+// Play a positional impact sound at the given world `position` (THREE.Vector3).
+// Falls back to non-positional Audio if no AudioListener / WebAudio is available.
+playPositionalImpactSound(soundPathOrArray, position, volume = 0.8, refDistance = 6) {
+  if (!soundPathOrArray || !position) return;
+
+  // Allow passing an array of candidate paths; pick one randomly here so
+  // callers can simply provide multiple options and we ensure a single
+  // randomly chosen positional sound plays at the impact point.
+  let soundPath = soundPathOrArray;
+  if (Array.isArray(soundPathOrArray) && soundPathOrArray.length) {
+    soundPath = soundPathOrArray[Math.floor(Math.random() * soundPathOrArray.length)];
+  }
+
+  const listener = this._getAudioListener();
+  if (!listener) {
+    // fallback to non-positional playback
+    this.playImpactSound(soundPath, position, volume);
+    return;
+  }
+
+  const loader = this._audioLoader;
+  const cache = this._audioBufferCache;
+  const scene = this.scene;
+
+  const playBuffer = (buffer) => {
+    try {
+      const sound = new THREE.PositionalAudio(listener);
+      sound.setBuffer(buffer);
+      sound.setRefDistance(refDistance);
+      sound.setVolume(volume);
+
+      const holder = new THREE.Object3D();
+      holder.position.copy(position);
+      holder.add(sound);
+      scene.add(holder);
+
+      // cleanup when ended (and guard with timeout in case onEnded isn't reliable)
+      sound.onEnded = () => { try { scene.remove(holder); } catch (e) {} };
+      try { sound.play(); } catch (e) { console.warn('Positional play failed', e); }
+
+      const maxMs = Math.max(4000, Math.round((buffer.duration || 1) * 1000) + 2000);
+      setTimeout(() => { try { if (scene && holder && holder.parent) scene.remove(holder); } catch (e) {} }, maxMs);
+    } catch (e) {
+      console.warn('playBuffer failed', e);
+    }
+  };
+
+  if (cache[soundPath]) {
+    playBuffer(cache[soundPath]);
+    return;
+  }
+
+  loader.load(soundPath,
+    (buffer) => {
+      cache[soundPath] = buffer;
+      playBuffer(buffer);
+    },
+    undefined,
+    (err) => {
+      console.warn('Positional audio load failed', soundPath, err);
+      this.playImpactSound(soundPath, position, volume);
+    }
+  );
+}
+
+
   // -----------------------------
   // Damage Handling (adapted to arrays/maps)
   // -----------------------------
-applyDamageToMesh(mesh, damage = 1) {
+applyDamageToMesh(mesh, damage = 1, opts = {}) {
   if (!mesh) return false;
 
   let obj = mesh;
@@ -1015,10 +1117,13 @@ applyDamageToMesh(mesh, damage = 1) {
 
   // Room surfaces
   if (obj.userData.type === "room") {
-    const sounds = obj.userData.hitSounds;
-    if (Array.isArray(sounds) && sounds.length > 0) {
-      const sound = sounds[Math.floor(Math.random() * sounds.length)];
-      this.playImpactSound(sound, mesh.position);
+    // Allow caller to suppress the default (non-positional) room hit sound
+    if (!(opts && opts.suppressRoomSound)) {
+      const sounds = obj.userData.hitSounds;
+      if (Array.isArray(sounds) && sounds.length > 0) {
+        const sound = sounds[Math.floor(Math.random() * sounds.length)];
+        this.playImpactSound(sound, mesh.position);
+      }
     }
     return true;
   }

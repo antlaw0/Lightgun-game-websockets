@@ -18,40 +18,9 @@ import { SceneLoader } from "./sceneLoader.js";
 // js/game.js
 import { Player } from './player.js';
 import { HUD } from './hud.js';
-const canvas = document.getElementById('canvas');
 
-let cw = canvas.width = window.innerWidth;
-let ch = canvas.height = window.innerHeight;
-
-const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.01, 200);
-camera.position.set(0, 1.7, 5);
-camera.lookAt(0, 1.7, 0);
-
-export const player = new Player({
-  camera: camera,
-  maxHp: 10000,
-  hp: 10000,
-  weapons: [
-    {
-      name: "Starter Pistol",
-      image: "/assets/hud/weapon_placeholder.png",
-	  fireMode:  "auto",
-	    rateOfFireMs: 120,
-      ammoType: "bullets",
-      clipSize: 12,
-      ammoInClip: 12,
-	  damage: 10,
-	  projectilesPerShot: 8,
-	  projectileSpread:  10,
-	  spreadPattern:  "normal",
-      totalAmmo: 48
-    }
-  ],
-  currentWeaponIndex: 0
-});
-
-// Expose for debugging / cross-module access
-window.player = player;
+// will be created after camera is initialized
+export let player = null;
 
 
 // Example usage:
@@ -155,12 +124,15 @@ function generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy,
 
 
 // ---- UI elements assumed in page ----
+const canvas = document.getElementById('canvas');
 const reticleDiv = document.getElementById('reticle');
 const connStatus = document.getElementById('connStatus');
 const retXY = document.getElementById('retXY');
 const abc = document.getElementById('abc');
 const debugConsole = document.getElementById('debugConsole');
 
+let cw = canvas.width = window.innerWidth;
+let ch = canvas.height = window.innerHeight;
 
 
 function sendDesktopPayload(overrides = {}) {
@@ -186,7 +158,8 @@ function resize() { cw = canvas.width = window.innerWidth; ch = canvas.height = 
 window.addEventListener('resize', resize);
 
 // WebSocket setup (unchanged)
-const WS_URL = `wss://${window.location.hostname}:8080`;
+// Use secure WS when page is HTTPS, otherwise plain WS.
+const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + window.location.hostname + ':8080';
 const ws = new WebSocket(WS_URL);
 ws.onopen = () => { connStatus && (connStatus.textContent = 'WS: connected'); ws.send(JSON.stringify({ type:'register', client:'game' })); };
 ws.onclose = () => { connStatus && (connStatus.textContent = 'WS: disconnected'); };
@@ -207,7 +180,7 @@ ws.onmessage = (ev) => {
       if (abc) abc.textContent = `${p.alpha?.toFixed(1) ?? ''}, ${p.beta?.toFixed(1) ?? ''}, ${p.gamma?.toFixed(1) ?? ''}`;
       // Handle firing with edge detection so semi-auto fires once per press
       const pFire = !!p.fire;
-      const w = player.currentWeapon;
+      const w = player?.currentWeapon;
       if (pFire && !window._lastControllerFire) {
         // rising edge: single-shot for semi-auto, start continuous for auto
         if (w && w.fireMode === 'semi-auto') {
@@ -232,7 +205,7 @@ ws.onmessage = (ev) => {
 function sendWeaponInfo() {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const w = player.currentWeapon;
+    const w = player?.currentWeapon;
     if (!w) return;
     const payload = {
       currentWeapon: {
@@ -250,13 +223,25 @@ function sendWeaponInfo() {
 
 // Send initial weapon info on connect + when player's ammo/weapon changes
 ws.addEventListener('open', () => { setTimeout(sendWeaponInfo, 200); });
-player.addEventListener && player.addEventListener('ammoChanged', sendWeaponInfo);
+if (player && player.addEventListener) player.addEventListener('ammoChanged', sendWeaponInfo);
 
 // ------------------ Three.js Setup ------------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
-scene.add(camera)
+const camera = new THREE.PerspectiveCamera(60, cw / ch, 0.1, 200);
+camera.position.set(0, 1.7, 5);
+camera.lookAt(0, 1.7, 0);
+// expose camera globally for modules that expect it
+window.camera = camera;
+// If player already has arm loaded, attach it now
+try { if (player && typeof player._attachArmToCamera === 'function') player._attachArmToCamera(); } catch(_) {}
+// Ensure camera is part of the scene so camera-attached children are rendered
+try {
+  scene.add(camera);
+  console.log('Camera added to scene so camera children will render');
+} catch (_) {}
+
 // FPS mode state (toggle with Tab). When true: WASD + mouse look, reticle centered.
 let isFPSMode = false;
 const fpsState = {
@@ -278,8 +263,33 @@ const enemyVoiceManager = new EnemyVoiceManager(
 );
 // Expose globally so Enemy.js can request voices
 window.enemyVoiceManager = enemyVoiceManager;
-
  
+ 
+// Create player now that camera exists so it can be passed in
+player = new Player({
+  maxHp: 10000,
+  hp: 10000,
+  weapons: [
+    {
+      name: "Starter Pistol",
+      image: "/assets/hud/weapon_placeholder.png",
+      fireMode:  "auto",
+      rateOfFireMs: 120,
+      ammoType: "bullets",
+      clipSize: 12,
+      ammoInClip: 12,
+      damage: 10,
+      projectilesPerShot: 8,
+      projectileSpread:  10,
+      spreadPattern:  "normal",
+      totalAmmo: 48
+    }
+  ],
+  currentWeaponIndex: 0,
+  camera: camera
+});
+// Expose for debugging / cross-module access
+window.player = player;
 
 HUD.init(player, camera);
 window.hud = HUD;
@@ -310,7 +320,7 @@ window.addEventListener(
 
 window.addEventListener("wheel", e => {
   const direction = e.deltaY > 0 ? 1 : -1;
-  player.cycleWeapon(direction);
+  if (player && typeof player.cycleWeapon === 'function') player.cycleWeapon(direction);
 });
 
 // Toggle FPS mode with Tab: pointer lock + mouse look. Press Tab again to exit.
@@ -485,7 +495,7 @@ document.addEventListener('keydown', (e) => {
         return; // Prevent reload spam
     }
 
-    const w = player.currentWeapon;
+    const w = player?.currentWeapon;
     if (!w) return;
 
     // Only reload if ammoInClip < clipSize
@@ -600,6 +610,7 @@ function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
     direction: deviatedDir.clone(),
     bornTime: performance.now(),
     damage: 1
+    ,projectileType: 'bullet'
   };
   scene.add(bullet);
   enemyProjectiles.push(bullet);
@@ -658,6 +669,7 @@ function spawnProjectile(origin, direction, damage = 1) {
         bornTime: performance.now(),
         damage: damage,
         trail: null // placeholder for motion trail
+      ,projectileType: 'bullet'
     };
 
     // Optional: create a simple motion trail
@@ -751,8 +763,8 @@ function spawnProjectile(origin, direction, damage = 1) {
 let lastFireMs = 0;
 
 function handleFire() {
-    const w = player.currentWeapon;
-    if (!w || !isFiring) return;
+  const w = player?.currentWeapon;
+  if (!w || !isFiring) return;
 
     const now = performance.now();
 
@@ -771,7 +783,7 @@ function handleFire() {
     }
 
     // --- Ammo check ---
-    if (!player.useAmmo(1)) {
+    if (!(player && player.useAmmo && player.useAmmo(1))) {
         logDebug("No ammo!");
         try { new Audio('sounds/click.ogg').play().catch(() => {}); } catch(e) {}
         return;
@@ -831,14 +843,14 @@ function handleFire() {
 function triggerReload() {
    try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
     
-   player.reload();
+  if (player && typeof player.reload === 'function') player.reload();
   logDebug("Player reloaded"); 
 }
 
 
 function updateAutoFire(nowMs) {
-    const w = player.currentWeapon;
-    if (!w) return;
+  const w = player?.currentWeapon;
+  if (!w) return;
 
     if (w.fireMode === "auto") {
         if (!isFiring) return;
@@ -886,10 +898,10 @@ function stopFiring() {
 
 
 function triggerFire() {
-    const w = player.currentWeapon;
-    if (!w) return false;
+  const w = player?.currentWeapon;
+  if (!w) return false;
 
-    if (!player.useAmmo(1)) {
+  if (!(player && player.useAmmo && player.useAmmo(1))) {
         logDebug("No ammo! Reload first.");
         try {
             const clickSound = new Audio('sounds/click.ogg');
@@ -1152,7 +1164,23 @@ const moveDist = bullet.userData.speed * (dt / 1000);
                 if (mesh.userData.enemy) {
                     mesh.userData.enemy.takeDamage(bullet.userData.damage);
                 } else {
-                    sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage);
+                    // If this is a bullet hitting room geometry, play a positional ricochet
+                    try {
+                      let obj = mesh;
+                      while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId && obj.userData.type !== 'room') obj = obj.parent;
+                      if (bullet.userData.projectileType === 'bullet' && obj && obj.userData && obj.userData.type === 'room') {
+                        const paths = [
+                          'assets/sfx/ric1.ogg',
+                          'assets/sfx/ric2.ogg',
+                          'assets/sfx/ric3.ogg',
+                          'assets/sfx/ric4.ogg',
+                          'assets/sfx/ric5.ogg'
+                        ];
+                        try { sceneLoader.playPositionalImpactSound(paths, hit.point, 0.9, 6); } catch (e) {}
+                      }
+                    } catch (e) {}
+
+                    sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage, { suppressRoomSound: bullet.userData.projectileType === 'bullet' });
                 }
 
                 logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
@@ -1169,9 +1197,9 @@ if (pos && b.userData.explosive) {
                 x: pos.x,
                 y: pos.y,
                 z: pos.z,
-                blastRadius: player.currentWeapon.explosionRadius,
-                maxDamage: player.currentWeapon.explosionDamage,
-                explosionSounds: player.currentWeapon.explosionSounds
+                blastRadius: player?.currentWeapon?.explosionRadius,
+                maxDamage: player?.currentWeapon?.explosionDamage,
+                explosionSounds: player?.currentWeapon?.explosionSounds
             });
         }
 
@@ -1291,7 +1319,7 @@ function animate(nowMs) {
           if (hip) {
             try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
           } else {
-            //console.log('[DEBUG] hip bone not found on first enemy');
+            console.log('[DEBUG] hip bone not found on first enemy');
           }
         }
       }
@@ -1326,7 +1354,7 @@ function animate(nowMs) {
   
       handleFire(); // <-- centralized firing
   updateSparks(deltaMs);
-player.updateArm(deltaMs);
+
   // Update displayed reticle
   displayedRet.x += (ret.x - displayedRet.x) * LERP;
   displayedRet.y += (ret.y - displayedRet.y) * LERP;
@@ -1338,11 +1366,12 @@ player.updateArm(deltaMs);
 
   updateDynamicReticle({
     camera,
-    weapon: player.currentWeapon
+    weapon: player?.currentWeapon
   });
 
   // Update player recoil decay each frame (deltaMs)
   try { player.updateRecoil && player.updateRecoil(deltaMs); } catch(_) {}
+  try { player.updateArm && player.updateArm(deltaMs); } catch(_) {}
 
   // Ducking & zoom
   // Only enforce default ground height when NOT in FPS mode; in FPS mode vertical movement is controlled by keys

@@ -98,6 +98,26 @@ export const scene_test = {
       // increase crouch depth so model can hide behind 0.5m crate
       behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
     }
+    ,
+    {
+      id: "swat_test",
+      type: "Grunt",
+      displayName: "Grunt Soldier",
+      hp: 100,
+      // Use your provided SWAT model and shooting + dying animations
+      modelUrl: "assets/models/swatguy.fbx",
+      animationUrls: {
+        shoot: "assets/animations/swatguy_firing_rifle.fbx",
+        dying_rifle: "assets/animations/swatguy_dying.fbx",
+        dying: "assets/animations/swatguy_dying.fbx"
+      },
+      // standing in the open and firing at intervals
+      position: { x: 2, y: 0, z: -6 },
+      // set an explicit groundY so the loader aligns the model's feet to this height
+      groundY: 0.85,
+      facing: 0,
+      behavior: { pattern: "standInOpen", params: { fireIntervalMs: 900 } }
+    }
   ],
 
   objective: {

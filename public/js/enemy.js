@@ -578,6 +578,29 @@ this.coverObjectId = instanceConfig.coverObject || null;
           try { this.sceneGroup.remove(this.mesh); } catch(_){}
           const old = this.mesh;
           this.mesh = res.model;
+          // Immediately ensure SkinnedMesh parts are bound and materials support skinning
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isSkinnedMesh) return;
+              try {
+                // Ensure material supports skinning
+                if (o.material) {
+                  if (Array.isArray(o.material)) o.material.forEach(m => { if (m) m.skinning = true; });
+                  else o.material.skinning = true;
+                }
+                // If skeleton present, bind to ensure PropertyBinding resolves to bones under this.mesh
+                if (o.skeleton && !o.bindMatrix) {
+                  try { o.bind(o.skeleton, o.bindMatrix || new THREE.Matrix4()); } catch(_) {}
+                } else if (o.skeleton) {
+                  try { o.bind(o.skeleton, o.bindMatrix); } catch(_) {}
+                }
+                // normalize skin weights when available
+                try { if (typeof o.normalizeSkinWeights === 'function') o.normalizeSkinWeights(); } catch(_) {}
+                o.frustumCulled = false;
+              } catch (e) {}
+            });
+            try { this.mesh.updateMatrixWorld(true); } catch(_) {}
+          } catch (e) {}
           // --- Diagnostic checks (1..9) to systematically find why animations leave the model in T-pose ---
           try {
             // 1) Verify the model is skinned: traverse and log first SkinnedMesh
@@ -950,6 +973,28 @@ this.coverObjectId = instanceConfig.coverObject || null;
           this.mesh.name = `enemy_${this.id}`;
           try { if (this.position) this.mesh.position.copy(this.position); if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
           this.sceneGroup.add(this.mesh);
+          // Ensure any SkinnedMesh parts are correctly bound to their skeletons
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isSkinnedMesh) return;
+              try {
+                // Ensure materials support skinning
+                if (o.material) {
+                  if (Array.isArray(o.material)) o.material.forEach(m => { if (m) m.skinning = true; });
+                  else o.material.skinning = true;
+                }
+                // Bind skeleton if not already bound
+                if (o.skeleton) {
+                  try { o.bind(o.skeleton, o.bindMatrix); } catch(_) {}
+                  try { o.skeleton.pose(); } catch(_) {}
+                }
+                // Normalize skin weights where available
+                try { if (typeof o.normalizeSkinWeights === 'function') o.normalizeSkinWeights(); } catch(_) {}
+                o.frustumCulled = false;
+              } catch (e) {}
+            });
+            try { this.mesh.updateMatrixWorld(true); } catch(_) {}
+          } catch (e) {}
           try {
             this.sceneGroup.castShadow = true;
             this.sceneGroup.receiveShadow = true;
@@ -1244,21 +1289,35 @@ this.coverObjectId = instanceConfig.coverObject || null;
             try {
               const tracks = (clip.tracks || []).filter(t => !/\.position$/i.test(t.name));
               // normalize track target names to match skeleton (mixamorig -> mixamorig9)
-              const mappedTracks = tracks.map(t => {
-                try {
-                  const nt = t.clone ? t.clone() : Object.assign({}, t);
-                  const fullname = nt.name || '';
-                  const parts = fullname.split('.');
-                  let node = parts[0] || '';
-                  const rest = parts.slice(1).join('.') || '';
-                  if (/mixamorig(?!9)/i.test(node) && this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
-                    const has9 = this.mesh.skeleton.bones.some(b => /mixamorig9/i.test(b.name));
-                    if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
-                  }
-                  nt.name = rest ? `${node}.${rest}` : node;
-                  return nt;
-                } catch (e) { return t; }
-              });
+                  const mappedTracks = tracks.map(t => {
+                        try {
+                          const nt = t.clone ? t.clone() : Object.assign({}, t);
+                          const fullname = nt.name || '';
+                          const parts = fullname.split('.');
+                          let node = parts[0] || '';
+                          const rest = parts.slice(1).join('.') || '';
+                          try {
+                            if (this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+                              const bones = this.mesh.skeleton.bones.map(b => b.name || '');
+                              // exact or case-insensitive match
+                              if (!bones.includes(node)) {
+                                const lower = node.toLowerCase();
+                                // mixamorig -> mixamorig9 heuristic
+                                if (/mixamorig(?!9)/i.test(node)) {
+                                  const has9 = bones.some(b => /mixamorig9/i.test(b));
+                                  if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
+                                }
+                                if (!bones.includes(node)) {
+                                  const found = bones.find(b => (b && b.toLowerCase() === lower) || (b && b.toLowerCase().endsWith(lower)) || (lower && lower.endsWith((b || '').toLowerCase())));
+                                  if (found) node = found;
+                                }
+                              }
+                            }
+                          } catch (e) {}
+                          nt.name = rest ? `${node}.${rest}` : node;
+                          return nt;
+                        } catch (e) { return t; }
+                      });
               const safeClip = new THREE.AnimationClip(clip.name || clip.uuid || 'embedded', clip.duration || -1, mappedTracks);
               const n = (safeClip.name || '').toLowerCase();
               const a = this.mixer.clipAction(safeClip);
@@ -1296,10 +1355,22 @@ this.coverObjectId = instanceConfig.coverObject || null;
                           const parts = fullname.split('.');
                           let node = parts[0] || '';
                           const rest = parts.slice(1).join('.') || '';
-                          if (/mixamorig(?!9)/i.test(node) && this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
-                            const has9 = this.mesh.skeleton.bones.some(b => /mixamorig9/i.test(b.name));
-                            if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
-                          }
+                          try {
+                            if (this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
+                              const bones = this.mesh.skeleton.bones.map(b => b.name || '');
+                              if (!bones.includes(node)) {
+                                const lower = node.toLowerCase();
+                                if (/mixamorig(?!9)/i.test(node)) {
+                                  const has9 = bones.some(b => /mixamorig9/i.test(b));
+                                  if (has9) node = node.replace(/mixamorig/ig, 'mixamorig9');
+                                }
+                                if (!bones.includes(node)) {
+                                  const found = bones.find(b => (b && b.toLowerCase() === lower) || (b && b.toLowerCase().endsWith(lower)) || (lower && lower.endsWith((b || '').toLowerCase())));
+                                  if (found) node = found;
+                                }
+                              }
+                            }
+                          } catch (e) {}
                           nt.name = rest ? `${node}.${rest}` : node;
                           return nt;
                         } catch (e) { return t; }
@@ -1619,7 +1690,7 @@ _randomTauntDelay() {
     // mark as dying so AI/firing stops and future damage is ignored
     this._isDying = true;
     this._playRandom(this.deathSounds);
-
+player._playRandomTaunt();
     // Remove from enemyMeshes so raycasting no longer hits it
     try {
       if (this.mesh) {
@@ -2149,6 +2220,14 @@ const dir = targetPos.clone().sub(origin).normalize();
 
   const targetPos =
     this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
+
+  // Ensure the enemy is facing the target when firing (standInOpen should look at player)
+  try {
+    const toPlayer = targetPos.clone().sub(this.mesh.position || new THREE.Vector3());
+    if (toPlayer.lengthSq() > 1e-6) {
+      this._targetRotationY = Math.atan2(toPlayer.x, toPlayer.z);
+    }
+  } catch (e) {}
 
   // HARD BLOCK: do not fire if wall is between muzzle and player
   if (!this._hasClearShot(muzzle, targetPos)) {
