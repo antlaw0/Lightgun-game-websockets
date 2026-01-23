@@ -141,10 +141,12 @@ function lookAt(camera, target, duration) {
 function rotate(camera, rotation, duration) {
   return new Promise(resolve => {
     const startQuat = camera.quaternion.clone();
+    // Accept numeric rotation as shorthand (degrees around Y), or an object {x,y,z}
+    const rot = (typeof rotation === 'number') ? { x: 0, y: rotation, z: 0 } : (rotation || {});
     const euler = new THREE.Euler(
-      THREE.MathUtils.degToRad(rotation.x || 0),
-      THREE.MathUtils.degToRad(rotation.y || 0),
-      THREE.MathUtils.degToRad(rotation.z || 0),
+      THREE.MathUtils.degToRad(rot.x || 0),
+      THREE.MathUtils.degToRad(rot.y || 0),
+      THREE.MathUtils.degToRad(rot.z || 0),
       'YXZ'
     );
     const endQuat = new THREE.Quaternion().setFromEuler(euler).multiply(startQuat);

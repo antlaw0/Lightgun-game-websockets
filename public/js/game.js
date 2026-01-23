@@ -13,6 +13,7 @@ import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
 import { SceneLoader } from "./sceneLoader.js";
+import { ALL_SCENES } from "./sceneIndex.js";
 
 
 // js/game.js
@@ -548,6 +549,141 @@ window.LIST_OF_ENEMIES = LIST_OF_ENEMIES;
 let currentLevel = Level_Warehouse;
 let currentSceneIndex = 0;
 window.sceneManager = new SceneManager(camera, sceneLoader);
+
+// Debug helper: load a scene by its name from the browser console.
+// Usage: loadSceneByName("Scene Name")
+window.loadSceneByName = async function(name) {
+  if (!name) {
+    console.warn('Usage: loadSceneByName("Scene Name")');
+    return;
+  }
+  if (!window.sceneManager) {
+    console.warn('sceneManager not available');
+    return;
+  }
+
+  const matchName = (s) => s && s.name && s.name.toLowerCase() === name.toLowerCase();
+
+  // Try current level first
+  let target = currentLevel?.scenes?.find(matchName);
+  let levelFound = currentLevel;
+
+  // Fallback: try known level `Level_Warehouse`
+  if (!target && typeof Level_Warehouse !== 'undefined') {
+    target = Level_Warehouse.scenes?.find(matchName);
+    if (target) levelFound = Level_Warehouse;
+  }
+
+  // Fallback: try any levels exposed on window.ALL_LEVELS (optional)
+  if (!target && window.ALL_LEVELS && Array.isArray(window.ALL_LEVELS)) {
+    for (const lv of window.ALL_LEVELS) {
+      target = lv.scenes?.find(matchName);
+      if (target) { levelFound = lv; break; }
+    }
+  }
+
+  if (!target) {
+    console.warn(`Scene not found: ${name}`);
+    return;
+  }
+
+  // Set current level/index so `nextScene()` works as expected
+  currentLevel = levelFound;
+  currentSceneIndex = currentLevel.scenes.indexOf(target);
+
+  console.log(`Loading scene '${target.name}' (index ${currentSceneIndex}) from level '${currentLevel.name || 'unknown'}'`);
+  await window.sceneManager.loadScene(target);
+};
+
+// --- Scene picker UI (F3) --------------------------------------------------
+// Creates an overlay select element populated from `ALL_SCENES`.
+(function installScenePicker() {
+  if (typeof document === 'undefined') return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'scene-picker-overlay';
+  overlay.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#fff;padding:12px;border-radius:8px;z-index:9999;display:none;min-width:320px;';
+
+  const label = document.createElement('div');
+  label.textContent = 'Select scene (Enter to load, Esc to close)';
+  label.style.marginBottom = '8px';
+  overlay.appendChild(label);
+
+  const sel = document.createElement('select');
+  sel.id = 'scene-picker-select';
+  sel.style.width = '100%';
+  sel.style.fontSize = '14px';
+  sel.size = 8; // show multiple rows
+  overlay.appendChild(sel);
+
+  const hint = document.createElement('div');
+  hint.style.marginTop = '8px';
+  hint.style.opacity = '0.8';
+  hint.textContent = `Scenes: ${ALL_SCENES.length}`;
+  overlay.appendChild(hint);
+
+  document.body.appendChild(overlay);
+
+  function populate() {
+    sel.innerHTML = '';
+    ALL_SCENES.forEach((entry, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = entry.scene.name || entry.id || (`Scene ${i}`);
+      sel.appendChild(opt);
+    });
+    hint.textContent = `Scenes: ${ALL_SCENES.length}`;
+  }
+
+  function show() {
+    populate();
+    overlay.style.display = 'block';
+    sel.focus();
+    // select first if none selected
+    if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+  }
+
+  function hide() {
+    overlay.style.display = 'none';
+  }
+
+  // Toggle on F3, close on Esc
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F3') {
+      if (overlay.style.display === 'block') hide();
+      else show();
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      if (overlay.style.display === 'block') { hide(); e.preventDefault(); }
+    } else if (e.key === 'Enter') {
+      if (overlay.style.display === 'block' && document.activeElement === sel) {
+        const idx = Number(sel.value || sel.selectedIndex || 0);
+        const entry = ALL_SCENES[idx];
+        if (entry && entry.scene) {
+          // set currentLevel/currentSceneIndex so nextScene behaves reasonably
+          currentLevel = { name: '(single)', scenes: [entry.scene] };
+          currentSceneIndex = 0;
+          window.sceneManager.loadScene(entry.scene);
+        }
+        hide();
+        e.preventDefault();
+      }
+    }
+  }, true);
+
+  // Double-click or double-press Enter loads too
+  sel.addEventListener('dblclick', () => {
+    const idx = Number(sel.value || sel.selectedIndex || 0);
+    const entry = ALL_SCENES[idx];
+    if (entry && entry.scene) {
+      currentLevel = { name: '(single)', scenes: [entry.scene] };
+      currentSceneIndex = 0;
+      window.sceneManager.loadScene(entry.scene);
+    }
+    hide();
+  });
+
+})();
 
 function loadLevel(level) {
     currentLevel = level;

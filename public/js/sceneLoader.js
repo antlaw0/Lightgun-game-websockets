@@ -835,12 +835,15 @@ _createRoom() {
     this.enemiesById = {};
     this.enemyMeshes = [];
 
-    // Props
-    this.props.forEach((pr) => { try { pr.dispose(); } catch {} });
+    // Props — remove meshes from scene and dispose
+    this.props.forEach((pr) => {
+      try { if (pr.mesh && pr.mesh.parent) pr.mesh.parent.remove(pr.mesh); } catch (e) {}
+      try { if (typeof pr.dispose === 'function') pr.dispose(); } catch (e) {}
+    });
     this.props = [];
     this.propsById = {};
     this.propMeshes = [];
-this.staticObjects = [];
+    this.staticObjects = [];
 
     // Explosions
     this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
@@ -1138,10 +1141,11 @@ applyDamageToMesh(mesh, damage = 1, opts = {}) {
     if (!this.objective) return;
 
     if (this.objective.type === "eliminateAllEnemies") {
-        const remaining = this.enemies.filter(e => !e._isDead);
-        console.log("Enemies still alive:", remaining.length);
+      // Treat enemies that are dying as effectively removed for objective checks.
+      const remaining = this.enemies.filter(e => !(e._isDead || e._isDying));
+      console.log("Enemies still alive:", remaining.length);
 
-        if (remaining.length === 0) {
+      if (remaining.length === 0) {
             console.log("All enemies defeated!");
 
             // Optional: remove dead enemies from array now
