@@ -22,6 +22,7 @@ this.meleeCooldownMs = 600;
 
     // Arm model (visual melee) - create a simple placeholder immediately
     this._armGroup = new THREE.Group(); // Group attached to camera (placeholder until GLB loads)
+    this._armModel = null; // reference to loaded arm GLB scene (if any)
     this._armVisible = false;
     this._meleeAnim = null; // { startMs, durationMs }
     this._armLoaded = false;
@@ -264,6 +265,7 @@ _loadArmModel() {
                 console.log('GLB loaded, scene children:', gltf.scene.children.length);
 			try {
                 const arm = gltf.scene;
+                this._armModel = arm;
 // Normalize Sketchfab scale
 arm.scale.setScalar(0.015);
 
@@ -384,6 +386,123 @@ arm.scale.setScalar(0.015);
     );
 }
 
+  // Load and attach a melee weapon GLB (knife, crowbar, etc.)
+  loadMeleeWeapon(path) {
+    this._meleeWeaponPath = path;
+    if (!path) return;
+    const loader = new GLTFLoader();
+
+    // If arm isn't ready yet, just keep the path queued (arm loader will call this when ready)
+    if (!this._armGroup) {
+      console.warn('Arm group not ready; queued melee weapon:', path);
+      return;
+    }
+
+    // Remove existing weapon group children
+    if (!this._meleeWeaponGroup) this._meleeWeaponGroup = new THREE.Group();
+    while (this._meleeWeaponGroup.children.length) this._meleeWeaponGroup.remove(this._meleeWeaponGroup.children[0]);
+
+    console.log('Loading melee weapon GLB:', path);
+    loader.load(path,
+      (gltf) => {
+        try {
+          console.log('melee GLB loaded, scene children:', gltf.scene.children.length);
+          const weapon = gltf.scene;
+
+          // ensure group visible and not culled
+          this._meleeWeaponGroup.visible = true;
+
+          // debug: log bbox before normalization
+          try { const dbgBox0 = new THREE.Box3().setFromObject(weapon); const dbgSize0 = new THREE.Vector3(); dbgBox0.getSize(dbgSize0); console.log('Weapon bounds before:', dbgSize0.toArray()); } catch(e) {}
+
+          // Normalize scale and center the model so it fits predictably in camera/hand space
+          try {
+            const box = new THREE.Box3().setFromObject(weapon);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            const desiredMax = 0.35; // smaller target size for handheld weapons
+            const scaleFactor = desiredMax / maxDim;
+            weapon.scale.multiplyScalar(scaleFactor);
+            box.setFromObject(weapon);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            weapon.position.sub(center);
+          } catch (e) { console.warn('Weapon normalization failed', e); }
+
+          // Apply a default hold offset so weapon appears near the hand; tweak per-model later
+          weapon.position.add(new THREE.Vector3(0.12, -0.18, 0.08));
+          weapon.rotation.set(-0.45, 0, Math.PI / 8);
+
+          weapon.traverse(c => {
+            if (c.isMesh) {
+              c.castShadow = false;
+              c.receiveShadow = false;
+              c.frustumCulled = false;
+              if (c.material) {
+                c.material.depthTest = false;
+                c.material.depthWrite = false;
+                c.material.transparent = true;
+                c.material.side = THREE.DoubleSide;
+              }
+              c.renderOrder = 9999;
+            }
+          });
+
+                // ensure group flags
+                weapon.traverse(c => { if (c.isMesh) c.frustumCulled = false; });
+                this._meleeWeaponGroup.add(weapon);
+
+                // Attach to arm group (ensure arm is attached to camera first)
+                if (!this._armGroup.parent && this.camera && this.camera.add) this._attachArmToCamera();
+                if (!this._meleeWeaponGroup.parent) this._armGroup.add(this._meleeWeaponGroup);
+
+                // debug: log bbox after attaching
+                try { const dbgBox = new THREE.Box3().setFromObject(weapon); const dbgSize = new THREE.Vector3(); dbgBox.getSize(dbgSize); const dbgCenter = new THREE.Vector3(); dbgBox.getCenter(dbgCenter); console.log('Weapon bounds after attach:', dbgSize.toArray(), 'center:', dbgCenter.toArray()); } catch(e) {}
+
+          // Hide the arm model itself so only the weapon shows (modular look)
+          if (this._armModel) {
+            try { this._armModel.visible = false; } catch(_) {}
+          }
+
+          // Ensure weapon group and meshes render in front and are visible
+          try {
+            this._meleeWeaponGroup.traverse(c => {
+              if (c.isMesh && c.material) {
+                c.material.depthTest = false;
+                c.material.depthWrite = false;
+                c.material.transparent = true;
+              }
+              if (c.isMesh) c.renderOrder = 9999;
+              c.frustumCulled = false;
+              c.visible = true;
+            });
+            this._meleeWeaponGroup.visible = true;
+          } catch (e) { console.warn('Weapon visibility flags failed', e); }
+
+                // Extra per-weapon tweaks: make knife larger and give it a bolder hold offset
+                try {
+                  const pname = (path || '').toLowerCase();
+                  if (pname.includes('knife')) {
+                    this._meleeWeaponGroup.traverse(c => { if (c.isMesh) c.renderOrder = 9999; });
+                    // scale up knife for more visual presence
+                    weapon.scale.multiplyScalar(1.8);
+                    // shift slightly so blade arcs across view
+                    weapon.position.add(new THREE.Vector3(0.06, -0.06, 0.04));
+                    weapon.rotation.set(-0.7, 0, Math.PI / 5);
+                  }
+                } catch(e) { console.warn('per-weapon tweak failed', e); }
+
+          console.log('Melee weapon loaded and attached:', path);
+        } catch (e) {
+          console.warn('Failed to setup melee weapon', e);
+        }
+      },
+      undefined,
+      (err) => console.warn('Failed to load melee weapon GLB', err)
+    );
+  }
+
 // Attach the arm to the camera properly at shoulder height
 _attachArmToCamera() {
     if (!this._armGroup || !this.camera) return;
@@ -418,17 +537,26 @@ _startArmSwipe() {
     this._armGroup.visible = true;
 
     const now = performance.now();
-    const durationMs = 600; // swing duration
-    const shoulderHeight = -0.2; // camera-local Y
-    const shoulderZ = -0.6; // camera-local Z
-    const shoulderX = 0.4; // right shoulder start
+    // Restore previous dramatic but snappy duration
+    const durationMs = 520; // swing duration
+    const shoulderHeight = -0.18; // camera-local Y
+    // If a melee weapon is attached, bias the swing forward and wider for drama
+    const hasWeapon = (this._meleeWeaponGroup && this._meleeWeaponGroup.children.length > 0);
+    const shoulderZ = hasWeapon ? -0.45 : -0.6; // bring forward when weapon present
+    const shoulderX = hasWeapon ? 0.7 : 0.4; // wider arc when weapon present
 
     // Start and end positions/rotations for smooth swing
+    // Larger rotations when weapon is present for a dramatic arc
+    const fromRotZ = hasWeapon ? -Math.PI * 0.6 : -Math.PI / 3;
+    const toRotZ = hasWeapon ? Math.PI * 0.6 : Math.PI / 3;
+    const fromRotX = hasWeapon ? -0.6 : -0.2;
+    const toRotX = hasWeapon ? -0.2 : -0.15;
+
     this._meleeAnim = {
-        startMs: now,
-        durationMs,
-        from: { x: shoulderX, y: shoulderHeight, z: shoulderZ, rotX: -0.2, rotY: 0, rotZ: -Math.PI / 3 }, // raised behind
-        to:   { x: -shoulderX, y: shoulderHeight, z: shoulderZ, rotX: -0.15, rotY: 0, rotZ: Math.PI / 3 }  // swing across
+      startMs: now,
+      durationMs,
+      from: { x: shoulderX, y: shoulderHeight, z: shoulderZ, rotX: fromRotX, rotY: 0, rotZ: fromRotZ }, // raised behind
+      to:   { x: -shoulderX, y: shoulderHeight, z: shoulderZ, rotX: toRotX, rotY: 0, rotZ: toRotZ }  // swing across
     };
 
     // ensure arm is attached
