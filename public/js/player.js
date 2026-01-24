@@ -2,8 +2,46 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 
-import { WEAPON_DEFS } from "./weapons.js";
+import { WEAPON_DEFS, MELEE_DEFS } from "./weapons.js";
 import { AMMO_DEFS } from "./ammo.js";
+
+// Console helper: change equipped melee weapon at runtime
+// Usage: window.changeMeleeWeapon('combatKnife')
+try {
+  window.changeMeleeWeapon = function(id) {
+    if (!window.player) {
+      console.warn('player not available yet');
+      return false;
+    }
+    if (!MELEE_DEFS[id]) {
+      console.warn('unknown melee id:', id);
+      return false;
+    }
+    // prepare player state: stop current swing and clear visuals
+    try {
+      if (window.player._meleeAnim) window.player._meleeAnim = null;
+      if (window.player._meleeWeaponGroup) {
+        window.player._meleeWeaponGroup.visible = false;
+        while (window.player._meleeWeaponGroup.children.length) window.player._meleeWeaponGroup.remove(window.player._meleeWeaponGroup.children[0]);
+      }
+    } catch (e) { console.warn('failed to clear previous melee visuals', e); }
+
+    window.player._equippedMeleeId = id;
+    const def = MELEE_DEFS[id];
+    // apply runtime overrides so other systems can read them directly
+    window.player.meleeCooldownMs = def.attackSpeed || window.player.meleeCooldownMs;
+    window.player._meleeReach = def.reach;
+    window.player._meleeDamage = def.damage;
+    window.player._meleeKnockback = def.knockback;
+    window.player._meleeAttackSounds = Array.isArray(def.attackSounds) ? def.attackSounds.slice() : [];
+    window.player._meleeWeaponPath = def.model || window.player._meleeWeaponPath;
+    try { window.player.loadMeleeWeapon(window.player._meleeWeaponPath); } catch (e) { console.warn('loadMeleeWeapon failed', e); }
+    console.log('Equipped melee:', id);
+    return true;
+  };
+
+  window.listMeleeWeapons = function() { return Object.keys(MELEE_DEFS); };
+} catch (e) { console.warn('failed to register console melee helpers', e); }
 
 export class Player extends EventTarget {
   constructor({ maxHp = 10000, hp = 10000, camera = null } = {}) {
@@ -17,46 +55,26 @@ export class Player extends EventTarget {
 
 // Melee state
 this._lastMeleeMs = 0;
-this.meleeCooldownMs = 600;
+// Equip default melee from definitions (first defined)
+this._equippedMeleeId = Object.keys(MELEE_DEFS)[0] || 'combatKnife';
+const _meleeDef = MELEE_DEFS[this._equippedMeleeId] || {};
+this.meleeCooldownMs = _meleeDef.attackSpeed || 600;
 
 
-    // Arm model (visual melee) - create a simple placeholder immediately
-    this._armGroup = new THREE.Group(); // Group attached to camera (placeholder until GLB loads)
-    this._armModel = null; // reference to loaded arm GLB scene (if any)
-    this._armVisible = false;
+    // Melee weapon visuals: attach a weapon group to the camera directly
+    this._meleeWeaponGroup = new THREE.Group(); // holds the currently loaded melee GLB
+    this._meleeWeaponPath = _meleeDef.model || 'assets/models/knife.glb';
     this._meleeAnim = null; // { startMs, durationMs }
-    this._armLoaded = false;
-    this._meleeWeaponGroup = null; // group that will hold the current melee weapon
-    this._meleeWeaponPath = null; // path of weapon to load (knife.glb etc.)
-    // Track whether we've retried attaching the arm to the camera once
-    this._armAttachRetried = false;
-    // placeholder mesh so player can see swipe before GLB finishes loading
-    try {
-      const geom = new THREE.BoxGeometry(0.35, 0.12, 0.6);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xDD9966 });
-      mat.depthTest = false;
-      mat.depthWrite = false;
-      mat.transparent = true;
-      mat.side = THREE.DoubleSide;
-      const box = new THREE.Mesh(geom, mat);
-      box.renderOrder = 9999;
-      box.frustumCulled = false;
-      box.position.set(0, -0.05, 0);
-      this._armGroup.add(box);
-      this._armGroup.visible = false;
-      this._armGroup.renderOrder = 9999;
-      console.log('Arm placeholder created');
-      // attach immediately if camera exists
-      if (this.camera && this.camera.add) {
-        try { this._attachArmToCamera(); } catch(_){ }
-      }
-    } catch (e) {
-      console.warn('arm placeholder creation failed', e);
-    }
-    // Attempt to load full arm model (will replace placeholder when ready)
-    try { this._loadArmModel(); } catch (e) { console.warn('arm load failed', e); }
-    // default melee weapon (can be changed later)
-    this._meleeWeaponPath = 'assets/models/knife.glb';
+    this._meleeWeaponGroup.visible = false;
+    // initialize runtime melee overrides from default definition
+    this._meleeReach = _meleeDef.reach;
+    this._meleeDamage = _meleeDef.damage;
+    this._meleeKnockback = _meleeDef.knockback;
+    this._meleeAttackSounds = Array.isArray(_meleeDef.attackSounds) ? _meleeDef.attackSounds.slice() : [];
+    // attach to camera if available
+    try { if (this.camera && this.camera.add) this.camera.add(this._meleeWeaponGroup); } catch(e) {}
+    // Load the default melee weapon model now
+    try { this.loadMeleeWeapon(this._meleeWeaponPath); } catch(e) { console.warn('load default melee failed', e); }
 
 // In Player constructor
     // Private backing field
@@ -167,15 +185,31 @@ meleeAttack() {
         return;
     }
 
-  // start visual swipe immediately and mark last melee time
-  this._lastMeleeMs = nowMs;
-          try {
-            const sw = new Audio("assets/sfx/swing_medium.ogg");
-            sw.currentTime = 0;
-            sw.play().catch(() => {});
-        } catch (_) {}
+    // Resolve melee definition for currently equipped melee and apply runtime overrides
+    const meleeDef = (MELEE_DEFS[this._equippedMeleeId] || {});
+    const resolved = Object.assign({}, meleeDef);
+    if (this._meleeReach !== undefined) resolved.reach = this._meleeReach;
+    if (this._meleeDamage !== undefined) resolved.damage = this._meleeDamage;
+    if (this._meleeKnockback !== undefined) resolved.knockback = this._meleeKnockback;
+    if (this._meleeAttackSounds !== undefined) resolved.attackSounds = this._meleeAttackSounds;
+    // update cooldown from resolved definition
+    this.meleeCooldownMs = resolved.attackSpeed || this.meleeCooldownMs;
 
-  try { this._startArmSwipe(); } catch (e) { console.warn('startArmSwipe failed', e); }
+    // start visual swipe immediately and mark last melee time
+    this._lastMeleeMs = nowMs;
+
+    // Play one random attack sound from the resolved attackSounds (if present)
+    try {
+      const sounds = resolved.attackSounds || meleeDef.attackSounds || [];
+      if (sounds.length > 0) {
+        const idx = Math.floor(Math.random() * sounds.length);
+        const sw = new Audio(sounds[idx]);
+        sw.currentTime = 0;
+        sw.play().catch(() => {});
+      }
+    } catch (_) {}
+
+    try { this._startArmSwipe(); } catch (e) { console.warn('startArmSwipe failed', e); }
 
     // Use camera if available, otherwise player position
     const origin = this.camera?.position?.clone() || this._position.clone();
@@ -187,10 +221,11 @@ meleeAttack() {
         forward.set(0, 0, -1); // default forward if camera missing
     }
 
-    const reach = 2.2;
-    const radius = 1.4;
-    const damage = 15;
-    const knockbackForce = 0.35;
+    const reach = (resolved.reach !== undefined) ? resolved.reach : 2.2;
+    // radius scaled relative to reach to make hitsize reasonable for short weapons
+    const radius = Math.max(0.25, reach * 0.64);
+    const damage = (resolved.damage !== undefined) ? resolved.damage : 15;
+    const knockbackForce = (resolved.knockback !== undefined) ? resolved.knockback : 0.35;
 
     const hitPos = origin.clone().add(forward.multiplyScalar(reach));
 
@@ -202,48 +237,48 @@ meleeAttack() {
         console.log("No enemies available to hit");
     }
 
-      console.log(`Melee origin=${origin.x.toFixed(2)},${origin.y.toFixed(2)},${origin.z.toFixed(2)} hitPos=${hitPos.x.toFixed(2)},${hitPos.y.toFixed(2)},${hitPos.z.toFixed(2)} enemies=${enemies.length}`);
-      for (const enemy of enemies) {
-        if (!enemy.mesh || enemy._isDead) continue;
-        // Use world position to account for parent transforms
-        const enemyPos = new THREE.Vector3();
-        try {
-          enemy.mesh.getWorldPosition(enemyPos);
-        } catch (_) {
-          enemyPos.copy(enemy.mesh.position || new THREE.Vector3());
-        }
-
-        // Compute distance from enemy to the line segment (capsule) from origin->hitPos
-        const segVec = hitPos.clone().sub(origin); // vector from origin to hitPos
-        const segLenSq = segVec.lengthSq() || 1;
-        const toEnemy = enemyPos.clone().sub(origin);
-        let t = segVec.dot(toEnemy) / segLenSq; // projection factor along segment
-        t = Math.max(0, Math.min(1, t));
-        const closest = origin.clone().add(segVec.clone().multiplyScalar(t));
-
-        // 3D distance (for diagnostics)
-        const dist3D = enemyPos.distanceTo(closest);
-        // Horizontal (XZ) distance: ignore vertical offset so camera/player height doesn't prevent hits
-        const dx = enemyPos.x - closest.x;
-        const dz = enemyPos.z - closest.z;
-        const distXZ = Math.hypot(dx, dz);
-
-        console.log(`  enemy=${enemy.id || enemy.name || 'unknown'} pos=${enemyPos.x.toFixed(2)},${enemyPos.y.toFixed(2)},${enemyPos.z.toFixed(2)} closest=${closest.x.toFixed(2)},${closest.y.toFixed(2)},${closest.z.toFixed(2)} dist3D=${dist3D.toFixed(2)} distXZ=${distXZ.toFixed(2)}`);
-
-        if (distXZ > radius) continue;
-
-        // Apply damage and knockback
-        try {
-          enemy.takeDamage(damage, "melee");
-        } catch (err) {
-          console.warn("Error calling takeDamage on enemy:", err);
-        }
-        const dir = enemyPos.clone().sub(origin).normalize();
-        if (!enemy._knockback) enemy._knockback = new THREE.Vector3();
-        enemy._knockback.add(dir.multiplyScalar(knockbackForce));
-        hitSomething = true;
-        console.log(`Hit enemy: ${enemy.name || enemy.id || "unknown"}, horizDist=${distXZ.toFixed(2)}, 3Ddist=${dist3D.toFixed(2)}`);
+    console.log(`Melee origin=${origin.x.toFixed(2)},${origin.y.toFixed(2)},${origin.z.toFixed(2)} hitPos=${hitPos.x.toFixed(2)},${hitPos.y.toFixed(2)},${hitPos.z.toFixed(2)} enemies=${enemies.length}`);
+    for (const enemy of enemies) {
+      if (!enemy.mesh || enemy._isDead) continue;
+      // Use world position to account for parent transforms
+      const enemyPos = new THREE.Vector3();
+      try {
+        enemy.mesh.getWorldPosition(enemyPos);
+      } catch (_) {
+        enemyPos.copy(enemy.mesh.position || new THREE.Vector3());
       }
+
+      // Compute distance from enemy to the line segment (capsule) from origin->hitPos
+      const segVec = hitPos.clone().sub(origin); // vector from origin to hitPos
+      const segLenSq = segVec.lengthSq() || 1;
+      const toEnemy = enemyPos.clone().sub(origin);
+      let t = segVec.dot(toEnemy) / segLenSq; // projection factor along segment
+      t = Math.max(0, Math.min(1, t));
+      const closest = origin.clone().add(segVec.clone().multiplyScalar(t));
+
+      // 3D distance (for diagnostics)
+      const dist3D = enemyPos.distanceTo(closest);
+      // Horizontal (XZ) distance: ignore vertical offset so camera/player height doesn't prevent hits
+      const dx = enemyPos.x - closest.x;
+      const dz = enemyPos.z - closest.z;
+      const distXZ = Math.hypot(dx, dz);
+
+      console.log(`  enemy=${enemy.id || enemy.name || 'unknown'} pos=${enemyPos.x.toFixed(2)},${enemyPos.y.toFixed(2)},${enemyPos.z.toFixed(2)} closest=${closest.x.toFixed(2)},${closest.y.toFixed(2)},${closest.z.toFixed(2)} dist3D=${dist3D.toFixed(2)} distXZ=${distXZ.toFixed(2)}`);
+
+      if (distXZ > radius) continue;
+
+      // Apply damage and knockback
+      try {
+        enemy.takeDamage(damage, "melee");
+      } catch (err) {
+        console.warn("Error calling takeDamage on enemy:", err);
+      }
+      const dir = enemyPos.clone().sub(origin).normalize();
+      if (!enemy._knockback) enemy._knockback = new THREE.Vector3();
+      enemy._knockback.add(dir.multiplyScalar(knockbackForce));
+      hitSomething = true;
+      console.log(`Hit enemy: ${enemy.name || enemy.id || "unknown"}, horizDist=${distXZ.toFixed(2)}, 3Ddist=${dist3D.toFixed(2)}`);
+    }
 
     if (hitSomething) {
         try {
@@ -256,186 +291,59 @@ meleeAttack() {
     }
 }
 
-  // Load the arm GLB and prepare group to attach to camera
-  // ----------------- ARM LOADING & SWIPE -----------------
-_loadArmModel() {
-    const loader = new GLTFLoader();
-    loader.load('assets/models/playerArm.glb',
-        (gltf) => {
-                console.log('GLB loaded, scene children:', gltf.scene.children.length);
-			try {
-                const arm = gltf.scene;
-                this._armModel = arm;
-// Normalize Sketchfab scale
-arm.scale.setScalar(0.015);
-
-                // ensure all meshes render in front and are transparent
-                arm.traverse((c) => {
-                    if (c.isMesh) {
-                        c.castShadow = false;
-                        c.receiveShadow = false;
-                        c.frustumCulled = false;
-                        if (c.material) {
-                            c.material.depthTest = false;
-                            c.material.depthWrite = false;
-                            c.material.transparent = true;
-                            c.material.side = THREE.DoubleSide;
-                        }
-                        c.renderOrder = 9999;
-                    }
-                });
-
-                // Normalize model scale and center so it fits in camera frustum predictably
-                try {
-                  const box = new THREE.Box3().setFromObject(arm);
-                  const size = new THREE.Vector3();
-                  box.getSize(size);
-                  const maxDim = Math.max(size.x, size.y, size.z) || 1;
-                  const desiredMax = 0.6; // target max dimension in meters
-                  const scaleFactor = desiredMax / maxDim;
-                  arm.scale.multiplyScalar(scaleFactor);
-                  // Recompute box after scaling and recenter to origin
-                  box.setFromObject(arm);
-                  const center = new THREE.Vector3();
-                  box.getCenter(center);
-                  arm.position.sub(center);
-                  // apply a small offset so arm sits slightly down/forward in camera space
-                  arm.position.add(new THREE.Vector3(0, -0.05, 0));
-                  arm.rotation.set(-0.35, 0, 0);
-                  try { const newBox = new THREE.Box3().setFromObject(arm); const newSize = new THREE.Vector3(); newBox.getSize(newSize); console.log('ARM normalize sizeBefore=', size.toArray(), 'scaleFactor=', scaleFactor, 'sizeAfter=', newSize.toArray()); } catch(e){}
-                } catch (e) {
-                  console.warn('ARM normalization failed', e);
-                  arm.position.set(0, -0.05, 0);
-                  arm.rotation.set(-0.35, 0, 0);
-                  arm.scale.set(1.05, 1.05, 1.05);
-                }
-
-                // Adjust local pivot so the shoulder sits at the group's origin.
-                try {
-                  let postBox = new THREE.Box3().setFromObject(arm);
-                  const postSize = new THREE.Vector3();
-                  postBox.getSize(postSize);
-
-                  // If model's major axis is Z (depth) instead of X (width), rotate model to align it along X
-                  if (postSize.z > postSize.x * 1.1) {
-                    arm.rotateY(-Math.PI / 2);
-                    // recompute box after rotation
-                    postBox = new THREE.Box3().setFromObject(arm);
-                    postBox.getSize(postSize);
-                    console.log('ARM rotated to align major axis: new size=', postSize.toArray());
-                  }
-
-                  // Choose hand side by which side extends further from center
-                  const center = new THREE.Vector3(); postBox.getCenter(center);
-                  const distMin = Math.abs(center.x - postBox.min.x);
-                  const distMax = Math.abs(postBox.max.x - center.x);
-                  // Hand is on side with larger distance; shoulder is opposite side (pivot)
-                  let pivotX;
-                  if (distMin > distMax) {
-                    // hand at min.x, shoulder at max.x
-                    pivotX = postBox.max.x;
-                  } else {
-                    // hand at max.x, shoulder at min.x
-                    pivotX = postBox.min.x;
-                  }
-
-                  // Shift arm so pivot (shoulder) is at x=0 in local space
-                  arm.position.x -= pivotX;
-                  console.log('ARM pivot adjusted chosen pivotX=', pivotX, 'new arm position=', arm.position.toArray(), 'postSize=', postSize.toArray());
-                } catch (e) { console.warn('ARM pivot adjustment failed', e); }
-
-                // Remove placeholder and add real arm
-                if (this._armGroup) {
-                    while (this._armGroup.children.length) this._armGroup.remove(this._armGroup.children[0]);
-                    this._armGroup.add(arm);
-                } else {
-                    this._armGroup = new THREE.Group();
-                    this._armGroup.add(arm);
-                }
-
-                this._armGroup.visible = false; // hide until melee starts
-                this._armLoaded = true;
-
-                console.log('playerArm.glb loaded');
-
-                try {
-                  const box = new THREE.Box3().setFromObject(arm);
-                  const size = new THREE.Vector3();
-                  box.getSize(size);
-                  const center = new THREE.Vector3();
-                  box.getCenter(center);
-                  console.log('ARM BOUNDS', JSON.stringify({ min: box.min.toArray(), max: box.max.toArray(), size: size.toArray(), center: center.toArray() }));
-                } catch (e) { console.warn('ARM bounds compute failed', e); }
-
-                // attach to camera if ready
-                if (this.camera && this.camera.add) {
-                  this._attachArmToCamera();
-                }
-
-                // If a melee weapon is queued, attempt to load/attach it now
-                if (this._meleeWeaponPath) {
-                  try { this.loadMeleeWeapon(this._meleeWeaponPath); } catch(e) { console.warn('queued melee attach failed', e); }
-                }
-
-            } catch (e) {
-                console.warn('Arm model setup failed', e);
-            }
-        },
-        undefined,
-        (err) => console.warn('Failed to load arm GLB', err)
-    );
-}
+  
 
   // Load and attach a melee weapon GLB (knife, crowbar, etc.)
   loadMeleeWeapon(path) {
     this._meleeWeaponPath = path;
     if (!path) return;
-    const loader = new GLTFLoader();
 
-    // If arm isn't ready yet, just keep the path queued (arm loader will call this when ready)
-    if (!this._armGroup) {
-      console.warn('Arm group not ready; queued melee weapon:', path);
-      return;
-    }
+    // token to ignore stale async loads
+    this._meleeLoadToken = (this._meleeLoadToken || 0) + 1;
+    const loadToken = this._meleeLoadToken;
 
-    // Remove existing weapon group children
+    // ensure group exists and clear previous
     if (!this._meleeWeaponGroup) this._meleeWeaponGroup = new THREE.Group();
     while (this._meleeWeaponGroup.children.length) this._meleeWeaponGroup.remove(this._meleeWeaponGroup.children[0]);
 
-    console.log('Loading melee weapon GLB:', path);
-    loader.load(path,
-      (gltf) => {
+    console.log('Loading melee weapon GLB:', path, 'token=', loadToken);
+
+    const loader = new GLTFLoader();
+    const onLoad = (gltf) => {
+      if (loadToken !== this._meleeLoadToken) { console.log('Stale melee GLB load ignored:', path, 'token=', loadToken); return; }
+      console.log('melee GLB loaded, scene children:', (gltf && gltf.scene && gltf.scene.children ? gltf.scene.children.length : 0), 'token=', loadToken);
+      const weapon = gltf.scene;
+
+      try {
+        // bounds
         try {
-          console.log('melee GLB loaded, scene children:', gltf.scene.children.length);
-          const weapon = gltf.scene;
+          const box0 = new THREE.Box3().setFromObject(weapon);
+          const size0 = new THREE.Vector3(); box0.getSize(size0);
+          const center0 = new THREE.Vector3(); box0.getCenter(center0);
+          console.log('  loaded weapon bounds size=', size0.toArray(), 'center=', center0.toArray());
+        } catch(e) { console.warn('  bounds compute failed', e); }
 
-          // ensure group visible and not culled
-          this._meleeWeaponGroup.visible = true;
+        // normalize scale/position
+        try {
+          const box = new THREE.Box3().setFromObject(weapon);
+          const size = new THREE.Vector3(); box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const desiredMax = 0.35;
+          const scaleFactor = desiredMax / maxDim;
+          weapon.scale.multiplyScalar(scaleFactor);
+          box.setFromObject(weapon);
+          const center = new THREE.Vector3(); box.getCenter(center);
+          weapon.position.sub(center);
+        } catch (e) { console.warn('Weapon normalization failed', e); }
 
-          // debug: log bbox before normalization
-          try { const dbgBox0 = new THREE.Box3().setFromObject(weapon); const dbgSize0 = new THREE.Vector3(); dbgBox0.getSize(dbgSize0); console.log('Weapon bounds before:', dbgSize0.toArray()); } catch(e) {}
+        // default hold offset and rotation
+        weapon.position.add(new THREE.Vector3(0.12, -0.18, 0.08));
+        weapon.rotation.set(-0.45, 0, Math.PI / 8);
 
-          // Normalize scale and center the model so it fits predictably in camera/hand space
-          try {
-            const box = new THREE.Box3().setFromObject(weapon);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z) || 1;
-            const desiredMax = 0.35; // smaller target size for handheld weapons
-            const scaleFactor = desiredMax / maxDim;
-            weapon.scale.multiplyScalar(scaleFactor);
-            box.setFromObject(weapon);
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            weapon.position.sub(center);
-          } catch (e) { console.warn('Weapon normalization failed', e); }
-
-          // Apply a default hold offset so weapon appears near the hand; tweak per-model later
-          weapon.position.add(new THREE.Vector3(0.12, -0.18, 0.08));
-          weapon.rotation.set(-0.45, 0, Math.PI / 8);
-
-          weapon.traverse(c => {
-            if (c.isMesh) {
+        // ensure meshes render in front
+        weapon.traverse(c => {
+          if (c.isMesh) {
+            try {
               c.castShadow = false;
               c.receiveShadow = false;
               c.frustumCulled = false;
@@ -446,158 +354,141 @@ arm.scale.setScalar(0.015);
                 c.material.side = THREE.DoubleSide;
               }
               c.renderOrder = 9999;
-            }
-          });
-
-                // ensure group flags
-                weapon.traverse(c => { if (c.isMesh) c.frustumCulled = false; });
-                this._meleeWeaponGroup.add(weapon);
-
-                // Attach to arm group (ensure arm is attached to camera first)
-                if (!this._armGroup.parent && this.camera && this.camera.add) this._attachArmToCamera();
-                if (!this._meleeWeaponGroup.parent) this._armGroup.add(this._meleeWeaponGroup);
-
-                // debug: log bbox after attaching
-                try { const dbgBox = new THREE.Box3().setFromObject(weapon); const dbgSize = new THREE.Vector3(); dbgBox.getSize(dbgSize); const dbgCenter = new THREE.Vector3(); dbgBox.getCenter(dbgCenter); console.log('Weapon bounds after attach:', dbgSize.toArray(), 'center:', dbgCenter.toArray()); } catch(e) {}
-
-          // Hide the arm model itself so only the weapon shows (modular look)
-          if (this._armModel) {
-            try { this._armModel.visible = false; } catch(_) {}
+            } catch(_) {}
           }
+        });
 
-          // Ensure weapon group and meshes render in front and are visible
-          try {
-            this._meleeWeaponGroup.traverse(c => {
-              if (c.isMesh && c.material) {
-                c.material.depthTest = false;
-                c.material.depthWrite = false;
-                c.material.transparent = true;
-              }
-              if (c.isMesh) c.renderOrder = 9999;
-              c.frustumCulled = false;
-              c.visible = true;
-            });
-            this._meleeWeaponGroup.visible = true;
-          } catch (e) { console.warn('Weapon visibility flags failed', e); }
+        // attach
+        this._meleeWeaponGroup.add(weapon);
+        if (!this._meleeWeaponGroup.parent && this.camera && this.camera.add) this.camera.add(this._meleeWeaponGroup);
+        this._meleeWeaponGroup.visible = true;
 
-                // Extra per-weapon tweaks: make knife larger and give it a bolder hold offset
-                try {
-                  const pname = (path || '').toLowerCase();
-                  if (pname.includes('knife')) {
-                    this._meleeWeaponGroup.traverse(c => { if (c.isMesh) c.renderOrder = 9999; });
-                    // scale up knife for more visual presence
-                    weapon.scale.multiplyScalar(1.8);
-                    // shift slightly so blade arcs across view
-                    weapon.position.add(new THREE.Vector3(0.06, -0.06, 0.04));
-                    weapon.rotation.set(-0.7, 0, Math.PI / 5);
-                  }
-                } catch(e) { console.warn('per-weapon tweak failed', e); }
+        // per-weapon tweaks
+        try {
+          const pname = (path || '').toLowerCase();
+          if (pname.includes('knife')) {
+            weapon.scale.multiplyScalar(1.8);
+            weapon.position.add(new THREE.Vector3(0.06, -0.06, 0.04));
+            weapon.rotation.set(-0.7, 0, Math.PI / 5);
+          }
+          if (pname.includes('crowbar')) {
+            weapon.scale.multiplyScalar(1.4);
+            weapon.position.add(new THREE.Vector3(0.02, -0.10, 0.00));
+            weapon.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+          }
+        } catch(e) { console.warn('per-weapon tweak failed', e); }
 
-          console.log('Melee weapon loaded and attached:', path);
-        } catch (e) {
-          console.warn('Failed to setup melee weapon', e);
-        }
-      },
-      undefined,
-      (err) => console.warn('Failed to load melee weapon GLB', err)
-    );
-  }
-
-// Attach the arm to the camera properly at shoulder height
-_attachArmToCamera() {
-    if (!this._armGroup || !this.camera) return;
-
-    const cam = this.camera;
-    if (!this._armGroup.parent) cam.add(this._armGroup);
-
-    // Reset transforms
-    this._armGroup.position.set(0, -0.2, -0.6); // shoulder-level near camera
-    this._armGroup.rotation.set(0, 0, 0);
-    this._armGroup.scale.set(1, 1, 1);
-
-    // Ensure all meshes are visible in front of scene
-    this._armGroup.traverse(c => {
-        if (c.isMesh && c.material) {
-            c.material.depthTest = false;
-            c.material.depthWrite = false;
-            c.material.transparent = true;
-            c.material.side = THREE.DoubleSide;
-            c.renderOrder = 9999;
+        // final visibility flags
+        try {
+          this._meleeWeaponGroup.traverse(c => {
+            if (c.isMesh && c.material) {
+              c.material.depthTest = false;
+              c.material.depthWrite = false;
+              c.material.transparent = true;
+            }
+            if (c.isMesh) c.renderOrder = 9999;
             c.frustumCulled = false;
-        }
-    });
+            c.visible = true;
+          });
+          this._meleeWeaponGroup.visible = true;
+        } catch (e) { console.warn('Weapon visibility flags failed', e); }
 
-    this._armGroup.visible = false; // only show on melee
-    console.log('Arm attached to camera at', this._armGroup.position.toArray());
-}
-
-// Start a smooth shoulder swing from left to right
-_startArmSwipe() {
-    if (!this._armGroup) return;
-    this._armGroup.visible = true;
-
-    const now = performance.now();
-    // Restore previous dramatic but snappy duration
-    const durationMs = 520; // swing duration
-    const shoulderHeight = -0.18; // camera-local Y
-    // If a melee weapon is attached, bias the swing forward and wider for drama
-    const hasWeapon = (this._meleeWeaponGroup && this._meleeWeaponGroup.children.length > 0);
-    const shoulderZ = hasWeapon ? -0.45 : -0.6; // bring forward when weapon present
-    const shoulderX = hasWeapon ? 0.7 : 0.4; // wider arc when weapon present
-
-    // Start and end positions/rotations for smooth swing
-    // Larger rotations when weapon is present for a dramatic arc
-    const fromRotZ = hasWeapon ? -Math.PI * 0.6 : -Math.PI / 3;
-    const toRotZ = hasWeapon ? Math.PI * 0.6 : Math.PI / 3;
-    const fromRotX = hasWeapon ? -0.6 : -0.2;
-    const toRotX = hasWeapon ? -0.2 : -0.15;
-
-    this._meleeAnim = {
-      startMs: now,
-      durationMs,
-      from: { x: shoulderX, y: shoulderHeight, z: shoulderZ, rotX: fromRotX, rotY: 0, rotZ: fromRotZ }, // raised behind
-      to:   { x: -shoulderX, y: shoulderHeight, z: shoulderZ, rotX: toRotX, rotY: 0, rotZ: toRotZ }  // swing across
+      } catch (e) {
+        console.warn('melee GLTF onLoad handler failed', e);
+      }
     };
 
-    // ensure arm is attached
-    if (!this._armGroup.parent) this._attachArmToCamera();
+    const onError = (err) => { console.error('melee GLB load error for', path, 'token=', loadToken, err); };
 
-    // Set initial transform
-    const f = this._meleeAnim.from;
-    this._armGroup.position.set(f.x, f.y, f.z);
-    this._armGroup.rotation.set(f.rotX, f.rotY, f.rotZ);
+    loader.load(path, onLoad, undefined, onError);
+  } // end loadMeleeWeapon
+
+// Start a smooth weapon swing across camera-local space
+_startArmSwipe() {
+  if (!this._meleeWeaponGroup) return;
+  this._meleeWeaponGroup.visible = true;
+
+  try {
+    const hasWeapon = (this._meleeWeaponGroup && this._meleeWeaponGroup.children.length > 0);
+    console.log('startArmSwipe: hasWeapon=', hasWeapon, 'children=', this._meleeWeaponGroup.children.length, 'visible=', this._meleeWeaponGroup.visible, 'parent=', !!this._meleeWeaponGroup.parent, 'meleePath=', this._meleeWeaponPath);
+  } catch (e) { console.warn('startArmSwipe diag failed', e); }
+
+  const now = performance.now();
+  // Dramatic arc for handheld weapons
+  // Visual swing should be slightly shorter than cooldown
+const durationMs = Math.max(
+  300,
+  (this.meleeCooldownMs || 600) * 0.85
+);
+
+  const shoulderHeight = -0.12; // camera-local Y (slightly up for dramatic arc)
+  const hasWeapon = (this._meleeWeaponGroup && this._meleeWeaponGroup.children.length > 0);
+  const shoulderZ = hasWeapon ? -0.25 : -0.6; // bring forward when weapon present
+  const shoulderX = hasWeapon ? 1.2 : 0.7; // wider arc when weapon present
+
+  // Bigger rotations when weapon present for a dramatic arc
+  const fromRotZ = hasWeapon ? -Math.PI * 0.9 : -Math.PI / 3;
+  const toRotZ = hasWeapon ? Math.PI * 0.9 : Math.PI / 3;
+  const fromRotX = hasWeapon ? -1.2 : -0.6;
+  const toRotX = hasWeapon ? -0.2 : -0.15;
+
+  this._meleeAnim = {
+    startMs: now,
+    durationMs,
+    from: { x: shoulderX, y: shoulderHeight, z: shoulderZ, rotX: fromRotX, rotY: 0, rotZ: fromRotZ },
+    to:   { x: -shoulderX, y: shoulderHeight, z: shoulderZ, rotX: toRotX, rotY: 0, rotZ: toRotZ }
+  };
+
+  // Ensure weapon group is attached to camera
+  try { if (!this._meleeWeaponGroup.parent && this.camera && this.camera.add) this.camera.add(this._meleeWeaponGroup); } catch(e) {}
+
+  // Set initial transform on the weapon group
+  const f = this._meleeAnim.from;
+  this._meleeWeaponGroup.position.set(f.x, f.y, f.z);
+  this._meleeWeaponGroup.rotation.set(f.rotX, f.rotY, f.rotZ);
 }
 
-// Update arm each frame
+// Update weapon swing each frame (called by game loop as updateArm)
 updateArm(deltaMs) {
-    if (!this._armGroup || !this._meleeAnim) return;
+  if (!this._meleeWeaponGroup || !this._meleeAnim) return;
 
-    const t = (performance.now() - this._meleeAnim.startMs) / this._meleeAnim.durationMs;
-    if (t >= 1) {
-        this._armGroup.visible = false;
-        this._meleeAnim = null;
-        if (this._hudHidden) {
-            this._hudHidden.forEach(h => { h.el.style.visibility = h.originalVisibility || ''; });
-            this._hudHidden = null;
-        }
-        return;
+  const t = (performance.now() - this._meleeAnim.startMs) / this._meleeAnim.durationMs;
+  if (t >= 1) {
+    this._meleeWeaponGroup.visible = false;
+    this._meleeAnim = null;
+    if (this._hudHidden) {
+      this._hudHidden.forEach(h => { h.el.style.visibility = h.originalVisibility || ''; });
+      this._hudHidden = null;
     }
+    return;
+  }
 
-    // Smooth swing with half-sine easing
-    const ease = Math.sin(Math.max(0, Math.min(1, t)) * Math.PI);
-    const f = this._meleeAnim.from;
-    const to = this._meleeAnim.to;
+  // Smooth swing with half-sine easing
+  const ease = 1 - Math.cos(t * Math.PI * 0.5);
 
-    this._armGroup.position.set(
-        f.x + (to.x - f.x) * ease,
-        f.y + (to.y - f.y) * ease,
-        f.z + (to.z - f.z) * ease
-    );
-    this._armGroup.rotation.set(
-        f.rotX + (to.rotX - f.rotX) * ease,
-        f.rotY + (to.rotY - f.rotY) * ease,
-        f.rotZ + (to.rotZ - f.rotZ) * ease
-    );
+  try {
+    const step = Math.floor(t * 8);
+    if (!this._meleeAnim._lastStep || this._meleeAnim._lastStep !== step) {
+      this._meleeAnim._lastStep = step;
+      console.log('updateArm: t=', t.toFixed(3), 'step=', step, 'ease=', ease.toFixed(3), 'visible=', this._meleeWeaponGroup.visible, 'children=', this._meleeWeaponGroup.children.length);
+    }
+  } catch (e) { /* ignore */ }
+
+
+  
+  const f = this._meleeAnim.from;
+  const to = this._meleeAnim.to;
+
+  this._meleeWeaponGroup.position.set(
+    f.x + (to.x - f.x) * ease,
+    f.y + (to.y - f.y) * ease,
+    f.z + (to.z - f.z) * ease
+  );
+  this._meleeWeaponGroup.rotation.set(
+    f.rotX + (to.rotX - f.rotX) * ease,
+    f.rotY + (to.rotY - f.rotY) * ease,
+    f.rotZ + (to.rotZ - f.rotZ) * ease
+  );
 }
   
     set position(v) {

@@ -198,3 +198,55 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
 export function getWeapon(id) {
   return WEAPON_DEFS[id] || null;
 }
+
+// Melee weapon definitions (simple schema)
+function baseMelee(def) {
+  return {
+    name: def.name,
+    model: def.model, // path to GLB for visual
+    reach: def.reach || 1.0, // meters
+    damage: def.damage || 10,
+    attackSpeed: def.attackSpeed || 600, // ms cooldown
+    knockback: def.knockback || 0,
+    attackSounds: def.attackSounds || []
+  };
+}
+
+export const MELEE_DEFS = {
+  combatKnife: baseMelee({
+    name: "Combat Knife",
+    model: "assets/models/knife.glb",
+    reach: 0.5,
+    damage: 15,
+    attackSpeed: 1000,
+    knockback: 0.1,
+    attackSounds: [
+      "assets/sfx/swing_medium1.ogg",
+      "assets/sfx/swing_medium2.ogg"
+    ]
+  })// end of combat Knife
+  ,
+  crowbar: baseMelee({
+    name: "Crowbar",
+    model: "assets/models/crowbar.glb",
+
+    // heavier melee weapon
+    reach: 0.8,
+    damage: 28,
+
+    // slower, weighty swing (also drives animation duration in player.js)
+    attackSpeed: 1400,
+
+    // strong physical impact
+    knockback: 0.45,
+
+    attackSounds: [
+      "assets/sfx/swing_heavy1.ogg",
+      "assets/sfx/swing_heavy2.ogg"
+    ]
+  }) // end crowbar
+};
+
+export function getMeleeWeapon(id) {
+  return MELEE_DEFS[id] || null;
+}
