@@ -9,6 +9,23 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
+// Editor mode flag and helpers (default OFF)
+window.engine = window.engine || { isEditorMode: false };
+
+function setEditorMode(enabled) {
+  window.engine.isEditorMode = !!enabled;
+  if (window.engine.isEditorMode) {
+    // disable enemy AI and combat, enable free FPS movement
+    try { setEnemyAIEnabled(false); } catch(_) {}
+    isFPSMode = true;
+    window.engine.disableCombat = true;
+    console.log('[EDITOR] Editor mode ENABLED');
+  } else {
+    try { setEnemyAIEnabled(true); } catch(_) {}
+    window.engine.disableCombat = false;
+    console.log('[EDITOR] Editor mode DISABLED');
+  }
+}
 import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
@@ -441,6 +458,334 @@ window.addEventListener("keydown", (e) => {
     logDebug(`Enemy AI toggled: ${ENEMY_AI_ENABLED ? "ON" : "OFF"}`);
   }
 });
+// Toggle Editor Mode (F2)
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'F2') {
+    setEditorMode(!window.engine.isEditorMode);
+    logDebug(`Editor mode: ${window.engine.isEditorMode ? 'ON' : 'OFF'}`);
+  }
+});
+
+// Editor spawn key bindings
+window.addEventListener('keydown', (e) => {
+  if (!window.engine?.isEditorMode) return;
+  if (e.code === 'Digit1') { e.preventDefault(); spawnEditorObject('wall'); }
+  else if (e.code === 'Digit2') { e.preventDefault(); spawnEditorObject('door'); }
+  else if (e.code === 'Digit3') { e.preventDefault(); spawnEditorObject('light'); }
+  else if (e.code === 'Digit4') { e.preventDefault(); spawnEditorObject('crate'); }
+});
+
+// Selection binding: press E to raycast from camera center and select nearest object
+window.addEventListener('keydown', (e) => {
+  if (!window.engine?.isEditorMode) return;
+  if (e.code === 'KeyE') {
+    e.preventDefault();
+    selectObjectFromCenter();
+  }
+});
+
+// Editor manipulation: move, rotate, delete selected object via keyboard
+window.addEventListener('keydown', (e) => {
+  if (!window.engine?.isEditorMode) return;
+  if (!window.selectedObject) return;
+
+  // Determine step size
+  let step = 1.0;
+  if (e.shiftKey) step = 0.1;
+  else if (e.ctrlKey) step = 0.01;
+
+  const obj = window.selectedObject;
+  const mesh = obj.mesh;
+  if (!mesh) return;
+
+  let moved = false;
+
+  switch (e.code) {
+    case 'ArrowUp':
+      mesh.position.z -= step; moved = true; e.preventDefault(); break;
+    case 'ArrowDown':
+      mesh.position.z += step; moved = true; e.preventDefault(); break;
+    case 'ArrowLeft':
+      mesh.position.x -= step; moved = true; e.preventDefault(); break;
+    case 'ArrowRight':
+      mesh.position.x += step; moved = true; e.preventDefault(); break;
+    case 'PageUp':
+      mesh.position.y += step; moved = true; e.preventDefault(); break;
+    case 'PageDown':
+      mesh.position.y -= step; moved = true; e.preventDefault(); break;
+    case 'KeyR':
+      // rotate Y by 90 degrees
+      mesh.rotation.y += Math.PI / 2; moved = true; e.preventDefault(); break;
+    case 'Delete':
+    case 'Backspace':
+      // delete selected object
+      try {
+        // remove mesh from scene
+        if (mesh.parent) mesh.parent.remove(mesh);
+
+        // remove from sceneLoader lists if present
+        const sl = window.sceneLoader;
+        if (sl) {
+          // props
+          const pidx = sl.props.findIndex(p => p === obj || p.id === obj.id);
+          if (pidx >= 0) { const p = sl.props.splice(pidx,1)[0]; if (p.id) delete sl.propsById[p.id]; }
+          // staticObjects
+          const sidx = sl.staticObjects.findIndex(s => s === obj || s.id === obj.id);
+          if (sidx >= 0) sl.staticObjects.splice(sidx,1);
+          // sceneLights
+          if (obj.light) {
+            const li = sl.sceneLights.indexOf(obj.light);
+            if (li >= 0) sl.sceneLights.splice(li,1);
+          }
+        }
+
+        // clear highlight and selection
+        _clearHighlight(window.selectedObject);
+        window.selectedObject = null;
+        logDebug('Editor: object deleted');
+      } catch (err) { console.warn('Delete failed', err); }
+      e.preventDefault();
+      return;
+  }
+
+  if (moved) {
+    // sync wrapper position fields if present
+    try {
+      if (obj.position) {
+        obj.position.x = mesh.position.x;
+        obj.position.y = mesh.position.y;
+        obj.position.z = mesh.position.z;
+      } else {
+        obj.position = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
+      }
+      // rotation store in degrees for easier scene export
+      if (obj.rotation) {
+        obj.rotation.x = mesh.rotation.x;
+        obj.rotation.y = mesh.rotation.y;
+        obj.rotation.z = mesh.rotation.z;
+      } else {
+        obj.rotation = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
+      }
+      if (obj.size && mesh.geometry && mesh.geometry.parameters) {
+        // attempt to keep size in sync for box geometries
+        const p = mesh.geometry.parameters;
+        if (p.width !== undefined) obj.size.x = p.width * mesh.scale.x;
+        if (p.height !== undefined) obj.size.y = p.height * mesh.scale.y;
+        if (p.depth !== undefined) obj.size.z = p.depth * mesh.scale.z;
+      }
+      if (obj._editorHighlight) obj._editorHighlight.update();
+      logDebug(`Editor: moved/rotated ${obj.id || '(no-id)'} -> ${mesh.position.x.toFixed(3)},${mesh.position.y.toFixed(3)},${mesh.position.z.toFixed(3)}`);
+    } catch (e) { console.warn('sync after move failed', e); }
+    e.preventDefault();
+  }
+});
+
+  // -----------------------------
+  // Simple editor console commands
+  // Usage from browser console: execEditorCommand('size x 2')
+  // Supported: size x|y|z <value>, rot y <degrees>, light intensity <value>
+  window.execEditorCommand = function(cmd) {
+    if (!cmd || typeof cmd !== 'string') return console.warn('execEditorCommand expects a string');
+    const parts = cmd.trim().split(/\s+/);
+    if (parts.length < 3) return console.warn('Invalid command');
+    const verb = parts[0].toLowerCase();
+    const target = parts[1].toLowerCase();
+    const val = Number(parts[2]);
+    if (Number.isNaN(val)) return console.warn('Value must be numeric');
+    const sel = window.selectedObject;
+    if (!sel) return console.warn('No selected object');
+
+    try {
+      if (verb === 'size') {
+        // scale along axis for mesh (box-like objects)
+        if (!sel.mesh) return console.warn('Selected has no mesh');
+        const scaleVec = sel.mesh.scale || { x:1,y:1,z:1 };
+        if (target === 'x') sel.mesh.scale.x = val;
+        else if (target === 'y') sel.mesh.scale.y = val;
+        else if (target === 'z') sel.mesh.scale.z = val;
+        // update wrapper size if present
+        if (sel.size) {
+          if (target === 'x') sel.size.x = val;
+          if (target === 'y') sel.size.y = val;
+          if (target === 'z') sel.size.z = val;
+        }
+        if (sel._editorHighlight) sel._editorHighlight.update();
+        console.log(`Applied size ${target}=${val} to ${sel.id || '(no-id)'} `);
+        return;
+      }
+
+      if (verb === 'rot') {
+        if (!sel.mesh) return console.warn('Selected has no mesh');
+        if (target === 'y') {
+          sel.mesh.rotation.y = THREE.MathUtils.degToRad(val);
+          if (!sel.rotation) sel.rotation = {};
+          sel.rotation.y = sel.mesh.rotation.y;
+          if (sel._editorHighlight) sel._editorHighlight.update();
+          console.log(`Applied rot y=${val}deg to ${sel.id || '(no-id)'} `);
+          return;
+        }
+        return console.warn('Unsupported rot axis');
+      }
+
+      if (verb === 'light' && target === 'intensity') {
+        // allow `light intensity <value>`
+        if (sel.light) {
+          sel.light.intensity = val;
+          console.log(`Set light intensity=${val} on ${sel.id || '(no-id)'} `);
+          return;
+        }
+        // If selecting wrapper that contains .light property
+        if (sel.light === undefined && sel.mesh) {
+          // try find THREE.Light child
+          let found = null;
+          sel.mesh.traverse(c => { if (!found && c.isLight) found = c; });
+          if (found) { found.intensity = val; console.log(`Set light intensity=${val} on ${sel.id || '(no-id)'} `); return; }
+        }
+        return console.warn('Selected object is not a light');
+      }
+
+      console.warn('Unknown command');
+    } catch (e) {
+      console.error('execEditorCommand failed', e);
+    }
+  };
+
+// Editor spawning: keys 1-4 spawn objects when editor mode active
+window.engine.editorCounters = window.engine.editorCounters || { wall: 0, door: 0, light: 0, crate: 0 };
+
+function _nextId(prefix) {
+  const c = window.engine.editorCounters;
+  c[prefix] = (c[prefix] || 0) + 1;
+  return `${prefix}_${String(c[prefix]).padStart(2,'0')}`;
+}
+
+function spawnEditorObject(type) {
+  if (!window.engine.isEditorMode) return;
+  if (!window.sceneLoader) { console.warn('No sceneLoader'); return; }
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const pos = camera.position.clone().add(dir.multiplyScalar(2));
+
+  const sl = window.sceneLoader;
+  let id, wrapper;
+
+  if (type === 'wall') {
+    id = _nextId('wall');
+    const width = 2; const height = 2; const depth = 0.2;
+    const geo = new THREE.BoxGeometry(width, height, depth);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x228833 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData = { propId: id, type: 'wall', solid: true };
+
+    wrapper = {
+      id,
+      mesh,
+      size: { x: width, y: height, z: depth },
+      position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+      hp: 9999,
+      maxHp: 9999,
+      indestructible: true,
+      takeDamage() { return false; },
+      dispose() { try { mesh.geometry?.dispose(); mesh.material?.dispose(); } catch(e){} }
+    };
+
+    sl.addProp(wrapper);
+    sl.staticObjects.push(wrapper);
+    console.log('Editor: spawned wall', id, mesh.position);
+    return wrapper;
+  }
+
+  if (type === 'door') {
+    id = _nextId('door');
+    const width = 1.2; const height = 2.2; const depth = 0.15;
+    const geo = new THREE.BoxGeometry(width, height, depth);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+    const door = new THREE.Mesh(geo, mat);
+    door.position.copy(pos);
+    door.castShadow = true; door.receiveShadow = true;
+    door.userData = { propId: id, type: 'door', solid: true };
+
+    wrapper = {
+      id,
+      mesh: door,
+      size: { x: width, y: height, z: depth },
+      position: { x: door.position.x, y: door.position.y, z: door.position.z },
+      hp: 1,
+      maxHp: 1,
+      indestructible: false,
+      takeDamage(amount) { this.hp -= amount; if (this.hp <= 0) { if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh); return true; } return false; },
+      dispose() { try { this.mesh.geometry?.dispose(); this.mesh.material?.dispose(); } catch(e){} }
+    };
+
+    sl.addProp(wrapper);
+    sl.staticObjects.push(wrapper);
+    console.log('Editor: spawned door', id, door.position);
+    return wrapper;
+  }
+
+  if (type === 'light') {
+    id = _nextId('light');
+    const holder = new THREE.Object3D();
+    holder.position.copy(pos);
+    const point = new THREE.PointLight(0xffffff, 1, 0, 2);
+    point.position.set(0,0,0);
+    holder.add(point);
+    // Add small sphere for selection
+    const sgeo = new THREE.SphereGeometry(0.08,8,8);
+    const smat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    const s = new THREE.Mesh(sgeo, smat);
+    holder.add(s);
+    holder.userData = { propId: id, type: 'light' };
+
+    wrapper = {
+      id,
+      mesh: holder,
+      light: point,
+      type: 'light',
+      position: { x: holder.position.x, y: holder.position.y, z: holder.position.z }
+    };
+
+    // register with scene lights and staticObjects for export
+    sl.scene.add(holder);
+    sl.sceneLights.push(point);
+    sl.staticObjects.push(wrapper);
+    console.log('Editor: spawned light', id, holder.position);
+    return wrapper;
+  }
+
+  if (type === 'crate') {
+    id = _nextId('crate');
+    const size = 1.0;
+    const geo = new THREE.BoxGeometry(size, size, size);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x996633 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.userData = { propId: id, type: 'crate', solid: true };
+
+    wrapper = {
+      id,
+      mesh,
+      size: { x: size, y: size, z: size },
+      position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+      hp: 10,
+      maxHp: 10,
+      indestructible: false,
+      hitSounds: [],
+      deathSounds: [],
+      takeDamage(amount) { this.hp -= amount; if (this.hp <= 0) { if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh); return true; } return false; },
+      dispose() { try { this.mesh.geometry?.dispose(); this.mesh.material?.dispose(); } catch(e){} }
+    };
+
+    sl.addProp(wrapper);
+    sl.staticObjects.push(wrapper);
+    console.log('Editor: spawned crate', id, mesh.position);
+    return wrapper;
+  }
+}
+
+window.spawnEditorObject = spawnEditorObject;
         
 		// Movement
         document.addEventListener('keydown', (e) => {
@@ -514,6 +859,163 @@ window.cam = () => {
   console.log(`Camera position -> x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`);
 };
 
+// -----------------------------
+// Scene export (F5)
+// -----------------------------
+function _serializeVector3(v) {
+  return { x: v.x, y: v.y, z: v.z };
+}
+
+function _lightToDef(light) {
+  if (!light) return null;
+  const def = {};
+  if (light.isAmbientLight) {
+    def.type = 'ambient';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+  } else if (light.isDirectionalLight) {
+    def.type = 'directional';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+    def.position = _serializeVector3(light.position);
+    if (light.target && light.target.position) def.target = _serializeVector3(light.target.position);
+    if (light.castShadow) def.castShadow = true;
+  } else if (light.isPointLight) {
+    def.type = 'point';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+    def.position = _serializeVector3(light.parent ? light.parent.position : light.position);
+    if (typeof light.distance === 'number') def.distance = light.distance;
+    if (typeof light.decay === 'number') def.decay = light.decay;
+  } else if (light.isSpotLight) {
+    def.type = 'spot';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+    def.position = _serializeVector3(light.parent ? light.parent.position : light.position);
+    def.angle = light.angle;
+    def.penumbra = light.penumbra;
+    def.decay = light.decay;
+  } else {
+    // unknown light type: fallback to point-like
+    def.type = 'point';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity ?? 1;
+    def.position = _serializeVector3(light.parent ? light.parent.position : light.position);
+  }
+  return def;
+}
+
+function _cleanStaticObject(o) {
+  const out = {};
+  out.id = o.id || null;
+  // type: prefer explicit, then mesh userData
+  out.type = o.type || (o.mesh && o.mesh.userData && o.mesh.userData.type) || 'prop';
+  if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
+  else if (o.mesh && o.mesh.position) out.position = _serializeVector3(o.mesh.position);
+  if (o.rotation && o.rotation.y !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
+  else if (o.mesh && o.mesh.rotation) out.rotation = { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z };
+  if (o.size) out.size = Object.assign({}, o.size);
+  if (typeof o.hp === 'number') out.hp = o.hp;
+  if (o.coverType) out.coverType = o.coverType;
+  // material/texture info not available for editor-spawned objects; leave out if missing
+  return out;
+}
+
+function _cleanEnemy(e, existingDefsById) {
+  const out = {};
+  out.id = e.id || (`enemy_${Date.now()}`);
+  // attempt to find original def in existing sceneDef.enemies
+  if (existingDefsById && existingDefsById[out.id] && existingDefsById[out.id].type) {
+    out.type = existingDefsById[out.id].type;
+  } else {
+    // fall back to display type or generic
+    out.type = e._defType || e.type || 'Unknown';
+  }
+  if (e.position && typeof e.position.x === 'number') out.position = { x: e.position.x, y: e.position.y, z: e.position.z };
+  if (typeof e.facing === 'number') out.facing = e.facing;
+  if (typeof e.hp === 'number') out.hp = e.hp;
+  if (e.coverIndex !== undefined) out.coverIndex = e.coverIndex;
+  if (e.coverObjectId) out.coverObject = e.coverObjectId;
+  return out;
+}
+
+function exportSceneToJS() {
+  if (!window.sceneLoader) { console.warn('No sceneLoader'); return; }
+  const sl = window.sceneLoader;
+
+  // Compose camera def
+  const cam = { position: _serializeVector3(camera.position) };
+  try {
+    const forward = new THREE.Vector3(); camera.getWorldDirection(forward);
+    const lookAt = camera.position.clone().add(forward.multiplyScalar(10));
+    cam.lookAt = _serializeVector3(lookAt);
+    if (camera.isPerspectiveCamera) { cam.fov = camera.fov; cam.near = camera.near; cam.far = camera.far; }
+  } catch (e) {}
+
+  // Lights: prefer sceneDef.lights if present, but include runtime lights
+  const lights = [];
+  if (Array.isArray(sl.sceneDef?.lights)) {
+    // include original lights first
+    sl.sceneDef.lights.forEach(ld => lights.push(ld));
+  }
+  // include any runtime sceneLoader.sceneLights not covered
+  sl.sceneLights.forEach(l => {
+    const def = _lightToDef(l);
+    if (def) lights.push(def);
+  });
+
+  // Static objects
+  const staticObjects = [];
+  (Array.isArray(sl.staticObjects) ? sl.staticObjects : []).forEach(o => {
+    try { staticObjects.push(_cleanStaticObject(o)); } catch (e) { console.warn('clean static obj failed', e); }
+  });
+
+  // Props (include as staticObjects if not already present)
+  (Array.isArray(sl.props) ? sl.props : []).forEach(p => {
+    const exists = staticObjects.find(s => s.id && p.id && s.id === p.id);
+    if (!exists) staticObjects.push(_cleanStaticObject(p));
+  });
+
+  // Enemies: start from sceneDef.enemies then add other runtime enemies
+  const enemiesOut = [];
+  const existingDefsById = {};
+  if (Array.isArray(sl.sceneDef?.enemies)) {
+    sl.sceneDef.enemies.forEach(ed => { existingDefsById[ed.id] = ed; enemiesOut.push(ed); });
+  }
+  (Array.isArray(sl.enemies) ? sl.enemies : []).forEach(en => {
+    if (existingDefsById[en.id]) return; // already included
+    enemiesOut.push(_cleanEnemy(en, existingDefsById));
+  });
+
+  const sceneObj = {
+    name: `Exported Scene ${new Date().toISOString()}`,
+    camera: cam,
+    lights: lights,
+    environment: { staticObjects },
+    enemies: enemiesOut
+  };
+
+  const jsText = 'export const Scene_Exported = ' + JSON.stringify(sceneObj, null, 2) + ';\n';
+  const blob = new Blob([jsText], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `scene_export_${Date.now()}.js`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  console.log('Scene exported to file');
+}
+
+// Bind F5 to export when in editor mode (prevent browser reload)
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'F5' && window.engine?.isEditorMode) {
+    e.preventDefault();
+    exportSceneToJS();
+  }
+});
+
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(cw, ch);
@@ -537,6 +1039,87 @@ const LERP_SPEED = 0.9;
 // ------------------ Raycaster ------------------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+
+// Editor selection state
+window.selectedObject = null; // editor:selected wrapper (prop/static/light)
+
+function _clearHighlight(obj) {
+  try {
+    if (!obj) return;
+    if (obj._editorHighlight) {
+      if (obj._editorHighlight.parent) obj._editorHighlight.parent.remove(obj._editorHighlight);
+      obj._editorHighlight = null;
+    }
+  } catch (e) { console.warn('clearHighlight failed', e); }
+}
+
+function _applyHighlight(obj) {
+  if (!obj || !obj.mesh) return;
+  _clearHighlight(window.selectedObject);
+  try {
+    const helper = new THREE.BoxHelper(obj.mesh, 0xffff00);
+    helper.material.linewidth = 2;
+    scene.add(helper);
+    obj._editorHighlight = helper;
+  } catch (e) { console.warn('applyHighlight failed', e); }
+}
+
+function selectObjectFromCenter() {
+  if (!window.engine?.isEditorMode) return null;
+  if (!window.sceneLoader) return null;
+  const ndc = new THREE.Vector2(0, 0);
+  raycaster.setFromCamera(ndc, camera);
+  const meshes = window.sceneLoader.getIntersectableMeshes();
+  const intersects = raycaster.intersectObjects(meshes, true);
+  if (!intersects || intersects.length === 0) {
+    // clear selection
+    _clearHighlight(window.selectedObject);
+    window.selectedObject = null;
+    logDebug('Editor: selection cleared');
+    return null;
+  }
+
+  // find nearest meaningful wrapper
+  for (const it of intersects) {
+    let obj = it.object;
+    while (obj && obj.userData && !obj.userData.propId && !obj.userData.enemyId && !obj.userData.type) {
+      obj = obj.parent;
+    }
+    if (!obj) continue;
+
+    let wrapper = null;
+    if (obj.userData && obj.userData.propId) {
+      wrapper = window.sceneLoader.propsById?.[obj.userData.propId] || window.sceneLoader.staticObjects.find(o => o.id === obj.userData.propId) || null;
+    } else if (obj.userData && obj.userData.type) {
+      // room or other
+      wrapper = window.sceneLoader.staticObjects.find(o => o.mesh === obj || o.id === obj.userData.id) || null;
+    }
+
+    if (!wrapper) {
+      // as a fallback, attempt to match by mesh reference
+      wrapper = window.sceneLoader.staticObjects.find(o => o.mesh === obj) || null;
+    }
+
+    if (wrapper) {
+      // select this
+      _clearHighlight(window.selectedObject);
+      window.selectedObject = wrapper;
+      _applyHighlight(wrapper);
+      const pos = wrapper.mesh && wrapper.mesh.position ? wrapper.mesh.position : wrapper.position || { x: 0, y: 0, z: 0 };
+      const type = wrapper.type || wrapper.mesh?.userData?.type || 'unknown';
+      const id = wrapper.id || wrapper.mesh?.userData?.propId || '(no-id)';
+      logDebug(`Selected: id=${id}, type=${type}, pos=${pos.x},${pos.y},${pos.z}`);
+      console.log('Selected object:', { id, type, position: pos, wrapper });
+      return wrapper;
+    }
+  }
+
+  // nothing matched
+  _clearHighlight(window.selectedObject);
+  window.selectedObject = null;
+  logDebug('Editor: no selectable object under reticle');
+  return null;
+}
 
 // ------------------ Scene / Level management ------------------
 
@@ -1034,6 +1617,10 @@ function stopFiring() {
 
 
 function triggerFire() {
+  if (window.engine && window.engine.isEditorMode) {
+    logDebug('Editor mode: firing disabled');
+    return false;
+  }
   const w = player?.currentWeapon;
   if (!w) return false;
 

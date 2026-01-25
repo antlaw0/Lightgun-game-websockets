@@ -1,209 +1,179 @@
-// js/scenes/scene_test_hallway_L.js
 export const Scene_W1_2 = {
-  name: "Test Scene - L Shaped Hallway",
-
-  background: {
-    texture: "assets/backgrounds/black_bg.png",
-    width: 0,
-    height: 0,
-    position: { x: 0, y: 0, z: 0 }
-  },
-
-  // Overall bounding room, larger than the hallway itself
-  room: {
-  width: 10,
-  height: 5,
-  depth: 12,
-  center: { x: 0, y: 0, z: 0 }
-},
-
-cameraRails: {
-  intro: [],
-
-  exit: [
-    // Move camera along the hallway
-    {
-      type: "moveTo",
-      position: { x: 8.0, y: 1.7, z: -8.0 },
-      duration: 8000
-    },
-
-    // Look slightly ahead as it moves
-    {
-      type: "lookAt",
-      target: { x: 8.5, y: 1.7, z: -8.1 },
-      duration: 1000
-    },
-
-    // Rotate camera safely
-    {
-      type: 'rotate',
-      rotation: { x: 0, y: -90, z: 0 }, // fixed: must be object with x,y,z
-      duration: 1000
-    },
-
-    // Small pause at the end before enabling player control
-    {
-      type: 'pause',
-      duration: 300,
-      triggerNextScene: true
-    }
-  ]
-},
+  name: "World 1-2 – L Hallway",
 
   camera: {
-    position: { x: 0, y: 1.7, z: 8 },
-    lookAt: { x: 0, y: 1.4, z: 0 },
+    position: { x: 0, y: 1.7, z: 1.5 },
+    lookAt: { x: 0, y: 1.7, z: -2 },
     fov: 60,
     near: 0.1,
-    far: 120
-  },
+    far: 100
+  }, // end camera
+
+  cameraRails: {
+    intro: [
+      {
+        type: "doorOpen",
+        doorId: "door_entrance",
+        duration: 600
+      },
+      {
+        type: "moveTo",
+        position: { x: 0, y: 1.7, z: -1.2 },
+        duration: 900
+      }
+    ],
+    exit: []
+  }, // end cameraRails
 
   lights: [
     {
       type: "ambient",
-      color: 0x8899aa,
-      intensity: 0.35
+      color: 0xffffff,
+      intensity: 0.9
     },
     {
-      // Light for first hallway leg (-Z)
       type: "spot",
       color: 0xffffff,
-      intensity: 2.5,
-      distance: 30,
-      angle: Math.PI / 6,
-      penumbra: 0.15,
-      decay: 2,
-      position: { x: 0, y: 7.5, z: 2 },
-      target: { x: 0, y: 0, z: -10 },
-      castShadow: true,
-      shadow: {
-        mapSize: { width: 2048, height: 2048 },
-        bias: -0.00008,
-        near: 1,
-        far: 40
-      }
+      intensity: 1.3,
+      position: { x: 0, y: 2.8, z: -3 },
+      target: { x: 0, y: 1.5, z: -5 },
+      angle: Math.PI / 2,
+      penumbra: 0.6,
+      decay: 0.6,
+      distance: 16
     },
     {
-      // Light for second hallway leg (+X)
       type: "spot",
       color: 0xffffff,
-      intensity: 2.5,
-      distance: 30,
-      angle: Math.PI / 6,
-      penumbra: 0.15,
-      decay: 2,
-      position: { x: 6, y: 7.5, z: -14 },
-      target: { x: 14, y: 0, z: -14 },
-      castShadow: true,
-      shadow: {
-        mapSize: { width: 2048, height: 2048 },
-        bias: -0.00008,
-        near: 1,
-        far: 40
-      }
+      intensity: 1.3,
+      position: { x: 4, y: 2.8, z: -6 },
+      target: { x: 6, y: 1.5, z: -6 },
+      angle: Math.PI / 2,
+      penumbra: 0.6,
+      decay: 0.6,
+      distance: 16
     }
-  ],
-
-enemies: [
-  
-  {
-      id: "gruntC",
-      type: "Grunt",
-      hp: 40,
-      position: { x: 1, y: 0.9, z: 0 },
-	  
-      behavior: { pattern: "standInOpen" },
-      firePauseMs: 3000,
-      weapon: "sniperRifle",
-	    voice: {
-    pain: [
-      "assets/sfx/grunt/pain1.ogg",
-      "assets/sfx/grunt/pain2.ogg"
-    ],
-    death: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-	taunt: [
-      "assets/sfx/grunt/taunt1.ogg",
-      "assets/sfx/grunt/taunt2.ogg"
-    ],
-    engage: [
-      "assets/sfx/grunt/engage1.ogg"
-    ]
-  }, // end voice
-      hitSounds: ["assets/sfx/grunt/hit1.ogg", "assets/sfx/grunt/hit2.ogg"],
-      deathSounds: ["assets/sfx/grunt/death1.ogg", "assets/sfx/grunt/death2.ogg"],
-      sprite: "assets/sprites/grunt.png"
-    },
-
-  {
-    id: "MeleegruntA",
-    type: "Grunt",
-    hp: 40,
-    position: { x: 1, y: 0.9, z: 2 },
-	    voice: {
-    pain: [
-      "assets/sfx/grunt/pain1.ogg",
-      "assets/sfx/grunt/pain2.ogg"
-    ],
-    death: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-	taunt: [
-      "assets/sfx/grunt/taunt1.ogg",
-      "assets/sfx/grunt/taunt2.ogg"
-    ],
-    engage: [
-      "assets/sfx/grunt/engage1.ogg"
-    ]
-  }, // end voice
-
-    behavior: {
-      pattern: "meleeRush",
-      params: {
-        approachSpeed: 2.2,
-        meleeRange: 1.5,
-        sideOffset: 1.1,
-        attackCooldownMs: 700
-      }
-    }, // end behavior
-
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
-
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-
-    sprite: "assets/sprites/grunt.png"
-  }
-], 
-
-  
-  roomTextures: {
-    floor: "assets/textures/warehouse_floor.png",
-    ceiling: "assets/textures/warehouse_ceiling.png",
-    wall: "assets/textures/warehouse_wall.png",
-    backWall: "assets/textures/warehouse_wall.png"
-  },
+  ], // end lights
 
   environment: {
-    staticObjects: []
+    staticObjects: [
+      /* =========================
+         ENTRANCE LEG WALLS (–Z)
+         ========================= */
 
+      {
+        id: "wall_entrance_left",
+        type: "wall",
+        hp: 200,
+        maxHp: 200,
+        position: { x: -1.5, y: 0, z: -3 },
+        size: { x: 0.2, y: 2.5, z: 6 },
+        coverType: "full",
+        indestructible: true,
+        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
       },
 
-  
+      {
+        id: "wall_entrance_right",
+        type: "wall",
+        hp: 200,
+        maxHp: 200,
+        position: { x: 1.5, y: 0, z: -3 },
+        size: { x: 0.2, y: 2.5, z: 6 },
+        coverType: "full",
+        indestructible: true,
+        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
+      },
+
+      /* =========================
+         TURN LEG WALLS (+X)
+         ========================= */
+
+      {
+        id: "wall_turn_top",
+        type: "wall",
+        hp: 200,
+        maxHp: 200,
+        position: { x: 3, y: 0, z: -7.5 },
+        size: { x: 6, y: 2.5, z: 0.2 },
+        coverType: "full",
+        indestructible: true,
+        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
+      },
+
+      {
+        id: "wall_turn_bottom",
+        type: "wall",
+        hp: 200,
+        maxHp: 200,
+        position: { x: 3, y: 0, z: -4.5 },
+        size: { x: 6, y: 2.5, z: 0.2 },
+        coverType: "full",
+        indestructible: true,
+        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
+      },
+
+      /* =========================
+         DOORS
+         ========================= */
+
+      {
+        id: "door_entrance",
+        type: "door",
+        position: { x: 0, y: 0, z: 0 },
+        width: 1.2,
+        height: 2.2,
+        depth: 0.2
+      },
+
+      {
+        id: "door_exit",
+        type: "door",
+        position: { x: 6, y: 0, z: -6 },
+        rotation: { x: 0, y: Math.PI / 2, z: 0 },
+        width: 1.2,
+        height: 2.2,
+        depth: 0.2
+      }
+    ]
+  }, // end environment
+
+  enemies: [
+    /* E1 – Sniper at far end */
+    {
+      id: "sniper_w1_2",
+      type: "Grunt",
+      displayName: "Sniper Grunt",
+      hp: 90,
+      modelUrl: "assets/models/exo_red.fbx",
+      position: { x: 5.2, y: 0, z: -6 },
+      facing: -Math.PI / 2,
+      behavior: { pattern: "standInOpen", params: { fireIntervalMs: 1200 } }
+    },
+
+    /* E2 – SWAT enemy reused EXACTLY */
+    {
+      id: "swat_w1_2",
+      type: "Grunt",
+      displayName: "Grunt Soldier",
+      hp: 100,
+      modelUrl: "assets/models/swatguy.fbx",
+      animationUrls: {
+        shoot: "assets/animations/swatguy_firing_rifle.fbx",
+        dying_rifle: "assets/animations/swatguy_dying.fbx",
+        dying: "assets/animations/swatguy_dying.fbx"
+      },
+      position: { x: 2, y: 0, z: -5 },
+      groundY: 0.85,
+      facing: 0,
+      behavior: { pattern: "standInOpen", params: { fireIntervalMs: 900 } }
+    }
+  ], // end enemies
 
   objective: {
-    type: "reachEnd",
-    description: "Traverse the L-shaped hallway to verify movement, collision, lighting, and audio."
+    type: "eliminateAllEnemies",
+    description: "Clear the hallway."
   },
 
-  nextScene: null
+  nextScene: "scene_w1_3"
 };

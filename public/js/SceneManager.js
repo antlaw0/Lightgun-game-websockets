@@ -79,6 +79,13 @@ export class SceneManager {
         const targetRotation = obj.targetRotation || null;
         const duration = obj.duration || 1;
         if (!targetRotation) return;
+        // Play optional sound attached to the transition object at start
+        try {
+            if (obj.sound) {
+                const a = new Audio(obj.sound);
+                a.play().catch(() => {});
+            }
+        } catch (e) { /* ignore audio errors */ }
 
         return new Promise(resolve => {
             const startRot = obj.object3D.rotation.clone();

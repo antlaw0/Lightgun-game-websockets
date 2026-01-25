@@ -140,8 +140,11 @@ this.meleeCooldownMs = _meleeDef.attackSpeed || 600;
   }
 
   takeDamage(amount) {
+    // Ignore damage while editor mode is active
+    if (window.engine && window.engine.isEditorMode) return;
+
     window.hud.shakeCamera(0.3, 0.4);
-	this.hp = Math.max(this.hp - amount, 0);
+    this.hp = Math.max(this.hp - amount, 0);
             try {
     const s = new Audio("assets/sfx/player/gethit1.ogg");
     s.currentTime = 0;

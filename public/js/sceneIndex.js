@@ -3,6 +3,7 @@ import * as SceneW1_1 from './scenes/Scene_W1_1.js';
 import * as SceneW1_2 from './scenes/Scene_W1_2.js';
 import * as SceneTest from './scenes/scene_test.js';
 import * as SceneTestCopy from './scenes/scene_test - Copy.js';
+import * as generatedScene from './scenes/generatedScene.js';
 
 const ALL_SCENES = [];
 
@@ -22,5 +23,7 @@ addFromModule(SceneW1_1);
 addFromModule(SceneW1_2);
 addFromModule(SceneTest);
 addFromModule(SceneTestCopy);
+addFromModule(generatedScene);
+
 
 export { ALL_SCENES };
