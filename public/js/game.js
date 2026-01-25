@@ -599,19 +599,58 @@ window.addEventListener('keydown', (e) => {
       if (verb === 'size') {
         // scale along axis for mesh (box-like objects)
         if (!sel.mesh) return console.warn('Selected has no mesh');
-        const scaleVec = sel.mesh.scale || { x:1,y:1,z:1 };
-        if (target === 'x') sel.mesh.scale.x = val;
-        else if (target === 'y') sel.mesh.scale.y = val;
-        else if (target === 'z') sel.mesh.scale.z = val;
+        const mesh = sel.mesh;
+        // ensure numeric
+        const n = Number(val);
+        if (Number.isNaN(n)) return console.warn('Invalid numeric value');
+
+        if (target === 'x') mesh.scale.set(n, mesh.scale.y, mesh.scale.z);
+        else if (target === 'y') mesh.scale.set(mesh.scale.x, n, mesh.scale.z);
+        else if (target === 'z') mesh.scale.set(mesh.scale.x, mesh.scale.y, n);
+        else return console.warn('Unknown size axis');
+
         // update wrapper size if present
         if (sel.size) {
-          if (target === 'x') sel.size.x = val;
-          if (target === 'y') sel.size.y = val;
-          if (target === 'z') sel.size.z = val;
+          if (target === 'x') sel.size.x = n;
+          if (target === 'y') sel.size.y = n;
+          if (target === 'z') sel.size.z = n;
         }
-        if (sel._editorHighlight) sel._editorHighlight.update();
-        console.log(`Applied size ${target}=${val} to ${sel.id || '(no-id)'} `);
-        return;
+
+        // Try to update highlight bounding box
+        try {
+          if (sel._editorHighlight) {
+            // BoxHelper has .update(); call it and also recompute matrix world
+            if (typeof sel._editorHighlight.update === 'function') sel._editorHighlight.update();
+            else sel._editorHighlight.setFromObject(mesh);
+          }
+        } catch (e) { /* non-fatal */ }
+
+        console.log(`Applied size ${target}=${n} to ${sel.id || '(no-id)'} `);
+        return true;
+      }
+
+      // position editing: `pos x 1.5` or `position z -2`
+      if (verb === 'pos' || verb === 'position') {
+        if (!sel.mesh) return console.warn('Selected has no mesh');
+        const n = Number(val);
+        if (Number.isNaN(n)) return console.warn('Invalid numeric value');
+        if (target === 'x') sel.mesh.position.x = n;
+        else if (target === 'y') sel.mesh.position.y = n;
+        else if (target === 'z') sel.mesh.position.z = n;
+        else return console.warn('Unknown position axis');
+
+        // sync wrapper position
+        if (sel.position) {
+          sel.position.x = sel.mesh.position.x;
+          sel.position.y = sel.mesh.position.y;
+          sel.position.z = sel.mesh.position.z;
+        } else {
+          sel.position = { x: sel.mesh.position.x, y: sel.mesh.position.y, z: sel.mesh.position.z };
+        }
+
+        try { if (sel._editorHighlight) sel._editorHighlight.update(); } catch (e) {}
+        console.log(`Applied position ${target}=${n} to ${sel.id || '(no-id)'} `);
+        return true;
       }
 
       if (verb === 'rot') {
@@ -860,7 +899,7 @@ window.cam = () => {
 };
 
 // -----------------------------
-// Scene export (F5)
+// Scene export (F6)
 // -----------------------------
 function _serializeVector3(v) {
   return { x: v.x, y: v.y, z: v.z };
@@ -1008,9 +1047,9 @@ function exportSceneToJS() {
   console.log('Scene exported to file');
 }
 
-// Bind F5 to export when in editor mode (prevent browser reload)
+// Bind F6 to export when in editor mode (prevent browser reload)
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'F5' && window.engine?.isEditorMode) {
+  if (e.code === 'F6' && window.engine?.isEditorMode) {
     e.preventDefault();
     exportSceneToJS();
   }

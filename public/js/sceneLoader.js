@@ -525,16 +525,25 @@ if (pdef.type === "prefab" && pdef.prefab) {
       this.addEnemy(e);
     });
 
-    // Construct room around enemies/props
-    //this._calculateRoomBounds();
-    //this._createRoom();
-if (sceneDef.room) {
-  this._useDefinedRoom(sceneDef.room);
-} else {
-  this._calculateRoomBounds();
-}
-
-this._createRoom();
+        // Construct room around enemies/props
+        // If the scene explicitly provides a `room` definition, use it and create the room.
+        // Otherwise calculate bounds. If the scene defines environment.staticObjects (for
+        // example a floor/walls), assume the scene author intends those to be the room
+        // geometry and do NOT create the implicit room (walls/ceiling) here.
+    if (sceneDef.room) {
+      this._useDefinedRoom(sceneDef.room);
+      this._createRoom();
+    } else {
+      this._calculateRoomBounds();
+      const staticObjs = sceneDef.environment?.staticObjects ?? [];
+      const hasRoomLikeObject = staticObjs.some(o => {
+        const t = (o && o.type) ? String(o.type).toLowerCase() : "";
+        return t === 'floor' || t === 'wall' || t === 'ceiling' || t === 'room' || t === 'backwall';
+      });
+      if (!hasRoomLikeObject) {
+        this._createRoom();
+      }
+    }
 
 
     // Lights must be created AFTER room and AFTER sceneDef exists
