@@ -19,12 +19,12 @@
   <div><small>Mouse click or fire button to shoot, hold 'Shift' to duck, 'Z' to zoom</small></div>
 </div>
 
-<div id="debugConsole" aria-live="polite"></div>
+<div id="debugConsole"></div>
 
 <!-- HUD Overlay -->
 <div class="hud-container" aria-hidden="false">
   <!-- Health (center bottom) -->
-  <div class="hud-health" role="status" aria-label="Player health" aria-live="polite">
+  <div class="hud-health" role="status" aria-label="Player health">
     <div class="health-track" aria-hidden="true">
       <div class="health-fill hp-green" style="width:100%"></div>
     </div>
@@ -32,7 +32,7 @@
   </div>
 
   <!-- Weapon info (bottom-right) -->
-<div class="hud-weapon" role="status" aria-label="Weapon information" aria-live="polite" >
+<div class="hud-weapon" role="status" aria-label="Weapon information" >
 
   <!-- Weapon Image -->
   <div class="weapon-image">
@@ -58,8 +58,8 @@
 
 </div>
 
-  <!-- Screen-reader urgent announcements -->
-  <div id="hud-announce" role="alert" aria-live="assertive"></div>
+  <!-- Screen-reader urgent announcements (deprecated: use TTS instead) -->
+  <div id="hud-announce" role="alert"></div>
 </div>
 
 <script type="importmap">
@@ -70,6 +70,9 @@
 }
 </script>
 
+
+<!-- TTS helper (provides window.speak) -->
+<script src="./js/tts.js"></script>
 
 <!-- Your game code (game.js is ES module if it uses imports) -->
 <script type="module" src="./js/game.js"></script>
@@ -124,6 +127,23 @@
 })();
 </script>
 
+
+<!-- JSON editor modal for selected object (editor mode) -->
+<div id="jsonEditModal" role="dialog" aria-modal="true" aria-labelledby="jsonEditTitle" aria-describedby="jsonEditErrors" style="display:none; position:fixed; inset:0; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:9999;">
+  <div role="document" style="width:760px; max-width:95%; max-height:85%; background:#111; color:#fff; border:1px solid #444; padding:12px; box-shadow:0 6px 24px rgba(0,0,0,0.8); overflow:auto;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+      <strong id="jsonEditTitle">Edit Object JSON</strong>
+      <div>
+        <button id="jsonEditCancel" type="button" style="margin-right:8px;">Cancel</button>
+        <button id="jsonEditSubmit" type="button">Apply</button>
+      </div>
+    </div>
+    <div id="jsonEditInstructions" style="font-size:12px; color:#ccc; margin-bottom:6px;">Edit the JSON definition for the selected object. Press <strong>Apply</strong> to validate and apply immediately. Press <strong>Esc</strong> to close.</div>
+    <label for="jsonEditInput" class="sr-only">Object JSON editor</label>
+    <input id="jsonEditInput" aria-labelledby="jsonEditTitle" aria-describedby="jsonEditInstructions jsonEditErrors" type="text" style="width:100%; background:#0b0b0b; color:#e6e6e6; border:1px solid #333; padding:8px; font-family:monospace; font-size:13px;" />
+    <div id="jsonEditErrors" role="alert" aria-live="assertive" style="color:#f88; margin-top:8px; min-height:20px;"></div>
+  </div>
+</div>
 
 </body>
 </html>

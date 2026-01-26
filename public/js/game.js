@@ -20,11 +20,15 @@ function setEditorMode(enabled) {
     isFPSMode = true;
     window.engine.disableCombat = true;
     console.log('[EDITOR] Editor mode ENABLED');
+    try { if (window.speak) window.speak('Editor mode on', { interrupt: true }); } catch(e){}
   } else {
     try { setEnemyAIEnabled(true); } catch(_) {}
     window.engine.disableCombat = false;
     console.log('[EDITOR] Editor mode DISABLED');
+    try { if (window.speak) window.speak('Editor mode off', { interrupt: true }); } catch(e){}
   }
+  // Ensure any grid state updates after editor toggle (safe if updateEditorGrid defined later)
+  try { requestAnimationFrame(() => { if (window.updateEditorGrid) window.updateEditorGrid(); }); } catch (e) {}
 }
 import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
@@ -475,6 +479,19 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit4') { e.preventDefault(); spawnEditorObject('crate'); }
 });
 
+// Cycle editor grid with G (Off -> 1 -> 0.5 -> 0.25)
+window.addEventListener('keydown', (e) => {
+  if (!window.engine?.isEditorMode) return;
+  if (e.code === 'KeyG') {
+    e.preventDefault();
+    const g = window.engine.editorGrid = window.engine.editorGrid || { sizes: [0,1,0.5,0.25], index: 0, size: 0 };
+    g.index = (g.index + 1) % g.sizes.length;
+    g.size = g.sizes[g.index];
+    try { window.updateEditorGrid(); } catch (err) {}
+    logDebug(`Editor grid: ${g.size === 0 ? 'OFF' : g.size}`);
+  }
+});
+
 // Selection binding: press E to raycast from camera center and select nearest object
 window.addEventListener('keydown', (e) => {
   if (!window.engine?.isEditorMode) return;
@@ -484,15 +501,28 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Open JSON editor for selected object with T (works even if other handlers exist)
+window.addEventListener('keydown', (e) => {
+  if (!window.engine?.isEditorMode) return;
+  if (e.code === 'KeyT') {
+    e.preventDefault();
+    console.log('KeyT pressed - attempting to open JSON editor');
+    openEditSelectedJSON();
+  }
+});
+
 // Editor manipulation: move, rotate, delete selected object via keyboard
 window.addEventListener('keydown', (e) => {
   if (!window.engine?.isEditorMode) return;
   if (!window.selectedObject) return;
 
   // Determine step size
-  let step = 1.0;
-  if (e.shiftKey) step = 0.1;
-  else if (e.ctrlKey) step = 0.01;
+  // Determine step size: use editor grid size as base when active, otherwise 0.1
+  let baseStep = 0.1;
+  try { const gs = window.engine?.editorGrid?.size; if (gs && gs > 0) baseStep = gs; } catch (e) {}
+  let step = baseStep;
+  if (e.shiftKey) step = baseStep / 10;
+  else if (e.ctrlKey) step = baseStep / 100;
 
   const obj = window.selectedObject;
   const mesh = obj.mesh;
@@ -549,6 +579,11 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (moved) {
+    // Snap to editor grid if active
+    try {
+      if (window.engine?.editorGrid?.size) snapVector3ToEditorGrid(mesh.position);
+    } catch (e) {}
+
     // sync wrapper position fields if present
     try {
       if (obj.position) {
@@ -714,6 +749,8 @@ function spawnEditorObject(type) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x228833 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(pos);
+    // Snap placement to editor grid when active
+    try { snapVector3ToEditorGrid(mesh.position); } catch (e) {}
     mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.userData = { propId: id, type: 'wall', solid: true };
 
@@ -742,6 +779,7 @@ function spawnEditorObject(type) {
     const mat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
     const door = new THREE.Mesh(geo, mat);
     door.position.copy(pos);
+    try { snapVector3ToEditorGrid(door.position); } catch (e) {}
     door.castShadow = true; door.receiveShadow = true;
     door.userData = { propId: id, type: 'door', solid: true };
 
@@ -767,6 +805,7 @@ function spawnEditorObject(type) {
     id = _nextId('light');
     const holder = new THREE.Object3D();
     holder.position.copy(pos);
+    try { snapVector3ToEditorGrid(holder.position); } catch (e) {}
     const point = new THREE.PointLight(0xffffff, 1, 0, 2);
     point.position.set(0,0,0);
     holder.add(point);
@@ -800,6 +839,7 @@ function spawnEditorObject(type) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x996633 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(pos);
+    try { snapVector3ToEditorGrid(mesh.position); } catch (e) {}
     mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.userData = { propId: id, type: 'crate', solid: true };
 
@@ -992,7 +1032,7 @@ function exportSceneToJS() {
   } catch (e) {}
 
   // Lights: prefer sceneDef.lights if present, but include runtime lights
-  const lights = [];
+  let lights = [];
   if (Array.isArray(sl.sceneDef?.lights)) {
     // include original lights first
     sl.sceneDef.lights.forEach(ld => lights.push(ld));
@@ -1002,6 +1042,25 @@ function exportSceneToJS() {
     const def = _lightToDef(l);
     if (def) lights.push(def);
   });
+
+  // Ensure exactly one ambient light in exported scene: keep the first ambient
+  // encountered and drop duplicates. If no ambient exists, add a sensible default.
+  {
+    let foundAmbient = false;
+    const filtered = [];
+    for (const li of lights) {
+      if (li && li.type === 'ambient') {
+        if (!foundAmbient) { filtered.push(li); foundAmbient = true; }
+        // else skip duplicate ambient
+      } else {
+        filtered.push(li);
+      }
+    }
+    if (!foundAmbient) {
+      filtered.unshift({ type: 'ambient', color: 0xffffff, intensity: 0.6 });
+    }
+    lights = filtered;
+  }
 
   // Static objects
   const staticObjects = [];
@@ -1068,6 +1127,70 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
+
+// ------------------ Editor Grid (visual + snapping) ------------------
+window.engine = window.engine || {};
+window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
+
+function _snapToGridValue(v, spacing) {
+  if (!spacing || spacing <= 0) return v;
+  return Math.round(v / spacing) * spacing;
+}
+
+function snapVector3ToEditorGrid(vec) {
+  const g = window.engine?.editorGrid;
+  if (!g || !g.size) return;
+  vec.x = _snapToGridValue(vec.x, g.size);
+  vec.y = _snapToGridValue(vec.y, g.size);
+  vec.z = _snapToGridValue(vec.z, g.size);
+}
+
+window.updateEditorGrid = function() {
+  const g = window.engine?.editorGrid;
+  if (!g) return;
+  try {
+    // Remove existing helpers
+    if (g.helpers && Array.isArray(g.helpers)) {
+      for (const h of g.helpers) {
+        try { scene.remove(h); } catch (e) {}
+        try { if (h.geometry) h.geometry.dispose(); } catch (e) {}
+        try {
+          if (h.material) {
+            if (Array.isArray(h.material)) h.material.forEach(m => { try { m.dispose(); } catch(_){} });
+            else h.material.dispose();
+          }
+        } catch (e) {}
+      }
+    }
+    g.helpers = [];
+
+    if (!g.size || g.size <= 0) return; // grid OFF
+
+    const world = g.worldSize || 200;
+    const divisions = Math.max(2, Math.round(world / g.size));
+
+    // Create three overlaid grid helpers with different colors for contrast
+    const colors = [0x000000, 0xffffff, 0xffff00];
+    const opacities = [0.6, 0.95, 0.95];
+    for (let i = 0; i < colors.length; i++) {
+      const col = colors[i];
+      const grid = new THREE.GridHelper(world, divisions, col, col);
+      grid.position.y = 0.5; // raised up 0.5 units as requested
+      grid.renderOrder = 9999 + i;
+      // Ensure visibility and layered rendering
+      try {
+        if (Array.isArray(grid.material)) {
+          grid.material.forEach(m => { m.opacity = opacities[i]; m.transparent = true; m.depthTest = false; });
+        } else {
+          grid.material.opacity = opacities[i]; grid.material.transparent = true; grid.material.depthTest = false;
+        }
+      } catch (e) {}
+      scene.add(grid);
+      g.helpers.push(grid);
+    }
+  } catch (e) { console.warn('updateEditorGrid failed', e); }
+};
+
 
 
 // ------------------ Reticle Tracking ------------------
@@ -1149,6 +1272,7 @@ function selectObjectFromCenter() {
       const id = wrapper.id || wrapper.mesh?.userData?.propId || '(no-id)';
       logDebug(`Selected: id=${id}, type=${type}, pos=${pos.x},${pos.y},${pos.z}`);
       console.log('Selected object:', { id, type, position: pos, wrapper });
+    try { if (window.speak) window.speak(`Object ${id} selected`, { interrupt: true }); } catch(e){}
       return wrapper;
     }
   }
@@ -1159,6 +1283,238 @@ function selectObjectFromCenter() {
   logDebug('Editor: no selectable object under reticle');
   return null;
 }
+
+// -----------------------------
+// JSON Editor for selected object
+// -----------------------------
+function _getEditableDefForSelected() {
+  const sel = window.selectedObject;
+  if (!sel) return null;
+  try {
+    // Use existing helper to produce a clean static object definition when possible
+    const def = _cleanStaticObject(sel);
+    // include extra known properties if present
+    if (sel.hp !== undefined) def.hp = sel.hp;
+    if (sel.coverType) def.coverType = sel.coverType;
+    if (sel.type) def.type = sel.type;
+    if (sel.size) def.size = Object.assign({}, sel.size);
+    return def;
+  } catch (e) {
+    return { id: sel.id || null, type: sel.type || null };
+  }
+}
+
+function openEditSelectedJSON() {
+  if (!window.engine?.isEditorMode) return;
+  const sel = window.selectedObject;
+  if (!sel) { alert('No object selected'); return; }
+  console.log('openEditSelectedJSON called for', sel && (sel.id || sel.mesh && sel.mesh.userData && sel.mesh.userData.propId));
+  const modal = document.getElementById('jsonEditModal');
+  const ta = document.getElementById('jsonEditInput');
+  const title = document.getElementById('jsonEditTitle');
+  const errs = document.getElementById('jsonEditErrors');
+  // accessibility: save focus, hide background from AT, announce
+  window._lastFocusedBeforeModal = document.activeElement;
+  // hide all body children except modal from assistive tech
+  Array.from(document.body.children).forEach(ch => { if (ch.id !== 'jsonEditModal') ch.setAttribute('aria-hidden', 'true'); });
+  errs.textContent = '';
+  const def = _getEditableDefForSelected();
+  title.textContent = `Edit Object JSON - ${def.id || '(no-id)'} `;
+  try { ta.value = JSON.stringify(def, null, 2).replace(/\n/g, ' '); } catch(e){ ta.value = '{}'; }
+  modal.style.display = 'flex';
+  // ensure focus goes to input and NVDA is aware
+  setTimeout(() => { try { ta.focus(); ta.setSelectionRange(0,0); } catch(e){} }, 50);
+
+  // install focus trap
+  _installModalFocusTrap(modal);
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('jsonEditModal');
+  modal.style.display = 'none';
+  // restore aria-hidden on body children
+  Array.from(document.body.children).forEach(ch => { if (ch.id !== 'jsonEditModal') ch.removeAttribute('aria-hidden'); });
+  // remove focus trap
+  _removeModalFocusTrap();
+  // restore focus
+  try { if (window._lastFocusedBeforeModal && typeof window._lastFocusedBeforeModal.focus === 'function') window._lastFocusedBeforeModal.focus(); } catch(e){}
+}
+
+// Focus trap helpers
+function _installModalFocusTrap(modal) {
+  if (!modal) return;
+  // ensure we only install once
+  if (modal._focusTrapInstalled) return;
+  modal._focusTrapInstalled = true;
+  modal._focusHandler = function(e) {
+    if (e.key !== 'Tab') return;
+    const focusable = modal.querySelectorAll('button, [href], textarea, input, select, [tabindex]:not([tabindex="-1"])');
+    const list = Array.from(focusable).filter(el => !el.hasAttribute('disabled'));
+    if (list.length === 0) { e.preventDefault(); return; }
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  };
+  document.addEventListener('keydown', modal._focusHandler);
+}
+
+function _removeModalFocusTrap() {
+  const modal = document.getElementById('jsonEditModal');
+  if (!modal || !modal._focusTrapInstalled) return;
+  document.removeEventListener('keydown', modal._focusHandler);
+  modal._focusTrapInstalled = false;
+  modal._focusHandler = null;
+}
+
+function _validateEditedDef(obj, sel) {
+  const errors = [];
+  if (typeof obj !== 'object' || obj === null) { errors.push('Top-level JSON must be an object'); return errors; }
+
+  // If editing a static prop, only allow a constrained set of keys
+  const isStaticProp = !!(sel && (sel.mesh && sel.mesh.userData && sel.mesh.userData.propId)) || (sel && sel.type === 'prop') || (window.sceneLoader && sel && sel.id && window.sceneLoader.propsById && window.sceneLoader.propsById[sel.id]);
+  if (isStaticProp) {
+    const allowed = ['id','position','size','texture','hitSounds'];
+    Object.keys(obj).forEach(k => { if (!allowed.includes(k)) errors.push(`Field not allowed for static props: ${k}`); });
+  }
+
+  if (obj.position) {
+    ['x','y','z'].forEach(k => { if (obj.position[k] === undefined || typeof obj.position[k] !== 'number') errors.push(`position.${k} must be a number`); });
+  }
+  if (obj.rotation) {
+    ['x','y','z'].forEach(k => { if (obj.rotation[k] === undefined || typeof obj.rotation[k] !== 'number') errors.push(`rotation.${k} must be a number`); });
+  }
+  if (obj.scale) {
+    ['x','y','z'].forEach(k => { if (obj.scale[k] === undefined || typeof obj.scale[k] !== 'number') errors.push(`scale.${k} must be a number`); });
+  }
+  if (obj.size) {
+    ['x','y','z'].forEach(k => { if (obj.size[k] === undefined || typeof obj.size[k] !== 'number') errors.push(`size.${k} must be a number`); });
+  }
+  if (obj.hitSounds && !Array.isArray(obj.hitSounds)) errors.push('hitSounds must be an array of sound paths');
+  if (obj.texture && typeof obj.texture !== 'string') errors.push('texture must be a string path');
+  return errors;
+}
+
+function applyEditedJSON() {
+  const ta = document.getElementById('jsonEditInput');
+  const errsHost = document.getElementById('jsonEditErrors');
+  errsHost.textContent = '';
+  let parsed;
+  try {
+    parsed = JSON.parse(ta.value);
+  } catch (e) {
+    errsHost.textContent = 'JSON parse error: ' + e.message;
+    try { if (window.speak) window.speak('JSON parse error', { interrupt: true }); } catch(e){}
+    return;
+  }
+  const sel = window.selectedObject;
+  const errors = _validateEditedDef(parsed, sel);
+  if (errors.length) {
+    errsHost.innerHTML = errors.map(s => `- ${s}`).join('<br>');
+    try { if (window.speak) window.speak('Errors found, changes not applied', { interrupt: true }); } catch(e){}
+    return;
+  }
+
+  // apply to selected object
+  if (!sel) { errsHost.textContent = 'No selected object'; return; }
+  // update id mapping if changed
+  const oldId = sel.id;
+  if (parsed.id && parsed.id !== oldId) {
+    sel.id = parsed.id;
+    const sl = window.sceneLoader;
+    try {
+      if (sl) {
+        if (sl.propsById && oldId && sl.propsById[oldId]) { delete sl.propsById[oldId]; sl.propsById[sel.id] = sel; }
+        if (sl.enemiesById && oldId && sl.enemiesById[oldId]) { delete sl.enemiesById[oldId]; sl.enemiesById[sel.id] = sel; }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // update simple properties
+  // Only apply allowed fields for static props
+  const isStaticProp = !!(sel && (sel.mesh && sel.mesh.userData && sel.mesh.userData.propId)) || (sel && sel.type === 'prop') || (window.sceneLoader && sel && sel.id && window.sceneLoader.propsById && window.sceneLoader.propsById[sel.id]);
+  if (isStaticProp) {
+    if (parsed.size !== undefined) sel.size = parsed.size;
+    if (parsed.position !== undefined) { /* applied below to mesh */ }
+    // texture and hitSounds handled below
+  } else {
+    if (parsed.type !== undefined) sel.type = parsed.type;
+    if (parsed.coverType !== undefined) sel.coverType = parsed.coverType;
+    if (parsed.hp !== undefined) sel.hp = parsed.hp;
+    if (parsed.size !== undefined) sel.size = parsed.size;
+  }
+
+  // Apply transforms to mesh or wrapper position
+  try {
+    if (sel.mesh) {
+      if (parsed.position) sel.mesh.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
+      if (parsed.rotation) sel.mesh.rotation.set(parsed.rotation.x, parsed.rotation.y, parsed.rotation.z);
+      if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
+      // ensure userData updated for id/propId
+      if (!sel.mesh.userData) sel.mesh.userData = {};
+      if (sel.id) sel.mesh.userData.propId = sel.id;
+      if (sel.type) sel.mesh.userData.type = sel.type;
+      // apply texture change for static props
+      if (parsed.texture && typeof parsed.texture === 'string') {
+        try {
+          const loader = new THREE.TextureLoader();
+          const tex = loader.load(parsed.texture, () => { try { if (sel.mesh && sel.mesh.material) { sel.mesh.material.map = tex; sel.mesh.material.needsUpdate = true; } } catch(e){} });
+        } catch (e) { console.warn('Failed to load texture', e); }
+      }
+      // apply hitSounds for static props (store array of paths)
+      if (parsed.hitSounds && Array.isArray(parsed.hitSounds)) {
+        sel.hitSounds = parsed.hitSounds.slice();
+      }
+    } else {
+      if (parsed.position) sel.position = parsed.position;
+      if (parsed.rotation) sel.rotation = parsed.rotation;
+    }
+  } catch (e) {
+    errsHost.textContent = 'Failed to apply transforms: ' + e.message;
+    return;
+  }
+
+  // reflect in the sceneLoader staticObjects where applicable
+  try {
+    const sl = window.sceneLoader;
+    if (sl && Array.isArray(sl.staticObjects)) {
+      const idx = sl.staticObjects.findIndex(o => o === sel || (o.id && sel.id && o.id === sel.id));
+      if (idx >= 0) {
+        sl.staticObjects[idx] = sel;
+      }
+    }
+  } catch (e) {}
+
+  // success
+  try { if (window.speak) window.speak('Changes applied', { interrupt: true }); } catch(e){}
+  closeEditModal();
+}
+
+// Hook up modal buttons and keyboard
+document.addEventListener('DOMContentLoaded', () => {
+  const cancel = document.getElementById('jsonEditCancel');
+  const submit = document.getElementById('jsonEditSubmit');
+  const modal = document.getElementById('jsonEditModal');
+  const ta = document.getElementById('jsonEditInput');
+  if (cancel) cancel.addEventListener('click', () => closeEditModal());
+  if (submit) submit.addEventListener('click', () => applyEditedJSON());
+  // ESC closes
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeEditModal();
+    // open editor with T when in editor mode and selection exists
+    if (e.key.toLowerCase() === 't' && window.engine?.isEditorMode) {
+      // prevent typing into textarea from re-opening modal
+      if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) return;
+      e.preventDefault();
+      openEditSelectedJSON();
+    }
+  });
+  // allow Enter in input to submit
+  if (ta) ta.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyEditedJSON(); } });
+});
 
 // ------------------ Scene / Level management ------------------
 

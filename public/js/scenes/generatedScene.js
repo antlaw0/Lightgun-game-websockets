@@ -1,21 +1,31 @@
 export const Scene_Exported = {
-  "name": "Exported Scene 2026-01-25T16:01:20.034Z",
+  "name": "Exported Scene 2026-01-25T16:12:41.769Z",
   "camera": {
     "position": {
-      "x": -1.385655004446122,
+      "x": 0.4847129258521049,
       "y": 1.7,
-      "z": 0.2244077789314527
+      "z": -4.898913216097025
     },
     "lookAt": {
-      "x": -5.490387604580524,
-      "y": -0.5631838413718404,
-      "z": -8.609004312754708
+      "x": 5.316957006562139,
+      "y": -0.19656371491219815,
+      "z": 3.6481601555151126
     },
     "fov": 60,
     "near": 0.1,
     "far": 200
   },
   "lights": [
+    {
+      "type": "ambient",
+      "color": 16777215,
+      "intensity": 0.6
+    },
+    {
+      "type": "ambient",
+      "color": 16777215,
+      "intensity": 0.6
+    },
     {
       "type": "ambient",
       "color": 16777215,
@@ -34,7 +44,7 @@ export const Scene_Exported = {
         "type": "wall",
         "position": {
           "x": 1.0933984755269983,
-          "y": 1.2473632317256318,
+          "y": 0,
           "z": -1.5422746394057794
         },
         "rotation": {
@@ -44,10 +54,16 @@ export const Scene_Exported = {
         },
         "size": {
           "x": 6,
-          "y": 2,
-          "z": 0.2
+          "y": 3,
+          "z": 0.5
         },
-        "hp": 9999
+        "hp": 9999,
+		"indestructible":  true,
+		"hitSounds": [
+    "assets/sfx/props/metalHit1.ogg",
+    "assets/sfx/props/metalHit2.ogg"
+  ],
+        "coverType": "full"
       },
       {
         "id": "floor_01",
@@ -67,7 +83,8 @@ export const Scene_Exported = {
           "y": 0.1,
           "z": 50
         },
-        "hp": 1,
+        "hp": 999,
+		indestructible:  true,
         "coverType": "none"
       }
     ]
