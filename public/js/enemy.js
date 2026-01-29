@@ -3,7 +3,7 @@ import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
 import { getWeapon } from "./weapons.js";
 import { createMannequin } from './humanoid.js';
 import { createWalkRunAnimations } from './animations.js';
-import { loadCharacter, loadAnimationClips } from './characterLoader.js';
+import { loadCharacter, loadAnimationClips, normalizeAndGroundModel, findFootBonesMinY, computeSkinnedMeshesMinMaxY, CAMERA_HEIGHT } from './characterLoader.js';
 import { equipApparelList } from './clothing/index.js';
 export let ENEMY_AI_ENABLED = true;
 
@@ -167,7 +167,7 @@ _snapBasePositionToCoverEdge() {
       ...instanceConfig
     };
 
-	this.id = instanceConfig.id || `enemy_${Date.now()}`;
+  this.id = instanceConfig.id || `enemy_${Date.now()}`;
 	this.firePauseMs = mergedDef.firePauseMs ?? 0;
 this._nextAllowedFireMs = 0;
 
@@ -177,6 +177,9 @@ this._hasEngagedPlayer=false
 
 	
 	this.maxHp = this.hp;
+    // Active state: if `active` is explicitly false in the instance config
+    // the enemy is loaded but stays invisible / AI-disabled until activated.
+    this._isActive = (typeof mergedDef.active === 'undefined') ? true : !!mergedDef.active;
     let weaponDef = null;
 
 if (typeof mergedDef.weapon === "string") {
@@ -241,6 +244,69 @@ this._nextTauntTime = null;
     this.player = player;
     this.fireCallback = fireCallback;
 
+    // Public method to toggle active/inactive state at runtime.
+    this.setActive = (active) => {
+      const now = !!active;
+      const was = !!this._isActive;
+      this._isActive = now;
+      if (!this.mesh) return;
+      try {
+        if (this._isActive) {
+          // Ensure root group visible
+          try { this.mesh.visible = true; } catch(e) {}
+          this.mesh.traverse(o => {
+            if (o.isMesh) {
+              o.visible = true;
+              o.frustumCulled = false;
+              o.userData.enemyId = this.id;
+              if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes) && !window.sceneLoader.enemyMeshes.includes(o)) {
+                window.sceneLoader.enemyMeshes.push(o);
+              }
+            }
+          });
+          // Debug: log mesh counts after activation
+          try {
+            let meshCount = 0, visCount = 0;
+            this.mesh.traverse(o => { if (o.isMesh) { meshCount++; if (o.visible) visCount++; } });
+            console.log(`[Enemy ${this.id}] setActive(true) meshes=${meshCount} visible=${visCount}`);
+          } catch (e) {}
+          try { if (typeof this._postSpawnInit === 'function') this._postSpawnInit(); } catch(e) {}
+        } else {
+          this.mesh.traverse(o => {
+            if (o.isMesh) {
+              o.visible = false;
+              if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+                const idx = window.sceneLoader.enemyMeshes.indexOf(o);
+                if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    };
+
+    // If mesh will be created asynchronously, ensure inactive enemies remain hidden.
+    if (!this._isActive) {
+      const _hidePoll = setInterval(() => {
+        try {
+          if (this.mesh) {
+            this.mesh.traverse(o => {
+              if (o.isMesh) {
+                o.visible = false;
+                if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+                  const idx = window.sceneLoader.enemyMeshes.indexOf(o);
+                  if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+                }
+              }
+            });
+            clearInterval(_hidePoll);
+          }
+        } catch (e) {
+          clearInterval(_hidePoll);
+        }
+      }, 40);
+    }
+
     this.position = new THREE.Vector3(
       instanceConfig.position.x || 0,
       instanceConfig.position.y || 0,
@@ -254,6 +320,85 @@ this._nextTauntTime = null;
       : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
         ? window.sceneLoader.groundY
         : 0;
+
+    // Helper to consistently scale and ground loaded models so feet sit at groundY
+    // Uses the centralized normalizeAndGroundModel utility for consistent behavior
+    this._finalizeModel = (mesh, defObj, instanceCfg) => {
+      if (!mesh) return;
+      try {
+        // Determine groundY from instance config, scene loader, or default to 0
+        const groundY = (typeof (instanceCfg && instanceCfg.groundY) === 'number')
+          ? instanceCfg.groundY
+          : ((window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+            ? window.sceneLoader.groundY
+            : 0);
+
+        // Get target height (defaults to camera height)
+        const targetHeight = (defObj && (defObj.desiredHeight || defObj.modelDesiredHeight))
+          ? (defObj.desiredHeight || defObj.modelDesiredHeight)
+          : CAMERA_HEIGHT;
+
+        // Get explicit scale settings from def or instance config
+        const explicitScale = (defObj && defObj.modelScale !== undefined && defObj.modelScale !== null)
+          ? Number(defObj.modelScale)
+          : (instanceCfg && instanceCfg.modelScale !== undefined ? Number(instanceCfg.modelScale) : null);
+
+        const scalePercent = (defObj && defObj.modelScalePercent !== undefined && defObj.modelScalePercent !== null)
+          ? Number(defObj.modelScalePercent)
+          : (instanceCfg && instanceCfg.modelScalePercent !== undefined ? Number(instanceCfg.modelScalePercent) : null);
+
+        // Store original position X/Z to restore after normalization (which resets position)
+        const origX = mesh.position.x;
+        const origZ = mesh.position.z;
+
+        // Use the centralized normalizeAndGroundModel utility
+        const result = normalizeAndGroundModel(mesh, {
+          targetHeight,
+          groundY,
+          explicitScale,
+          scalePercent,
+          debug: true
+        });
+
+        // Restore original X/Z position
+        mesh.position.x = origX;
+        mesh.position.z = origZ;
+        mesh.updateMatrixWorld(true);
+
+        console.log(`[Enemy ${this.id}] finalizeModel: scale=${result.finalScale?.toFixed(4)}, height=${result.finalHeight?.toFixed(4)}, groundOffset=${result.groundOffset?.toFixed(4)}`);
+
+        // Ensure basePosition aligns to ground
+        try {
+          if (!this.basePosition) this.basePosition = mesh.position.clone();
+          this.basePosition.y = groundY;
+        } catch (e) {}
+
+        // Make visible and register for hit tests (only if active)
+        try {
+          mesh.traverse(o => {
+            if (o.isMesh) {
+              o.frustumCulled = false;
+              o.castShadow = true;
+              o.receiveShadow = true;
+              o.userData = Object.assign({}, o.userData || {}, {});
+              // Respect inactive state: add meshes to scene but keep invisible until activation
+              if (this._isActive) {
+                o.visible = true;
+                if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+                  if (!window.sceneLoader.enemyMeshes.includes(o)) {
+                    window.sceneLoader.enemyMeshes.push(o);
+                  }
+                  o.userData.enemyId = this.id;
+                }
+              } else {
+                o.visible = false;
+                o.userData.enemyId = this.id;
+              }
+            }
+          });
+        } catch (e) {}
+      } catch (e) { console.warn(`[Enemy ${this.id}] finalizeModel failed`, e); }
+    };
 
     this.facing = instanceConfig.facing || 0;
     this.coverIndex = instanceConfig.coverIndex ?? null;
@@ -293,46 +438,52 @@ this.coverObjectId = instanceConfig.coverObject || null;
             const isDrone = (mergedDef.displayName === 'Drone' || mergedDef.type === 'Drone' || String(instanceConfig.type || '').toLowerCase() === 'drone');
             if (!isDrone && typeof this._groundY === 'number') this.mesh.position.y = this._groundY;
           } catch(e) {}
-          // Determine final scale and apply it (respect explicit `modelScale` or percent)
+          // Normalize and ground the Drone model using the centralized utility
           try {
-            const desiredHeight = 1.7;
-            const explicitScale = (mergedDef.modelScale !== undefined && mergedDef.modelScale !== null) ? Number(mergedDef.modelScale) : (instanceConfig.modelScale !== undefined ? Number(instanceConfig.modelScale) : null);
-            const explicitPercent = (mergedDef.modelScalePercent !== undefined && mergedDef.modelScalePercent !== null) ? Number(mergedDef.modelScalePercent) : (instanceConfig.modelScalePercent !== undefined ? Number(instanceConfig.modelScalePercent) : null);
-
-            // start from unit scale so measurements are consistent
+            // Reset to unit scale to make normalization predictable
             this.mesh.scale.setScalar(1);
             this.mesh.updateMatrixWorld(true);
-            let finalScale = 1;
-            try {
-              const box = new THREE.Box3().setFromObject(this.mesh);
-              const size = new THREE.Vector3(); box.getSize(size);
-              const height = size.y > 1e-6 ? size.y : null;
-              const autoScale = height ? (desiredHeight / height) : 1;
-
-              if (explicitScale !== null && !Number.isNaN(explicitScale)) {
-                finalScale = explicitScale;
-              } else if (explicitPercent !== null && !Number.isNaN(explicitPercent)) {
-                finalScale = autoScale * (explicitPercent / 100);
-              } else {
-                finalScale = autoScale;
-              }
-
-              finalScale = THREE.MathUtils.clamp(finalScale, 0.0001, 10);
-            } catch (e) {
-              finalScale = (explicitScale !== null && !Number.isNaN(explicitScale)) ? explicitScale : 1;
-            }
-
-            this.mesh.scale.setScalar(finalScale);
-            this.mesh.updateMatrixWorld(true);
-            // record base/target scale and lock it so later generic code won't overwrite Drone scale
+            // Call centralized normalizer which handles target height, explicit scales, and grounding
+            try { normalizeAndGroundModel(this.mesh, mergedDef, instanceConfig); } catch (e) { console.warn('[Enemy] normalizeAndGroundModel failed', e); }
+            // Record base scale and lock to prevent later overwrites
             try { this.baseScale = this.mesh.scale.clone(); this._targetScale = this.baseScale.clone(); this._scaleLocked = true; } catch(e) {}
           } catch (e) {}
 
-          // make sure visible and not frustum culled, then add to scene
-          try { this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; } }); } catch(e) {}
+          // make sure frustum culling / shadow flags are set. Visibility depends on active state.
+          try { this.mesh.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; o.visible = !!this._isActive; } }); } catch(e) {}
           try { this.sceneGroup.add(this.mesh); } catch(e) {}
           // register meshes for hit tests AFTER scaling so raycasts/bboxes reflect final size
-          try { if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) { this.mesh.traverse(o => { if (o.isMesh) { if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o); o.userData.enemyId = this.id; } }); } } catch(e) {}
+          try {
+            if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+              this.mesh.traverse(o => {
+                if (o.isMesh) {
+                  if (this._isActive) {
+                    if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
+                  }
+                  o.userData.enemyId = this.id;
+                }
+              });
+            }
+          } catch(e) {}
+          try { this._finalizeModel && this._finalizeModel(this.mesh, mergedDef, instanceConfig); } catch(e) {}
+          // Additional per-model correction: if this model is known problematic (brute),
+          // sample skinned vertices and force the bottom to match groundY.
+          try {
+            if (/brute\.glb$/i.test(String(mergedDef.modelUrl || ''))) {
+              try {
+                const sk = computeSkinnedMeshesMinMaxY(this.mesh, 2000);
+                if (sk && isFinite(sk.minY)) {
+                  const desiredGround = (typeof this._groundY === 'number') ? this._groundY : 0;
+                  const dy = desiredGround - sk.minY;
+                  if (isFinite(dy) && Math.abs(dy) < 100) {
+                    this.mesh.position.y += dy;
+                    this.mesh.updateMatrixWorld(true);
+                    console.log(`[Enemy ${this.id}] brute-specific skinned-ground adjust dy=${dy.toFixed(4)} (sk.minY=${sk.minY.toFixed(4)})`);
+                  }
+                }
+              } catch (e) { console.warn(`[Enemy ${this.id}] brute-specific grounding failed`, e); }
+            }
+          } catch (e) {}
           try { console.log(`[Enemy ${this.id}] Drone model attached: ${mergedDef.modelUrl}`); } catch(e) {}
           // Log materials for each mesh in the Drone so we can inspect whether
           // textures or vertex colors are present (helps diagnose white/flat look).
@@ -707,11 +858,11 @@ this.coverObjectId = instanceConfig.coverObject || null;
                     else o.material.skinning = true;
                   }
                   o.frustumCulled = false;
-                  o.visible = true;
+                  o.visible = !!this._isActive;
                 }
                 if (o.isMesh && o.material) {
                   o.frustumCulled = false;
-                  o.visible = true;
+                  o.visible = !!this._isActive;
                 }
               } catch (e) {}
               o.children.forEach(c => listNode(c, depth+1));
@@ -764,12 +915,17 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
               let finalScale = autoScale;
               if (explicitScale !== null && explicitScale !== undefined) {
-                finalScale = explicitScale;
+                finalScale = Number(explicitScale) || autoScale;
               } else if (explicitPercent !== null && explicitPercent !== undefined) {
                 const p = Number(explicitPercent) || 0;
                 const percentScalar = p / 100;
                 finalScale = autoScale * percentScalar;
               }
+
+              // Guard against extreme or non-finite values from malformed FBX/GLB assets
+              if (!isFinite(finalScale) || Number.isNaN(finalScale)) finalScale = autoScale;
+              // clamp to a sensible range so models don't become microscopic or gigantic
+              finalScale = THREE.MathUtils.clamp(finalScale, 0.02, 5);
 
               this.mesh.scale.setScalar(finalScale);
               this.mesh.updateMatrixWorld(true);
@@ -814,9 +970,9 @@ this.coverObjectId = instanceConfig.coverObject || null;
                   if (!this.basePosition) this.basePosition = this.mesh.position.clone();
                   this.basePosition.y = groundY;
                 } catch (e) {}
-                // Ensure model is visible and not frustum-culled incorrectly
-                this.mesh.visible = true;
-                this.mesh.traverse(o => { if (o.isMesh) { o.visible = true; o.frustumCulled = false; } });
+                // Ensure model visibility/frustum settings respect active state
+                this.mesh.visible = !!this._isActive;
+                this.mesh.traverse(o => { if (o.isMesh) { o.visible = !!this._isActive; o.frustumCulled = false; } });
 
                 // Colorize parts to simulate clothing: legs (dark blue), torso/arms (dark gray), feet (brown)
                 try {
@@ -973,6 +1129,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
           this.mesh.name = `enemy_${this.id}`;
           try { if (this.position) this.mesh.position.copy(this.position); if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
           this.sceneGroup.add(this.mesh);
+          try { this._finalizeModel && this._finalizeModel(this.mesh, mergedDef, instanceConfig); } catch(e) {}
           // Ensure any SkinnedMesh parts are correctly bound to their skeletons
           try {
             this.mesh.traverse(o => {
@@ -1006,7 +1163,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
             if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
               this.mesh.traverse(o => {
                 if (o.isMesh) {
-                  if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
+                  if (this._isActive) {
+                    if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
+                    o.visible = true;
+                  } else {
+                    o.visible = false;
+                  }
                   // tag for easy lookup
                   o.userData.enemyId = this.id;
                 }
@@ -1151,7 +1313,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
                   }
                 }
 
-                o.visible = true;
+                o.visible = !!this._isActive;
                 o.frustumCulled = false;
                 o.castShadow = true;
                 o.receiveShadow = true;
@@ -1413,6 +1575,47 @@ this.coverObjectId = instanceConfig.coverObject || null;
             }
           } catch (e) { console.warn('Failed to load external animationUrls', e); }
 
+          // Post-attachment grounding fix for brute GLB: after clips are mapped and actions created,
+          // force a mixer update to apply the pose, then align foot bones (or bbox) to groundY.
+          try {
+            const isBrute = (mergedDef && mergedDef.modelUrl && /brute\.glb$/i.test(String(mergedDef.modelUrl))) || (mergedDef && mergedDef.displayName === 'Brute') || (instanceConfig && String(instanceConfig.id || '').toLowerCase().startsWith('brute'));
+            if (isBrute) {
+              try { if (this.mixer) this.mixer.update(0.0001); } catch (e) {}
+              try {
+                const beforePosY = this.mesh.position.y || 0;
+                const groundY = (typeof this._groundY === 'number') ? this._groundY : 0;
+                const footY = findFootBonesMinY(this.mesh);
+                console.log(`[Enemy ${this.id}] brute-grounding debug BEFORE: mesh.posY=${beforePosY.toFixed(4)} groundY=${groundY} footY=${footY}`);
+                if (footY !== null && isFinite(footY)) {
+                  const dy = groundY - footY;
+                  console.log(`[Enemy ${this.id}] brute-grounding: footY found -> dy=${dy.toFixed(4)}`);
+                  if (Math.abs(dy) > 1e-6) {
+                    this.mesh.position.y += dy;
+                    this.mesh.updateMatrixWorld(true);
+                    if (this.basePosition) this.basePosition.y = groundY;
+                    console.log(`[Enemy ${this.id}] brute-grounding: applied dy -> new mesh.posY=${this.mesh.position.y.toFixed(4)}`);
+                  }
+                } else {
+                  try {
+                    const box = new THREE.Box3().setFromObject(this.mesh);
+                    const minY = box && isFinite(box.min.y) ? box.min.y : NaN;
+                    console.log(`[Enemy ${this.id}] brute-grounding: footY not found, bbox.minY=${String(minY)}`);
+                    if (isFinite(minY)) {
+                      const dy2 = groundY - minY;
+                      console.log(`[Enemy ${this.id}] brute-grounding: bbox dy=${dy2.toFixed(4)}`);
+                      if (Math.abs(dy2) > 1e-6) {
+                        this.mesh.position.y += dy2;
+                        this.mesh.updateMatrixWorld(true);
+                        if (this.basePosition) this.basePosition.y = groundY;
+                        console.log(`[Enemy ${this.id}] brute-grounding: applied bbox dy -> new mesh.posY=${this.mesh.position.y.toFixed(4)}`);
+                      }
+                    }
+                  } catch (e) { console.warn(`[Enemy ${this.id}] brute-grounding bbox error`, e); }
+                }
+              } catch (e) { console.warn(`[Enemy ${this.id}] brute-grounding error`, e); }
+            }
+          } catch (e) {}
+
           // If only a single Mixamo clip exists, create distinct walk/idle actions
           // by cloning the clip so we can crossfade between separate actions.
           try {
@@ -1532,6 +1735,19 @@ if (this.behavior.pattern === "path") {
     this.mesh.name = `enemy_${this.id}`;
 
     this.sceneGroup = sceneGroup;
+    // Ensure visibility respects inactive state and register meshes only when active
+    try {
+      this.mesh.visible = !!this._isActive;
+      this.mesh.traverse(o => {
+        if (o.isMesh) {
+          o.frustumCulled = false;
+          if (this._isActive && window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes) && !window.sceneLoader.enemyMeshes.includes(o)) {
+            window.sceneLoader.enemyMeshes.push(o);
+          }
+          o.userData.enemyId = this.id;
+        }
+      });
+    } catch (e) {}
     this.sceneGroup.add(this.mesh);
 
     // track last known mesh/world position for movement detection (useful for patrol/path)
@@ -1610,9 +1826,11 @@ if (this.coverType === "full") {
     this._lastFireWhilePopped = 0;
 
     // Safety: clamp mesh visible initially depending on state
-    if (this._popState.phase === "hidden") {
-      this.mesh.visible = (this.behavior.pattern !== "popOutFromCover"); // visible if not cover pattern
-    }
+      if (this._popState.phase === "hidden") {
+        // Respect explicit active flag: even if behavior would normally make the
+        // enemy visible while hidden, keep it invisible until activated.
+        this.mesh.visible = !!this._isActive && (this.behavior.pattern !== "popOutFromCover");
+      }
   }
 
   	
@@ -1781,9 +1999,10 @@ player._playRandomTaunt();
 
 
 update(deltaMs, nowMs, player) {
-    if (this._isDead) return;
-    if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
-      this._postSpawnInit(); // ADD THIS
+  if (this._isDead) return;
+  if (!this._isActive) return; // inactive enemies do not run AI or interact
+  if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
+  this._postSpawnInit();
 	const pattern = this.behavior.pattern;
     const p = this.behavior.params || {};
 
@@ -2264,7 +2483,7 @@ const dir = targetPos.clone().sub(origin).normalize();
 
   // Visual muzzle flash
   try {
-    if (this.weaponMuzzle) {
+    if (this.weaponMuzzle && this._isActive) {
       this.weaponMuzzle.visible = true;
       setTimeout(() => { try { this.weaponMuzzle && (this.weaponMuzzle.visible = false); } catch(_){} }, 80);
     }
@@ -2367,7 +2586,7 @@ const dir = targetPos.clone().sub(origin).normalize();
         s.phaseSince = nowMs;
         // decide popDuration (how long transition to fully popped takes)
         s.transitionMs = cp.popTransitionMs;
-        this.mesh.visible = true; // make visible and transition out
+        if (this._isActive) this.mesh.visible = true; // make visible and transition out only if active
         // reset firing cadence tracker
         this._lastFireWhilePopped = 0;
       }
@@ -2429,7 +2648,8 @@ if (this._isFullyPoppedTarget &&
     this._targetPosition.y += 0.02;
   } else {
     // Low cover: vertical pop
-    this._targetPosition.y = this.basePosition.y - cp.crouchOffsetY;
+    // Low cover: vertical pop -> stand up to base position (don't invert crouch offset)
+    this._targetPosition.y = this.basePosition.y;
 
   }
 

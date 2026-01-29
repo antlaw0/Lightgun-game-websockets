@@ -69,10 +69,15 @@ export const scene_test = {
       id: "grunt_1",
       type: "Grunt",
       hp: 40,
-      // Quick model (falls back to procedural mannequin if unreachable)
-      modelUrl: "assets/models/model.fbx",
+      // Use a GLB humanoid base mesh instead of FBX
+      modelUrl: "assets/models/exo_red.glb",
       // allow automatic auto-scaling based on the GLTF bounding box
       modelScale: null,
+      // provide common pistol animations as GLB clips
+      animationUrls: {
+        walk: "assets/animations/walk_pistol.glb",
+        shoot: "assets/animations/stand_pistol.glb"
+      },
       position: { x: -3, y: 0.9, z: -6 },
       behavior: {
         pattern: "path",
@@ -122,8 +127,12 @@ export const scene_test = {
       id: "grunt_shooter",
       type: "Grunt",
       hp: 40,
-      modelUrl: "assets/models/model.fbx",
+      modelUrl: "assets/models/exo_red.glb",
       modelScale: null,
+      animationUrls: {
+        walk: "assets/animations/walk_pistol.glb",
+        shoot: "assets/animations/stand_pistol.glb"
+      },
       position: { x: 2.5, y: 0.9, z: -6 },
       behavior: {
         pattern: "standInOpen",
@@ -149,11 +158,11 @@ export const scene_test = {
       id: "melee_exo",
       type: "Grunt",
       hp: 60,
-      // use the brute model for this melee enemy (place brute.fbx in assets/models)
-      modelUrl: "assets/models/brute.fbx",
-      // use the brute-specific walk animation (place brute_walk.fbx in assets/animations)
+      // use the brute model for this melee enemy
+      modelUrl: "assets/models/brute.glb",
+      // use the brute-specific walk animation
       animationUrls: {
-        walk: "assets/animations/brute_walk.fbx"
+        walk: "assets/animations/brute_walk.glb"
       },
       // start farther away so it can slowly approach the player/camera
       position: { x: 0, y: 0.9, z: -12 },
@@ -163,7 +172,7 @@ export const scene_test = {
           approachSpeed: 0.9,
           meleeRange: 1.6,
           sideOffset: 0.2,
-          attackCooldownMs: 900
+				attackCooldownMs: 900
         }
       },
       sprite: "assets/sprites/grunt.png",
@@ -176,6 +185,7 @@ export const scene_test = {
         type: "Drone",
         displayName: "Drone",
         hp: 30,
+		active:  false,
         // use the provided drone glb
         modelUrl: "assets/models/drone.glb",
         // small hover height and scale so it reads as a flying drone

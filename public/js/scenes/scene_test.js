@@ -89,7 +89,8 @@ export const scene_test = {
       type: "Grunt",
       displayName: "Grunt Soldier",
 	  hp:  80,
-      modelUrl: "assets/models/exo_red.fbx",
+	  active: false,
+      modelUrl: "assets/models/exo_red.glb",
       // sit slightly behind the crate so crate is between camera and enemy
       position: { x: 0, y: 0, z: -6 },
       facing: 0,
@@ -105,14 +106,15 @@ export const scene_test = {
       displayName: "Grunt Soldier",
       hp: 100,
       // Use your provided SWAT model and shooting + dying animations
-      modelUrl: "assets/models/swatguy.fbx",
+      modelUrl: "assets/models/swatguy.glb",
       animationUrls: {
-        shoot: "assets/animations/swatguy_firing_rifle.fbx",
-        dying_rifle: "assets/animations/swatguy_dying.fbx",
-        dying: "assets/animations/swatguy_dying.fbx"
+        shoot: "assets/animations/swatguy_firing_rifle.glb",
+        dying_rifle: "assets/animations/swatguy_dying.glb",
+        dying: "assets/animations/swatguy_dying.glb"
       },
       // standing in the open and firing at intervals
-      position: { x: 2, y: 0, z: -6 },
+      active:  false,
+	  position: { x: 2, y: 0, z: -6 },
       // set an explicit groundY so the loader aligns the model's feet to this height
       groundY: 0.85,
       facing: 0,

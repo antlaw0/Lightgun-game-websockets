@@ -87,13 +87,13 @@ export const LEVELS = {
             type: "Grunt",
             position: { x: 0, y: 2.7, z: -8 },
             // Make this a moving enemy that uses the exo_red model and strafing clips
-            modelUrl: "assets/models/exo_red.fbx",
+            modelUrl: "assets/models/exo_red.glb",
             animationUrls: {
-              shoot: "assets/animations/exo_red_pistol_shooting.fbx",
-              dying_rifle: "assets/animations/exo_red_dying_rifle.fbx",
-              strafe_left: "assets/animations/exo_red_pistol_strafe_left.fbx",
-              strafe_right: "assets/animations/exo_red_pistol_strafe_right.fbx",
-              aim: "assets/animations/exo_red_pistol_aiming.fbx"
+              shoot: "assets/animations/exo_red_pistol_shooting.glb",
+              dying_rifle: "assets/animations/exo_red_dying_rifle.glb",
+              strafe_left: "assets/animations/exo_red_pistol_strafe_left.glb",
+              strafe_right: "assets/animations/exo_red_pistol_strafe_right.glb",
+              aim: "assets/animations/exo_red_pistol_aiming.glb"
             },
             behavior: { pattern: "patrol", params: { minX: -1.2, maxX: 1.2, speed: 0.004, fireIntervalMs: 1200 } }
           }
@@ -124,16 +124,16 @@ export const ENEMY_DEFS = {
     hp: 40,
     // Optional: specify a 3D model and external animation files.
     // Place model and animations under `public/assets/...` and set these paths.
-    modelUrl: "assets/models/exo_red.fbx",
+    modelUrl: "assets/models/exo_red.glb",
     animationUrls: {
       // using your uploaded pistol animations
-      walk: "assets/animations/walk_pistol.fbx",
-      shoot: "assets/animations/stand_pistol.fbx",
+      walk: "assets/animations/walk_pistol.glb",
+      shoot: "assets/animations/stand_pistol.glb",
       // default strafes (if present these will be mapped to strafe actions)
-      strafe_left: "assets/animations/exo_red_pistol_strafe_left.fbx",
-      strafe_right: "assets/animations/exo_red_pistol_strafe_right.fbx",
-      aim: "assets/animations/exo_red_pistol_aiming.fbx",
-      dying_rifle: "assets/animations/exo_red_dying_rifle.fbx"
+      strafe_left: "assets/animations/exo_red_pistol_strafe_left.glb",
+      strafe_right: "assets/animations/exo_red_pistol_strafe_right.glb",
+      aim: "assets/animations/exo_red_pistol_aiming.glb",
+      dying_rifle: "assets/animations/exo_red_dying_rifle.glb"
     },
 
     weapon: {

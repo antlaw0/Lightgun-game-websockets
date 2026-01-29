@@ -83,10 +83,17 @@ window.sceneLoader = this;
 
     this.scene.add(enemyInstance.mesh);
     enemyInstance.mesh.traverse(obj => {
-  if (obj.isMesh) {
-    this.enemyMeshes.push(obj);
-  }
-});
+      if (!obj.isMesh) return;
+      try {
+        // Only register mesh parts for hit-tests if the enemy is active.
+        if (enemyInstance._isActive) {
+          if (!this.enemyMeshes.includes(obj)) this.enemyMeshes.push(obj);
+        }
+        // Tag mesh with enemy id for lookup later (always present even if inactive)
+        obj.userData = Object.assign({}, obj.userData || {}, { enemyId: enemyInstance.id });
+        obj.frustumCulled = false;
+      } catch (e) {}
+    });
 
 	
   }
