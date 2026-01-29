@@ -1,15 +1,15 @@
 export const Scene_Exported = {
-  name: "Exported Scene 2026-01-29T17:41:14.175Z",
+  name: "Exported Scene 2026-01-29T21:58:12.737Z",
   camera: {
     position: {
-      x: 10.853424529145162,
+      x: 10.081632502148038,
       y: 1.7,
-      z: 5.087871725614355
+      z: -13.230328203864918
     },
     lookAt: {
-      x: 2.324776285471234,
-      y: 1.9715314455213624,
-      z: 10.302124290438075
+      x: 7.40538772236261,
+      y: -1.4057351754766134,
+      z: -4.109356605483606
     },
     fov: 60,
     near: 0.1,
@@ -17,14 +17,79 @@ export const Scene_Exported = {
   },
   lights: [
     {
+      type: "point",
+      color: 8388736,
+      intensity: 1.5,
+      position: {
+        x: 13.614789285961391,
+        y: 3.086222470043686,
+        z: 3.3607287045914815
+      },
+      distance: 50,
+      decay: 2,
+      id: "light_1112"
+    },
+    {
+      type: "directional",
+      color: 8388736,
+      intensity: 0,
+      position: {
+        x: 0,
+        y: 5,
+        z: 0
+      },
+      target: {
+        x: 0,
+        y: 1.4,
+        z: -6
+      },
+      castShadow: true,
+      id: "light_1115"
+    },
+    {
+      type: "point",
+      color: 255,
+      intensity: 1.5,
+      position: {
+        x: 13.614789285961391,
+        y: 3.086222470043686,
+        z: 3.3607287045914815
+      },
+      distance: 50,
+      decay: 2,
+      castShadow: true,
+      shadow: {
+        mapSize: {
+          width: 1024,
+          height: 1024
+        },
+        camera: {
+          near: 0.5,
+          far: 50
+        },
+        bias: -0.0001
+      },
+      id: "light_01",
+      rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+      },
+      size: {
+        x: 1,
+        y: 1,
+        z: 1
+      }
+    },
+    {
       type: "ambient",
       color: 16777215,
       intensity: 0.6
     },
     {
       type: "directional",
-      color: 16777215,
-      intensity: 1.6,
+      color: 255,
+      intensity: 0,
       position: {
         x: 0,
         y: 5,
@@ -50,118 +115,6 @@ export const Scene_Exported = {
           far: 50
         }
       }
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
-    },
-    {
-      type: "directional",
-      color: 16777215,
-      intensity: 1.6,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true
     }
   ],
   environment: {
@@ -185,7 +138,8 @@ export const Scene_Exported = {
           z: 6
         },
         hp: 9999,
-		indestructible:  true
+        indestructible: true,
+        coverType: "none"
       },
       {
         id: "wall_01",

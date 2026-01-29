@@ -12,6 +12,57 @@ import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js
 // Editor mode flag and helpers (default OFF)
 window.engine = window.engine || { isEditorMode: false };
 
+const DEFAULT_LIGHT_DEFINITIONS = {
+  point: {
+    type: "point",
+    color: 16777215,
+    intensity: 1.5,
+    position: { x: 0, y: 5, z: 0 },
+    distance: 50,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 1024, height: 1024 },
+      camera: { near: 0.5, far: 50 },
+      bias: -0.0001
+    }
+  },
+  directional: {
+    type: "directional",
+    color: 0xffffff,
+    intensity: 1.6,
+    position: { x: 0, y: 10, z: 0 },
+    target: { x: 0, y: 1.4, z: -6 },
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 2048, height: 2048 },
+      camera: { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 50 }
+    }
+  },
+  spot: {
+    type: "spot",
+    color: 16777215,
+    intensity: 2,
+    position: { x: 0, y: 5, z: 5 },
+    target: { x: 0, y: 1.4, z: 0 },
+    distance: 50,
+    angle: 0.5235987755982988,
+    penumbra: 0.3,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 2048, height: 2048 },
+      camera: { near: 0.5, far: 50 }
+    }
+  },
+  hemisphere: {
+    type: "hemisphere",
+    skyColor: 16777215,
+    groundColor: 4473924,
+    intensity: 0.6
+  }
+};
+
 function setEditorMode(enabled) {
   window.engine.isEditorMode = !!enabled;
   if (window.engine.isEditorMode) {
@@ -21,15 +72,81 @@ function setEditorMode(enabled) {
     window.engine.disableCombat = true;
     console.log('[EDITOR] Editor mode ENABLED');
     try { if (window.speak) window.speak('Editor mode on', { interrupt: true }); } catch(e){}
+    toggleLightHelpers(true);
   } else {
     try { setEnemyAIEnabled(true); } catch(_) {}
     window.engine.disableCombat = false;
     console.log('[EDITOR] Editor mode DISABLED');
     try { if (window.speak) window.speak('Editor mode off', { interrupt: true }); } catch(e){}
+    toggleLightHelpers(false);
   }
   // Ensure any grid state updates after editor toggle (safe if updateEditorGrid defined later)
   try { requestAnimationFrame(() => { if (window.updateEditorGrid) window.updateEditorGrid(); }); } catch (e) {}
 }
+
+function toggleLightHelpers(enabled) {
+  if (!window.sceneLoader) return;
+  const sl = window.sceneLoader;
+
+  sl.sceneLights.forEach(light => {
+    if (light.isAmbientLight) return;
+
+    let wrapper = sl.staticObjects.find(o => o.light === light);
+
+    if (enabled) {
+      if (!wrapper) {
+        const id = light.userData.id || `light_${light.id}`;
+        light.userData.id = id;
+        light.userData.propId = id;
+        light.userData.type = 'light';
+
+        let helper = light.userData.editorHelper;
+        if (!helper) {
+            const sgeo = new THREE.SphereGeometry(0.2, 8, 8);
+            const smat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+            helper = new THREE.Mesh(sgeo, smat);
+            light.add(helper);
+            light.userData.editorHelper = helper;
+            
+            if (Array.isArray(sl.propMeshes) && !sl.propMeshes.includes(helper)) {
+                sl.propMeshes.push(helper);
+            }
+        }
+        helper.visible = true;
+
+        wrapper = {
+            id: id,
+            mesh: light,
+            light: light,
+            type: 'light',
+            lightType: light.isDirectionalLight ? 'directional' : (light.isSpotLight ? 'spot' : (light.isHemisphereLight ? 'hemisphere' : 'point')),
+            position: { x: light.position.x, y: light.position.y, z: light.position.z },
+            _sceneDef: _lightToDef(light)
+        };
+        if (wrapper._sceneDef) wrapper._sceneDef.id = id;
+        sl.staticObjects.push(wrapper);
+      } else {
+          if (light.userData.editorHelper) {
+              light.userData.editorHelper.visible = true;
+          } else if (wrapper.mesh && wrapper.mesh !== light) {
+              wrapper.mesh.traverse(c => {
+                  if (c.isMesh && c.geometry && c.geometry.type === 'SphereGeometry') c.visible = true;
+              });
+          }
+      }
+    } else {
+      if (light.userData.editorHelper) {
+          light.userData.editorHelper.visible = false;
+      }
+      if (wrapper && wrapper.mesh && wrapper.mesh !== light) {
+           wrapper.mesh.traverse(c => {
+                if (c.isMesh && c.geometry && c.geometry.type === 'SphereGeometry') c.visible = false;
+            });
+      }
+    }
+  });
+}
+
 import { initSparks, spawnSparks, updateSparks } from './fx/sparks.js';
 
 import { Level_Warehouse } from "./Level_Warehouse.js";
@@ -480,7 +597,7 @@ window.addEventListener('keydown', (e) => {
   if (!window.engine?.isEditorMode) return;
   if (e.code === 'Digit1') { e.preventDefault(); spawnEditorObject('wall'); }
   else if (e.code === 'Digit2') { e.preventDefault(); spawnEditorObject('door'); }
-  else if (e.code === 'Digit3') { e.preventDefault(); spawnEditorObject('light'); }
+  else if (e.code === 'Digit3') { e.preventDefault(); showLightPicker(); }
   else if (e.code === 'Digit4') { e.preventDefault(); spawnEditorObject('crate'); }
 });
 
@@ -753,7 +870,7 @@ function _nextId(prefix) {
   return `${prefix}_${String(c[prefix]).padStart(2,'0')}`;
 }
 
-function spawnEditorObject(type) {
+function spawnEditorObject(type, defOverride = null) {
   if (!window.engine.isEditorMode) return;
   if (!window.sceneLoader) { console.warn('No sceneLoader'); return; }
   const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
@@ -825,33 +942,77 @@ function spawnEditorObject(type) {
 
   if (type === 'light') {
     id = _nextId('light');
+    const def = defOverride || DEFAULT_LIGHT_DEFINITIONS.point;
+    
     const holder = new THREE.Object3D();
     holder.position.copy(pos);
+    // Apply definition position if provided (relative to spawn or absolute? usually spawn at camera look)
+    // But let's respect the spawn logic (in front of camera) and just use def properties for light params.
+    
     try { snapVector3ToEditorGrid(holder.position); } catch (e) {}
-    const point = new THREE.PointLight(0xffffff, 1, 0, 2);
-    point.position.set(0,0,0);
-    holder.add(point);
-    // Add small sphere for selection
-    const sgeo = new THREE.SphereGeometry(0.08,8,8);
-    const smat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    
+    let light;
+    if (def.type === 'directional') {
+        light = new THREE.DirectionalLight(def.color, def.intensity);
+        if (def.target) {
+            light.target.position.set(def.target.x - def.position.x, def.target.y - def.position.y, def.target.z - def.position.z);
+            holder.add(light.target);
+        }
+    } else if (def.type === 'spot') {
+        light = new THREE.SpotLight(def.color, def.intensity, def.distance, def.angle, def.penumbra, def.decay);
+        if (def.target) {
+            light.target.position.set(def.target.x - def.position.x, def.target.y - def.position.y, def.target.z - def.position.z);
+            holder.add(light.target);
+        }
+    } else if (def.type === 'hemisphere') {
+        light = new THREE.HemisphereLight(def.skyColor, def.groundColor, def.intensity);
+    } else {
+        // point
+        light = new THREE.PointLight(def.color, def.intensity, def.distance, def.decay);
+    }
+    
+    light.position.set(0,0,0);
+    if (def.castShadow) light.castShadow = true;
+    if (def.shadow) {
+        if (def.shadow.mapSize) {
+            light.shadow.mapSize.width = def.shadow.mapSize.width;
+            light.shadow.mapSize.height = def.shadow.mapSize.height;
+        }
+        if (def.shadow.bias) light.shadow.bias = def.shadow.bias;
+        if (def.shadow.camera) {
+            if (def.shadow.camera.near) light.shadow.camera.near = def.shadow.camera.near;
+            if (def.shadow.camera.far) light.shadow.camera.far = def.shadow.camera.far;
+        }
+    }
+
+    holder.add(light);
+    
+    // Add white sphere for selection representation
+    const sgeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const smat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
     const s = new THREE.Mesh(sgeo, smat);
     holder.add(s);
-    holder.userData = { propId: id, type: 'light' };
+    
+    holder.userData = { propId: id, type: 'light', lightType: def.type };
 
     wrapper = {
       id,
       mesh: holder,
-      light: point,
+      light: light,
       type: 'light',
-      position: { x: holder.position.x, y: holder.position.y, z: holder.position.z }
+      lightType: def.type,
+      position: { x: holder.position.x, y: holder.position.y, z: holder.position.z },
+      _sceneDef: JSON.parse(JSON.stringify(def)) // Store initial def
     };
+    // Update ID in def
+    wrapper._sceneDef.id = id;
 
     try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     // attach initial raw def so editor can preserve arbitrary keys
     try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     // register with scene lights and staticObjects for export
     sl.scene.add(holder);
-    sl.sceneLights.push(point);
+    sl.sceneLights.push(light);
     // ensure the helper sphere and holder are selectable via raycasts
     try {
       holder.traverse(o => {
@@ -862,7 +1023,7 @@ function spawnEditorObject(type) {
       });
     } catch (e) {}
     sl.staticObjects.push(wrapper);
-    console.log('Editor: spawned light', id, holder.position);
+    console.log(`Editor: spawned ${def.type} light`, id, holder.position);
     return wrapper;
   }
 
@@ -969,6 +1130,52 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// --- Light Picker UI ---
+function showLightPicker() {
+  if (document.getElementById('light-picker-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'light-picker-overlay';
+  overlay.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#fff;padding:15px;border-radius:8px;z-index:10000;min-width:250px;text-align:center;';
+
+  const title = document.createElement('h3');
+  title.textContent = 'Select Light Type';
+  title.style.marginTop = '0';
+  overlay.appendChild(title);
+
+  const list = document.createElement('div');
+  list.style.display = 'flex';
+  list.style.flexDirection = 'column';
+  list.style.gap = '8px';
+
+  Object.keys(DEFAULT_LIGHT_DEFINITIONS).forEach(key => {
+    const btn = document.createElement('button');
+    btn.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+    btn.style.padding = '8px';
+    btn.style.cursor = 'pointer';
+    btn.style.fontSize = '14px';
+    btn.onclick = () => {
+      spawnEditorObject('light', DEFAULT_LIGHT_DEFINITIONS[key]);
+      closeLightPicker();
+    };
+    list.appendChild(btn);
+  });
+
+  overlay.appendChild(list);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Cancel';
+  closeBtn.style.marginTop = '15px';
+  closeBtn.onclick = closeLightPicker;
+  overlay.appendChild(closeBtn);
+
+  document.body.appendChild(overlay);
+}
+
+function closeLightPicker() {
+  const overlay = document.getElementById('light-picker-overlay');
+  if (overlay) overlay.remove();
+}
 
 window.cam = () => {
   console.log(`Camera position -> x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`);
@@ -1018,6 +1225,38 @@ function _lightToDef(light) {
     def.position = _serializeVector3(light.parent ? light.parent.position : light.position);
   }
   return def;
+}
+
+function _cleanLightObject(o) {
+    // If we have a stored definition, start with that to preserve structure
+    let def = o._sceneDef ? JSON.parse(JSON.stringify(o._sceneDef)) : {};
+    
+    // Update properties from the live object
+    def.id = o.id;
+    def.type = o.lightType || def.type || 'point';
+    
+    if (o.mesh) {
+        def.position = { x: o.mesh.position.x, y: o.mesh.position.y, z: o.mesh.position.z };
+    }
+    
+    if (o.light) {
+        def.color = o.light.color.getHex();
+        def.intensity = o.light.intensity;
+        
+        if (def.type === 'point' || def.type === 'spot') {
+            def.distance = o.light.distance;
+            def.decay = o.light.decay;
+        }
+        if (def.type === 'spot') {
+            def.angle = o.light.angle;
+            def.penumbra = o.light.penumbra;
+        }
+        if (def.type === 'hemisphere') {
+            def.groundColor = o.light.groundColor.getHex();
+            def.skyColor = o.light.color.getHex(); // skyColor is mapped to color in Three.js HemisphereLight
+        }
+    }
+    return def;
 }
 
 function _cleanStaticObject(o) {
@@ -1090,40 +1329,31 @@ function exportSceneToJS() {
     if (camera.isPerspectiveCamera) { cam.fov = camera.fov; cam.near = camera.near; cam.far = camera.far; }
   } catch (e) {}
 
-  // Lights: prefer sceneDef.lights if present, but include runtime lights
+  // Lights: Rebuild lights list from staticObjects (editor wrappers) + existing sceneDef lights that weren't wrapped
   let lights = [];
-  if (Array.isArray(sl.sceneDef?.lights)) {
-    // include original lights first
-    sl.sceneDef.lights.forEach(ld => lights.push(ld));
-  }
-  // include any runtime sceneLoader.sceneLights not covered
-  sl.sceneLights.forEach(l => {
-    const def = _lightToDef(l);
-    if (def) lights.push(def);
+  const processedLightIds = new Set();
+
+  // 1. Lights from editor (staticObjects with type 'light')
+  (Array.isArray(sl.staticObjects) ? sl.staticObjects : []).forEach(o => {
+      if (o.type === 'light') {
+          lights.push(_cleanLightObject(o));
+          if (o.id) processedLightIds.add(o.id);
+      }
   });
 
-  // Ensure exactly one ambient light in exported scene: keep the first ambient
-  // encountered and drop duplicates. If no ambient exists, add a sensible default.
-  {
-    let foundAmbient = false;
-    const filtered = [];
-    for (const li of lights) {
-      if (li && li.type === 'ambient') {
-        if (!foundAmbient) { filtered.push(li); foundAmbient = true; }
-        // else skip duplicate ambient
-      } else {
-        filtered.push(li);
-      }
-    }
-    if (!foundAmbient) {
-      filtered.unshift({ type: 'ambient', color: 0xffffff, intensity: 0.6 });
-    }
-    lights = filtered;
+  // 2. Existing lights from sceneDef that weren't edited/wrapped (if any)
+  if (Array.isArray(sl.sceneDef?.lights)) {
+      sl.sceneDef.lights.forEach(ld => {
+          if (!processedLightIds.has(ld.id)) {
+              lights.push(ld);
+          }
+      });
   }
 
   // Static objects
   const staticObjects = [];
   (Array.isArray(sl.staticObjects) ? sl.staticObjects : []).forEach(o => {
+    if (o.type === 'light') return; // Skip lights, handled above
     try { staticObjects.push(_cleanStaticObject(o)); } catch (e) { console.warn('clean static obj failed', e); }
   });
 
@@ -1359,6 +1589,10 @@ function _getEditableDefForSelected() {
     if (sel.hp !== undefined) def.hp = sel.hp;
     if (sel.coverType) def.coverType = sel.coverType;
     if (sel.type) def.type = sel.type;
+    if (sel.type === 'light') {
+        // Use the specialized cleaner for lights to get full properties
+        return _cleanLightObject(sel);
+    }
     if (sel.size) def.size = Object.assign({}, sel.size);
     return def;
   } catch (e) {
@@ -1617,6 +1851,16 @@ function applyEditedJSON() {
         if (parsed.angle !== undefined) light.angle = parsed.angle;
         if (parsed.penumbra !== undefined) light.penumbra = parsed.penumbra;
         if (parsed.castShadow !== undefined) light.castShadow = !!parsed.castShadow;
+        
+        // Hemisphere specific
+        if (light.isHemisphereLight) {
+             if (parsed.groundColor !== undefined) {
+                 try { if (typeof parsed.groundColor === 'number') light.groundColor.setHex(parsed.groundColor); else light.groundColor.set(parsed.groundColor); } catch(e){}
+             }
+             if (parsed.skyColor !== undefined) {
+                 try { if (typeof parsed.skyColor === 'number') light.color.setHex(parsed.skyColor); else light.color.set(parsed.skyColor); } catch(e){}
+             }
+        }
       }
     }
   } catch (e) {
@@ -2680,4 +2924,3 @@ loadLevel(Level_Warehouse);
 // Expose nextScene globally so UI or user can advance after onSceneComplete
 window.nextScene = nextScene;
 window.player = player;
-
