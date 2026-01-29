@@ -1,0 +1,103 @@
+default point light:
+
+
+  type: "point",
+  color: 16777215,            // white
+  intensity: 1.5,             // slightly boosted to compensate for shadows
+  position: {
+    x: 0,
+    y: 5,
+    z: 0
+  },
+  distance: 50,
+  decay: 2,                   // physically correct falloff
+
+  castShadow: true,
+
+  shadow: {
+    mapSize: {
+      width: 1024,
+      height: 1024
+    },
+    camera: {
+      near: 0.5,
+      far: 50                  // should match distance
+    },
+    bias: -0.0001              // reduces shadow acne
+  }
+}
+
+
+default directional:
+type: "directional",
+      color: 0xffffff,
+      intensity: 1.6,
+      position: {
+        x: 0,
+        y: 10,
+        z: 0
+      },
+      target: {
+        x: 0,
+        y: 1.4,
+        z: 0
+      },
+      castShadow: true,
+      shadow: {
+        mapSize: {
+          width: 2048,
+          height: 2048
+        },
+        camera: {
+          left: -10,
+          right: 10,
+          top: 10,
+          bottom: -10,
+          near: 0.5,
+          far: 50
+        }
+      
+   
+
+default spot light:
+{
+  type: "spot",
+  color: 16777215,
+  intensity: 2,
+  position: {
+    x: 0,
+    y: 5,
+    z: 5
+  },
+  target: {
+    x: 0,
+    y: 1.4,
+    z: 0
+  },
+  distance: 50,
+  angle: 0.5235987755982988, // Math.PI / 6
+  penumbra: 0.3,
+  decay: 2,
+  castShadow: true,
+  shadow: {
+    mapSize: {
+      width: 2048,
+      height: 2048
+    },
+    camera: {
+      near: 0.5,
+      far: 50
+    }
+  }
+}
+
+
+
+default hemisphere light:
+
+{
+  type: "hemisphere",
+  skyColor: 16777215,
+  groundColor: 4473924, // 0x444444
+  intensity: 0.6
+}

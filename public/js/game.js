@@ -571,6 +571,17 @@ window.addEventListener('keydown', (e) => {
           // staticObjects
           const sidx = sl.staticObjects.findIndex(s => s === obj || s.id === obj.id);
           if (sidx >= 0) sl.staticObjects.splice(sidx,1);
+          // also remove from sceneDef.environment.staticObjects if present
+          try {
+            if (sl.sceneDef && sl.sceneDef.environment && Array.isArray(sl.sceneDef.environment.staticObjects)) {
+              const aidx = sl.sceneDef.environment.staticObjects.findIndex(s => s && ((s.id && obj.id && s.id === obj.id) || s === obj));
+              if (aidx >= 0) sl.sceneDef.environment.staticObjects.splice(aidx,1);
+            }
+            if (obj.light && sl.sceneDef && Array.isArray(sl.sceneDef.lights)) {
+              const lidx = sl.sceneDef.lights.findIndex(l => l && l.id && obj.id && l.id === obj.id);
+              if (lidx >= 0) sl.sceneDef.lights.splice(lidx,1);
+            }
+          } catch(e) {}
           // sceneLights
           if (obj.light) {
             const li = sl.sceneLights.indexOf(obj.light);
@@ -775,6 +786,7 @@ function spawnEditorObject(type) {
       dispose() { try { mesh.geometry?.dispose(); mesh.material?.dispose(); } catch(e){} }
     };
 
+    try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     sl.addProp(wrapper);
     sl.staticObjects.push(wrapper);
     console.log('Editor: spawned wall', id, mesh.position);
@@ -804,6 +816,7 @@ function spawnEditorObject(type) {
       dispose() { try { this.mesh.geometry?.dispose(); this.mesh.material?.dispose(); } catch(e){} }
     };
 
+    try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     sl.addProp(wrapper);
     sl.staticObjects.push(wrapper);
     console.log('Editor: spawned door', id, door.position);
@@ -833,9 +846,21 @@ function spawnEditorObject(type) {
       position: { x: holder.position.x, y: holder.position.y, z: holder.position.z }
     };
 
+    try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
+    // attach initial raw def so editor can preserve arbitrary keys
+    try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     // register with scene lights and staticObjects for export
     sl.scene.add(holder);
     sl.sceneLights.push(point);
+    // ensure the helper sphere and holder are selectable via raycasts
+    try {
+      holder.traverse(o => {
+        if (o && o.isMesh) {
+          o.userData = Object.assign({}, o.userData || {}, { propId: id, type: 'light' });
+          if (Array.isArray(sl.propMeshes) && !sl.propMeshes.includes(o)) sl.propMeshes.push(o);
+        }
+      });
+    } catch (e) {}
     sl.staticObjects.push(wrapper);
     console.log('Editor: spawned light', id, holder.position);
     return wrapper;
@@ -866,6 +891,7 @@ function spawnEditorObject(type) {
       dispose() { try { this.mesh.geometry?.dispose(); this.mesh.material?.dispose(); } catch(e){} }
     };
 
+    try { wrapper._sceneDef = _cleanStaticObject(wrapper); } catch(e){}
     sl.addProp(wrapper);
     sl.staticObjects.push(wrapper);
     console.log('Editor: spawned crate', id, mesh.position);
@@ -995,6 +1021,29 @@ function _lightToDef(light) {
 }
 
 function _cleanStaticObject(o) {
+  // If a stored raw scene definition exists, prefer it (preserves arbitrary keys)
+  if (o && o._sceneDef && typeof o._sceneDef === 'object') {
+    try {
+      const out = JSON.parse(JSON.stringify(o._sceneDef)); // deep clone to avoid mutation
+      // Ensure id exists
+      out.id = out.id ?? (o.id || null);
+      // Overlay runtime transforms so exported data matches live scene
+      if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
+      else if (o.mesh && o.mesh.position) out.position = _serializeVector3(o.mesh.position);
+      if (o.rotation && o.rotation.x !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
+      else if (o.mesh && o.mesh.rotation) out.rotation = { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z };
+      if (o.size) out.size = Object.assign({}, o.size);
+      else if (o.mesh && o.mesh.scale) out.size = { x: o.mesh.scale.x, y: o.mesh.scale.y, z: o.mesh.scale.z };
+      if (typeof o.hp === 'number') out.hp = o.hp;
+      if (o.coverType) out.coverType = o.coverType;
+      if (o.type) out.type = out.type ?? o.type;
+      return out;
+    } catch (e) {
+      // fallback to synthesized def below
+      console.warn('Failed to clone _sceneDef', e);
+    }
+  }
+
   const out = {};
   out.id = o.id || null;
   // type: prefer explicit, then mesh userData
@@ -1485,6 +1534,10 @@ function applyEditedJSON() {
 
   // apply to selected object
   if (!sel) { errsHost.textContent = 'No selected object'; return; }
+
+  // Store raw user-edited definition on the runtime wrapper so unknown keys are preserved
+  try { sel._sceneDef = parsed; } catch (e) { /* ignore */ }
+
   // update id mapping if changed
   const oldId = sel.id;
   if (parsed.id && parsed.id !== oldId) {
@@ -1498,26 +1551,12 @@ function applyEditedJSON() {
     } catch (e) { /* ignore */ }
   }
 
-  // update simple properties
-  // Only apply allowed fields for static props
-  const isStaticProp = !!(sel && (sel.mesh && sel.mesh.userData && sel.mesh.userData.propId)) || (sel && sel.type === 'prop') || (window.sceneLoader && sel && sel.id && window.sceneLoader.propsById && window.sceneLoader.propsById[sel.id]);
-  if (isStaticProp) {
-    if (parsed.size !== undefined) sel.size = parsed.size;
-    if (parsed.position !== undefined) { /* applied below to mesh */ }
-    // texture and hitSounds handled below
-  } else {
-    if (parsed.type !== undefined) sel.type = parsed.type;
-    if (parsed.coverType !== undefined) sel.coverType = parsed.coverType;
-    if (parsed.hp !== undefined) sel.hp = parsed.hp;
-    if (parsed.size !== undefined) sel.size = parsed.size;
-  }
-
-  // Apply transforms to mesh or wrapper position
+  // reflect parsed values into runtime fields (but keep arbitrary keys inside _sceneDef)
   try {
+    // transforms
     if (sel.mesh) {
       if (parsed.position) sel.mesh.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
       if (parsed.rotation) sel.mesh.rotation.set(parsed.rotation.x, parsed.rotation.y, parsed.rotation.z);
-      // If size provided, adjust mesh.scale relative to previous size so geometry appears resized
       if (parsed.size) {
         try {
           const ms = sel.mesh.scale || { x: 1, y: 1, z: 1 };
@@ -1533,38 +1572,83 @@ function applyEditedJSON() {
         sel.size = parsed.size;
       }
       if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
-      // ensure userData updated for id/propId
+
+      // ensure userData updated for id/propId/type
       if (!sel.mesh.userData) sel.mesh.userData = {};
       if (sel.id) sel.mesh.userData.propId = sel.id;
-      if (sel.type) sel.mesh.userData.type = sel.type;
-      // apply texture change for static props
+      if (sel.type || parsed.type) sel.mesh.userData.type = parsed.type ?? sel.type;
+
+      // texture
       if (parsed.texture && typeof parsed.texture === 'string') {
         try {
           const loader = new THREE.TextureLoader();
           const tex = loader.load(parsed.texture, () => { try { if (sel.mesh && sel.mesh.material) { sel.mesh.material.map = tex; sel.mesh.material.needsUpdate = true; } } catch(e){} });
         } catch (e) { console.warn('Failed to load texture', e); }
       }
-      // apply hitSounds for static props (store array of paths)
+
+      // hit sounds
       if (parsed.hitSounds && Array.isArray(parsed.hitSounds)) {
         sel.hitSounds = parsed.hitSounds.slice();
       }
+
+      // common runtime props
+      if (parsed.hp !== undefined) sel.hp = parsed.hp;
+      if (parsed.maxHp !== undefined) sel.maxHp = parsed.maxHp;
+      if (parsed.indestructible !== undefined) sel.indestructible = !!parsed.indestructible;
     } else {
       if (parsed.position) sel.position = parsed.position;
       if (parsed.rotation) sel.rotation = parsed.rotation;
+    }
+
+    // Lights: update light object if present
+    if (sel.light || (sel.type === 'light' && sel.mesh)) {
+      const light = sel.light || (sel.mesh && sel.mesh.children && sel.mesh.children.find(c => c.isLight));
+      const holder = sel.mesh || null;
+      if (holder && parsed.position) {
+        holder.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
+      }
+      if (light) {
+        if (parsed.color !== undefined) {
+          try { if (typeof parsed.color === 'number') light.color.setHex(parsed.color); else light.color.set(parsed.color); } catch(e){}
+        }
+        if (parsed.intensity !== undefined) light.intensity = parsed.intensity;
+        if (parsed.distance !== undefined) light.distance = parsed.distance;
+        if (parsed.decay !== undefined) light.decay = parsed.decay;
+        if (parsed.angle !== undefined) light.angle = parsed.angle;
+        if (parsed.penumbra !== undefined) light.penumbra = parsed.penumbra;
+        if (parsed.castShadow !== undefined) light.castShadow = !!parsed.castShadow;
+      }
     }
   } catch (e) {
     errsHost.textContent = 'Failed to apply transforms: ' + e.message;
     return;
   }
 
-  // reflect in the sceneLoader staticObjects where applicable
+  // reflect updated raw def into scene-level sceneDef if present (so file -> editor round-trip preserved)
   try {
     const sl = window.sceneLoader;
-    if (sl && Array.isArray(sl.staticObjects)) {
-      const idx = sl.staticObjects.findIndex(o => o === sel || (o.id && sel.id && o.id === sel.id));
+    if (sl && sl.sceneDef && sl.sceneDef.environment && Array.isArray(sl.sceneDef.environment.staticObjects)) {
+      const arr = sl.sceneDef.environment.staticObjects;
+      const idx = arr.findIndex(o => (o && o.id && sel.id && o.id === sel.id) || (o === sel));
       if (idx >= 0) {
-        sl.staticObjects[idx] = sel;
+        arr[idx] = JSON.parse(JSON.stringify(parsed));
+      } else {
+        arr.push(JSON.parse(JSON.stringify(parsed)));
       }
+    }
+
+    // If editing a light and sceneDef.lights exists, update or append
+    if (sl && sel && (sel.type === 'light' || sel.light) && sl.sceneDef && Array.isArray(sl.sceneDef.lights)) {
+      const lids = sl.sceneDef.lights;
+      const li = lids.findIndex(l => l && l.id && sel.id && l.id === sel.id);
+      if (li >= 0) lids[li] = JSON.parse(JSON.stringify(parsed));
+      else lids.push(JSON.parse(JSON.stringify(parsed)));
+    }
+
+    // reflect in the sceneLoader staticObjects array
+    if (sl && Array.isArray(sl.staticObjects)) {
+      const idx2 = sl.staticObjects.findIndex(o => o === sel || (o.id && sel.id && o.id === sel.id));
+      if (idx2 >= 0) sl.staticObjects[idx2] = sel;
     }
   } catch (e) {}
 
@@ -1592,8 +1676,7 @@ document.addEventListener('DOMContentLoaded', () => {
       openEditSelectedJSON();
     }
   });
-  // allow Enter in input to submit
-  if (ta) ta.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyEditedJSON(); } });
+  // Note: Enter should create a newline in the textarea. Apply only via the Apply button.
 });
 
 // ------------------ Scene / Level management ------------------

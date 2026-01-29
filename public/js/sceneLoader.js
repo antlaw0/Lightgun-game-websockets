@@ -320,6 +320,8 @@ if (pdef.type === "prefab" && pdef.prefab) {
     });
 
     // Add prop to SceneLoader (tracks props + adds mesh to scene)
+    // preserve original scene definition on the runtime instance
+    try { propInstance._sceneDef = pdef; } catch(e){}
     this.addProp(propInstance);
 
     console.log(`Prefab prop loaded: ${pdef.id}`, propInstance.mesh.position);
@@ -406,6 +408,8 @@ if (pdef.type === "prefab" && pdef.prefab) {
         }
       };
 
+      // attach raw definition so the editor can preserve arbitrary keys
+      try { propWrapper._sceneDef = pdef; } catch(e){}
       this.addProp(propWrapper);
     });
 
@@ -476,6 +480,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
       }
     };
 
+    try { doorWrapper._sceneDef = pdef; } catch(e){}
     this.addProp(doorWrapper);
 
     const transitions = this.sceneDef.transitionObjects;
@@ -507,6 +512,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
     }
   });
 
+  try { p._sceneDef = pdef; } catch(e){}
   this.addProp(p);
 }
 
