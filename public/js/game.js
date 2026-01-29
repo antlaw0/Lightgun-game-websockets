@@ -385,6 +385,7 @@ document.addEventListener('mousemove', (e) => {
 
 // Key state for continuous movement in FPS mode
 document.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   // movement keys: WASD, Q (ascend), Z (descend), X (snap to ground)
   if (e.code === 'KeyX') {
     if (isFPSMode) camera.position.y = 1.7; // snap to ground height
@@ -438,6 +439,7 @@ window.addEventListener("mouseleave", () => {
 });
 
 window.addEventListener("keydown", e => {
+  if (window._editorModalOpen) return;
   const code = e.code || '';
   const key = e.key || '';
   if (code === 'KeyV' || key === 'v' || key === 'V') {
@@ -457,6 +459,7 @@ window.addEventListener("keydown", e => {
 });
 
 window.addEventListener("keydown", (e) => {
+  if (window._editorModalOpen) return;
   if (e.code === "F4") {
     setEnemyAIEnabled(!ENEMY_AI_ENABLED);
     logDebug(`Enemy AI toggled: ${ENEMY_AI_ENABLED ? "ON" : "OFF"}`);
@@ -464,6 +467,7 @@ window.addEventListener("keydown", (e) => {
 });
 // Toggle Editor Mode (F2)
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (e.code === 'F2') {
     setEditorMode(!window.engine.isEditorMode);
     logDebug(`Editor mode: ${window.engine.isEditorMode ? 'ON' : 'OFF'}`);
@@ -472,6 +476,7 @@ window.addEventListener('keydown', (e) => {
 
 // Editor spawn key bindings
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (!window.engine?.isEditorMode) return;
   if (e.code === 'Digit1') { e.preventDefault(); spawnEditorObject('wall'); }
   else if (e.code === 'Digit2') { e.preventDefault(); spawnEditorObject('door'); }
@@ -481,6 +486,7 @@ window.addEventListener('keydown', (e) => {
 
 // Cycle editor grid with G (Off -> 1 -> 0.5 -> 0.25)
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (!window.engine?.isEditorMode) return;
   if (e.code === 'KeyG') {
     e.preventDefault();
@@ -494,6 +500,7 @@ window.addEventListener('keydown', (e) => {
 
 // Selection binding: press E to raycast from camera center and select nearest object
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (!window.engine?.isEditorMode) return;
   if (e.code === 'KeyE') {
     e.preventDefault();
@@ -503,6 +510,7 @@ window.addEventListener('keydown', (e) => {
 
 // Open JSON editor for selected object with T (works even if other handlers exist)
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (!window.engine?.isEditorMode) return;
   if (e.code === 'KeyT') {
     e.preventDefault();
@@ -513,6 +521,7 @@ window.addEventListener('keydown', (e) => {
 
 // Editor manipulation: move, rotate, delete selected object via keyboard
 window.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if (!window.engine?.isEditorMode) return;
   if (!window.selectedObject) return;
 
@@ -913,7 +922,8 @@ let lastReloadPressMs = 0;
 const RELOAD_COOLDOWN_MS = 500; // half-second cooldown
 
 document.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() !== 'r') return;
+  if (window._editorModalOpen) return;
+  if (e.key.toLowerCase() !== 'r') return;
 
     const now = performance.now();
     if (now - lastReloadPressMs < RELOAD_COOLDOWN_MS) {
@@ -1093,7 +1103,9 @@ function exportSceneToJS() {
     enemies: enemiesOut
   };
 
-  const jsText = 'export const Scene_Exported = ' + JSON.stringify(sceneObj, null, 2) + ';\n';
+    const jsonStr = JSON.stringify(sceneObj, null, 2);
+    const jsObjLiteral = jsonStr.replace(/"([A-Za-z0-9_]+)"\s*:/g, '$1:');
+    const jsText = 'export const Scene_Exported = ' + jsObjLiteral + ';\n';
   const blob = new Blob([jsText], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1288,7 +1300,8 @@ function selectObjectFromCenter() {
 // JSON Editor for selected object
 // -----------------------------
 function _getEditableDefForSelected() {
-  const sel = window.selectedObject;
+  const sel = window._editorModalTarget || window.selectedObject;
+  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
   if (!sel) return null;
   try {
     // Use existing helper to produce a clean static object definition when possible
@@ -1304,9 +1317,44 @@ function _getEditableDefForSelected() {
   }
 }
 
+// Format an object as a JavaScript object literal string
+function _formatAsJsLiteral(obj, indent = 4, level = 0) {
+  const pad = (n) => ' '.repeat(n);
+  const cur = pad(level * indent);
+  const next = pad((level + 1) * indent);
+
+  if (obj === null) return 'null';
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return '[]';
+    const items = obj.map(it => {
+      if (typeof it === 'object') return _formatAsJsLiteral(it, indent, level + 1);
+      return typeof it === 'string' ? JSON.stringify(it) : String(it);
+    }).map(s => next + s).join(',\n');
+    return '[\n' + items + '\n' + cur + ']';
+  }
+
+  if (typeof obj === 'object') {
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return '{}';
+    const lines = keys.map(k => {
+      const v = obj[k];
+      let valStr;
+      if (typeof v === 'object') valStr = _formatAsJsLiteral(v, indent, level + 1);
+      else if (typeof v === 'string') valStr = JSON.stringify(v);
+      else valStr = String(v);
+      return next + k + ': ' + valStr;
+    });
+    return '{\n' + lines.join(',\n') + '\n' + cur + '}';
+  }
+
+  if (typeof obj === 'string') return JSON.stringify(obj);
+  return String(obj);
+}
+
 function openEditSelectedJSON() {
   if (!window.engine?.isEditorMode) return;
-  const sel = window.selectedObject;
+  const sel = window._editorModalTarget || window.selectedObject;
+  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
   if (!sel) { alert('No object selected'); return; }
   console.log('openEditSelectedJSON called for', sel && (sel.id || sel.mesh && sel.mesh.userData && sel.mesh.userData.propId));
   const modal = document.getElementById('jsonEditModal');
@@ -1320,13 +1368,16 @@ function openEditSelectedJSON() {
   errs.textContent = '';
   const def = _getEditableDefForSelected();
   title.textContent = `Edit Object JSON - ${def.id || '(no-id)'} `;
-  try { ta.value = JSON.stringify(def, null, 2).replace(/\n/g, ' '); } catch(e){ ta.value = '{}'; }
+  try { ta.value = _formatAsJsLiteral(def, 4); } catch(e){ ta.value = '{}'; }
   modal.style.display = 'flex';
   // ensure focus goes to input and NVDA is aware
   setTimeout(() => { try { ta.focus(); ta.setSelectionRange(0,0); } catch(e){} }, 50);
 
   // install focus trap
   _installModalFocusTrap(modal);
+  // mark modal open and remember selected object to ensure apply targets it
+  window._editorModalOpen = true;
+  window._editorModalTarget = sel;
 }
 
 function closeEditModal() {
@@ -1338,6 +1389,9 @@ function closeEditModal() {
   _removeModalFocusTrap();
   // restore focus
   try { if (window._lastFocusedBeforeModal && typeof window._lastFocusedBeforeModal.focus === 'function') window._lastFocusedBeforeModal.focus(); } catch(e){}
+  // clear modal flags
+  window._editorModalOpen = false;
+  window._editorModalTarget = null;
 }
 
 // Focus trap helpers
@@ -1374,12 +1428,7 @@ function _validateEditedDef(obj, sel) {
   const errors = [];
   if (typeof obj !== 'object' || obj === null) { errors.push('Top-level JSON must be an object'); return errors; }
 
-  // If editing a static prop, only allow a constrained set of keys
-  const isStaticProp = !!(sel && (sel.mesh && sel.mesh.userData && sel.mesh.userData.propId)) || (sel && sel.type === 'prop') || (window.sceneLoader && sel && sel.id && window.sceneLoader.propsById && window.sceneLoader.propsById[sel.id]);
-  if (isStaticProp) {
-    const allowed = ['id','position','size','texture','hitSounds'];
-    Object.keys(obj).forEach(k => { if (!allowed.includes(k)) errors.push(`Field not allowed for static props: ${k}`); });
-  }
+  // Allow arbitrary properties for static props; only validate types when present
 
   if (obj.position) {
     ['x','y','z'].forEach(k => { if (obj.position[k] === undefined || typeof obj.position[k] !== 'number') errors.push(`position.${k} must be a number`); });
@@ -1403,14 +1452,30 @@ function applyEditedJSON() {
   const errsHost = document.getElementById('jsonEditErrors');
   errsHost.textContent = '';
   let parsed;
+  const raw = ta.value;
+  // Try JSON.parse first (handles strict JSON)
   try {
-    parsed = JSON.parse(ta.value);
-  } catch (e) {
-    errsHost.textContent = 'JSON parse error: ' + e.message;
-    try { if (window.speak) window.speak('JSON parse error', { interrupt: true }); } catch(e){}
-    return;
+    parsed = JSON.parse(raw);
+  } catch (e1) {
+    // Try converting JS-style unquoted keys to quoted keys for JSON.parse
+    try {
+      const quoted = raw.replace(/([\{,\n\r\s])([A-Za-z0-9_]+)\s*:/g, '$1"$2":');
+      parsed = JSON.parse(quoted);
+    } catch (e2) {
+      // Last resort: attempt to evaluate as JS expression (object literal)
+      try {
+        // Use Function to evaluate in local scope safely-ish
+        // Wrap in parentheses so object literal parses correctly
+        parsed = Function('"use strict"; return (' + raw + ')')();
+      } catch (e3) {
+        errsHost.textContent = 'JSON parse error: ' + e1.message + ' — fallback parse failed: ' + (e2 && e2.message ? e2.message : (e3 && e3.message ? e3.message : 'invalid input'));
+        try { if (window.speak) window.speak('JSON parse error', { interrupt: true }); } catch(e){}
+        return;
+      }
+    }
   }
-  const sel = window.selectedObject;
+  const sel = window._editorModalTarget || window.selectedObject;
+  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
   const errors = _validateEditedDef(parsed, sel);
   if (errors.length) {
     errsHost.innerHTML = errors.map(s => `- ${s}`).join('<br>');
@@ -1452,6 +1517,21 @@ function applyEditedJSON() {
     if (sel.mesh) {
       if (parsed.position) sel.mesh.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
       if (parsed.rotation) sel.mesh.rotation.set(parsed.rotation.x, parsed.rotation.y, parsed.rotation.z);
+      // If size provided, adjust mesh.scale relative to previous size so geometry appears resized
+      if (parsed.size) {
+        try {
+          const ms = sel.mesh.scale || { x: 1, y: 1, z: 1 };
+          if (oldSize && oldSize.x && oldSize.y && oldSize.z) {
+            const fx = parsed.size.x / oldSize.x;
+            const fy = parsed.size.y / oldSize.y;
+            const fz = parsed.size.z / oldSize.z;
+            sel.mesh.scale.set((ms.x || 1) * fx, (ms.y || 1) * fy, (ms.z || 1) * fz);
+          } else {
+            sel.mesh.scale.set(parsed.size.x, parsed.size.y, parsed.size.z);
+          }
+        } catch (e) {}
+        sel.size = parsed.size;
+      }
       if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
       // ensure userData updated for id/propId
       if (!sel.mesh.userData) sel.mesh.userData = {};
@@ -2405,11 +2485,13 @@ function updateEnemyProjectiles(dt) {
 let ducking = false;
 let zoomed = false;
 document.addEventListener('keydown', (e) => {
+  if (window._editorModalOpen) return;
   if(e.key==='Shift') ducking=true;
   // Only treat Z as zoom when NOT in FPS mode
   if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=true;
 });
 document.addEventListener('keyup', (e) => {
+  if (window._editorModalOpen) return;
   if(e.key==='Shift') ducking=false;
   if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=false;
 });
