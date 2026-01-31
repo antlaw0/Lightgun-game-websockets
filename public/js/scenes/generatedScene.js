@@ -1,189 +1,196 @@
+import sounds from "../listOfSounds.js";
+
 export const Scene_Exported = {
-  name: "Exported Scene 2026-01-29T21:58:12.737Z",
+  name: "map_L_hallway",
   camera: {
-    position: {
-      x: 10.081632502148038,
-      y: 1.7,
-      z: -13.230328203864918
-    },
-    lookAt: {
-      x: 7.40538772236261,
-      y: -1.4057351754766134,
-      z: -4.109356605483606
-    },
+    position: { x: 15, y: 10, z: 50 },
+    lookAt: { x: 15, y: 3.5, z: 15 },
     fov: 60,
     near: 0.1,
     far: 200
   },
   lights: [
+    // Light 1
     {
       type: "point",
-      color: 8388736,
+      color: 16777215,
       intensity: 1.5,
-      position: {
-        x: 13.614789285961391,
-        y: 3.086222470043686,
-        z: 3.3607287045914815
-      },
+      position: { x: 15, y: 6.5, z: 25 },
       distance: 50,
       decay: 2,
-      id: "light_1112"
+      id: "light_point_1"
     },
-    {
-      type: "directional",
-      color: 8388736,
-      intensity: 0,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true,
-      id: "light_1115"
-    },
+    // Light 2
     {
       type: "point",
-      color: 255,
+      color: 16777215,
       intensity: 1.5,
-      position: {
-        x: 13.614789285961391,
-        y: 3.086222470043686,
-        z: 3.3607287045914815
-      },
+      position: { x: 9, y: 6.5, z: 17 },
       distance: 50,
       decay: 2,
-      castShadow: true,
-      shadow: {
-        mapSize: {
-          width: 1024,
-          height: 1024
-        },
-        camera: {
-          near: 0.5,
-          far: 50
-        },
-        bias: -0.0001
-      },
-      id: "light_01",
-      rotation: {
-        x: 0,
-        y: 0,
-        z: 0
-      },
-      size: {
-        x: 1,
-        y: 1,
-        z: 1
-      }
+      id: "light_point_2"
     },
+    // Ambient light
     {
       type: "ambient",
       color: 16777215,
       intensity: 0.6
-    },
-    {
-      type: "directional",
-      color: 255,
-      intensity: 0,
-      position: {
-        x: 0,
-        y: 5,
-        z: 0
-      },
-      target: {
-        x: 0,
-        y: 1.4,
-        z: -6
-      },
-      castShadow: true,
-      shadow: {
-        mapSize: {
-          width: 2048,
-          height: 2048
-        },
-        camera: {
-          left: -10,
-          right: 10,
-          top: 10,
-          bottom: -10,
-          near: 0.5,
-          far: 50
-        }
-      }
     }
   ],
   environment: {
     staticObjects: [
-      {
-        id: "wall_02",
-        type: "wall",
-        position: {
-          x: 5.877711007445899,
-          y: 1.7443093390743718,
-          z: 8.590165999332452
-        },
-        rotation: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        size: {
-          x: 1,
-          y: 12,
-          z: 6
-        },
-        hp: 9999,
-        indestructible: true,
-        coverType: "none"
-      },
-      {
-        id: "wall_01",
-        type: "wall",
-        position: {
-          x: 1.0933984755269983,
-          y: 0,
-          z: -1.4422746394057793
-        },
-        rotation: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        size: {
-          x: 20,
-          y: 12,
-          z: 1
-        },
-        hp: 9999,
-        indestructible: true,
-        coverType: "full"
-      },
+      // Floor
       {
         id: "floor_01",
         type: "floor",
-        position: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        rotation: {
-          x: 0,
-          y: 0,
-          z: 0
-        },
-        size: {
-          x: 50,
-          y: 0.1,
-          z: 50
-        },
+        position: { x: 15, y: 0, z: 15 },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 30, y: 0.1, z: 30 },
         hp: 999,
+        indestructible: true,
+        hitSounds: sounds.ric,
         coverType: "none"
-      }
+      },
+      // Ceiling
+      {
+        id: "ceiling_01",
+        type: "floor",
+        position: { x: 15, y: 7, z: 15 },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 30, y: 0.1, z: 30 },
+        hp: 999,
+        indestructible: true,
+        hitSounds: sounds.ric,
+        coverType: "none"
+      },
+      // Walls
+      ...[
+        {
+          name: "wall_righte_vertical",
+          x: 13,
+          z: 19,
+          w: 1,
+          h: 10,
+          height: 7
+        },
+        {
+          name: "wall_righte_vertical_2",
+          x: 17,
+          z: 16,
+          w: 1,
+          h: 13,
+          height: 7
+        },
+        {
+          name: "wall_left_2_horizontal",
+          x: 4,
+          z: 19,
+          w: 9,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_right_2_horizontal",
+          x: 4,
+          z: 15,
+          w: 14,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_end_piecee_vertical",
+          x: 3,
+          z: 18,
+          w: 1,
+          h: 2,
+          height: 7
+        },
+        {
+          name: "wall_piece_end_2e_vertical",
+          x: 3,
+          z: 15,
+          w: 1,
+          h: 2,
+          height: 7
+        },
+        {
+          name: "wall_beginning_piece_1e_horizontal",
+          x: 13,
+          z: 29,
+          w: 2,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_beginning_right_horizontal",
+          x: 16,
+          z: 29,
+          w: 2,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "",
+          x: 0,
+          z: 0,
+          w: 1,
+          h: 1,
+          height: 3
+        }
+      ].map((w, idx) => {
+        const isHorizontal = w.name.includes("horizontal");
+        return {
+          id: w.name || `wall_${idx}`,
+          type: "wall",
+          position: {
+            x: w.x + (isHorizontal ? w.w / 2 : 0.5),
+            y: w.height / 2,
+            z: w.z + (isHorizontal ? 0.5 : w.h / 2)
+          },
+          rotation: { x: 0, y: 0, z: 0 },
+          size: {
+            x: isHorizontal ? w.w : 1,
+            y: w.height,
+            z: isHorizontal ? 1 : w.h
+          },
+          hp: 9999,
+          indestructible: true,
+          hitSounds: sounds.ric,
+          coverType: "full"
+        };
+      }),
+      // Objects
+      ...[
+        {
+          name: "exit_door",
+          x: 3,
+          z: 17,
+          shape: "square",
+          color: "magenta",
+          notes: "exit door end of L hallway"
+        },
+        {
+          name: "starting_door",
+          x: 15,
+          z: 29,
+          shape: "square",
+          color: "magenta",
+          notes: "door at beginning of scene"
+        }
+      ].map((o, idx) => ({
+        id: o.name,
+        type: "object",
+        position: { x: o.x, y: 0, z: o.z },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 1, y: 1, z: 1 },
+        color: o.color,
+        shape: o.shape,
+        notes: o.notes,
+        hp: 1,
+        indestructible: false,
+        hitSounds: sounds.ric,
+        coverType: "none"
+      }))
     ]
   },
   enemies: []

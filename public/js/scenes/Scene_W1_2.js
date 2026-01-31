@@ -1,179 +1,235 @@
-export const Scene_W1_2 = {
-  name: "World 1-2 – L Hallway",
+import sounds from "../listOfSounds.js";
 
+export const Scene_W1_2 = {
+  name: "map_L_hallway",
   camera: {
-    position: { x: 0, y: 1.7, z: 1.5 },
-    lookAt: { x: 0, y: 1.7, z: -2 },
+    position: { x: 15, y: 10, z: 50 },
+    lookAt: { x: 15, y: 3.5, z: 15 },
     fov: 60,
     near: 0.1,
-    far: 100
-  }, // end camera
-
-  cameraRails: {
-    intro: [
-      {
-        type: "doorOpen",
-        doorId: "door_entrance",
-        duration: 600
-      },
-      {
-        type: "moveTo",
-        position: { x: 0, y: 1.7, z: -1.2 },
-        duration: 900
-      }
-    ],
-    exit: []
-  }, // end cameraRails
-
+    far: 200
+  },
   lights: [
-    {
-      type: "ambient",
-      color: 0xffffff,
-      intensity: 0.9
+  // Point light 1 near end of hallway
+  {
+    type: "point",
+    color: 16777215,
+    intensity: 1.5,
+    position: { x: 16, y: 6.5, z: 23 }, // just below wall top
+    distance: 50,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 1024, height: 1024 },
+      camera: { near: 0.5, far: 50 },
+      bias: -0.0001
     },
-    {
-      type: "spot",
-      color: 0xffffff,
-      intensity: 1.3,
-      position: { x: 0, y: 2.8, z: -3 },
-      target: { x: 0, y: 1.5, z: -5 },
-      angle: Math.PI / 2,
-      penumbra: 0.6,
-      decay: 0.6,
-      distance: 16
-    },
-    {
-      type: "spot",
-      color: 0xffffff,
-      intensity: 1.3,
-      position: { x: 4, y: 2.8, z: -6 },
-      target: { x: 6, y: 1.5, z: -6 },
-      angle: Math.PI / 2,
-      penumbra: 0.6,
-      decay: 0.6,
-      distance: 16
-    }
-  ], // end lights
-
-  environment: {
-    staticObjects: [
-      /* =========================
-         ENTRANCE LEG WALLS (–Z)
-         ========================= */
-
-      {
-        id: "wall_entrance_left",
-        type: "wall",
-        hp: 200,
-        maxHp: 200,
-        position: { x: -1.5, y: 0, z: -3 },
-        size: { x: 0.2, y: 2.5, z: 6 },
-        coverType: "full",
-        indestructible: true,
-        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
-      },
-
-      {
-        id: "wall_entrance_right",
-        type: "wall",
-        hp: 200,
-        maxHp: 200,
-        position: { x: 1.5, y: 0, z: -3 },
-        size: { x: 0.2, y: 2.5, z: 6 },
-        coverType: "full",
-        indestructible: true,
-        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
-      },
-
-      /* =========================
-         TURN LEG WALLS (+X)
-         ========================= */
-
-      {
-        id: "wall_turn_top",
-        type: "wall",
-        hp: 200,
-        maxHp: 200,
-        position: { x: 3, y: 0, z: -7.5 },
-        size: { x: 6, y: 2.5, z: 0.2 },
-        coverType: "full",
-        indestructible: true,
-        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
-      },
-
-      {
-        id: "wall_turn_bottom",
-        type: "wall",
-        hp: 200,
-        maxHp: 200,
-        position: { x: 3, y: 0, z: -4.5 },
-        size: { x: 6, y: 2.5, z: 0.2 },
-        coverType: "full",
-        indestructible: true,
-        material: { map: "assets/props/brick_wall.png", color: 0xffffff, roughness: 0.95, metalness: 0.0 }
-      },
-
-      /* =========================
-         DOORS
-         ========================= */
-
-      {
-        id: "door_entrance",
-        type: "door",
-        position: { x: 0, y: 0, z: 0 },
-        width: 1.2,
-        height: 2.2,
-        depth: 0.2
-      },
-
-      {
-        id: "door_exit",
-        type: "door",
-        position: { x: 6, y: 0, z: -6 },
-        rotation: { x: 0, y: Math.PI / 2, z: 0 },
-        width: 1.2,
-        height: 2.2,
-        depth: 0.2
-      }
-    ]
-  }, // end environment
-
-  enemies: [
-    /* E1 – Sniper at far end */
-    {
-      id: "sniper_w1_2",
-      type: "Grunt",
-      displayName: "Sniper Grunt",
-      hp: 90,
-      modelUrl: "assets/models/exo_red.fbx",
-      position: { x: 5.2, y: 0, z: -6 },
-      facing: -Math.PI / 2,
-      behavior: { pattern: "standInOpen", params: { fireIntervalMs: 1200 } }
-    },
-
-    /* E2 – SWAT enemy reused EXACTLY */
-    {
-      id: "swat_w1_2",
-      type: "Grunt",
-      displayName: "Grunt Soldier",
-      hp: 100,
-      modelUrl: "assets/models/swatguy.fbx",
-      animationUrls: {
-        shoot: "assets/animations/swatguy_firing_rifle.fbx",
-        dying_rifle: "assets/animations/swatguy_dying.fbx",
-        dying: "assets/animations/swatguy_dying.fbx"
-      },
-      position: { x: 2, y: 0, z: -5 },
-      groundY: 0.85,
-      facing: 0,
-      behavior: { pattern: "standInOpen", params: { fireIntervalMs: 900 } }
-    }
-  ], // end enemies
-
-  objective: {
-    type: "eliminateAllEnemies",
-    description: "Clear the hallway."
+    id: "light_point_1e"
   },
 
-  nextScene: "scene_w1_3"
+  // Point light 2 near start of hallway
+  {
+    type: "point",
+    color: 16777215,
+    intensity: 1.5,
+    position: { x: 10, y: 6.5, z: 16 },
+    distance: 50,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 1024, height: 1024 },
+      camera: { near: 0.5, far: 50 },
+      bias: -0.0001
+    },
+    id: "light_point_2e"
+  },
+
+  // Directional light simulating overhead light
+  {
+    type: "directional",
+    id: "directional_1",
+    color: 0xffffff,
+    intensity: 1.2, // slightly less intense than points
+    position: { x: 15, y: 20, z: 15 }, // high above hallway
+    target: { x: 15, y: 0, z: 15 },   // pointing down to center
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 4096, height: 4096 },
+      camera: {
+        left: -15,
+        right: 15,
+        top: 15,
+        bottom: -15,
+        near: 1,
+        far: 50
+      }
+    }
+  },
+
+  // Ambient fill
+  {
+    type: "ambient",
+    color: 16777215,
+    intensity: 0.6
+  }
+],
+environment: {
+    staticObjects: [
+      // Floor
+      {
+        id: "floor_01",
+        type: "floor",
+        position: { x: 15, y: 0, z: 15 },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 30, y: 0.1, z: 30 },
+        hp: 999,
+        indestructible: true,
+        hitSounds: sounds.ric,
+		texture:  "assets/textures/warehouse_floor.png",
+        coverType: "none"
+      },
+      // Ceiling
+      {
+        id: "ceiling_01",
+        type: "floor",
+        position: { x: 15, y: 14.05, z: 15 },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 30, y: 0.1, z: 30 },
+        hp: 999,
+		texture:  "assets/textures/warehouse_ceiling.png",
+        indestructible: true,
+        hitSounds: sounds.ric,
+        coverType: "none"
+      },
+      // Walls
+      ...[
+        {
+          name: "wall_righte_vertical",
+          x: 13,
+          z: 19,
+          w: 1,
+          h: 10,
+          height: 7
+        },
+        {
+          name: "wall_righte_vertical_2",
+          x: 19,
+          z: 14,
+          w: 1,
+          h: 15,
+          height: 7
+        },
+        {
+          name: "wall_left_2_horizontal",
+          x: 4,
+          z: 19,
+          w: 9,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_right_2_horizontal",
+          x: 3,
+          z: 13,
+          w: 17,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_end_piecee_vertical",
+          x: 3,
+          z: 18,
+          w: 1,
+          h: 2,
+          height: 7
+        },
+        {
+          name: "wall_piece_end_2e_vertical",
+          x: 3,
+          z: 14,
+          w: 1,
+          h: 3,
+          height: 7
+        },
+        {
+          name: "wall_beginning_piece_1e_horizontal",
+          x: 13,
+          z: 29,
+          w: 3,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "wall_beginning_right_horizontal",
+          x: 17,
+          z: 29,
+          w: 3,
+          h: 1,
+          height: 7
+        },
+        {
+          name: "",
+          x: 0,
+          z: 0,
+          w: 1,
+          h: 1,
+          height: 3
+        }
+      ].map((w, idx) => {
+        const isHorizontal = w.name.includes("horizontal");
+        return {
+          id: w.name || `wall_${idx}`,
+          type: "wall",
+          position: {
+            x: w.x + (isHorizontal ? w.w / 2 : 0.5),
+            y: w.height / 2,
+            z: w.z + (isHorizontal ? 0.5 : w.h / 2)
+          },
+          rotation: { x: 0, y: 0, z: 0 },
+          size: {
+            x: isHorizontal ? w.w : 1,
+            y: w.height,
+            z: isHorizontal ? 1 : w.h
+          },
+          hp: 9999,
+          indestructible: true,
+          hitSounds: sounds.ric,
+          coverType: "full"
+        };
+      }),
+      // Objects (doors)
+      ...[
+        {
+          name: "exit_door",
+          x: 3,
+          z: 17,
+          shape: "square",
+          color: "magenta",
+          notes: "exit door end of L hallway"
+        },
+        {
+          name: "starting_door",
+          x: 16,
+          z: 29,
+          shape: "square",
+          color: "magenta",
+          notes: "door at beginning of scene"
+        }
+      ].map((o) => ({
+        id: o.name,
+        type: "object",
+        position: { x: o.x, y: 0, z: o.z },
+        rotation: { x: 0, y: 0, z: 0 },
+        size: { x: 1, y: 1, z: 1 },
+        color: o.color,
+        shape: o.shape,
+        notes: o.notes,
+        hp: 1,
+        indestructible: false,
+        hitSounds: sounds.ric,
+        coverType: "none"
+      }))
+    ]
+  },
+  enemies: []
 };

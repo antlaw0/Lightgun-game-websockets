@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>2D Scene Mapper</title>
+
+<style>
+body {
+  margin: 0;
+  background: #000;
+  color: #fff;
+  font-family: sans-serif;
+} /* closes body */
+
+#toolbar {
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+} /* closes #toolbar */
+
+#gridContainer {
+  position: relative;
+  margin: 10px;
+  background-color: #000;
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, #fff 1px, transparent 1px),
+    linear-gradient(to bottom, #fff 1px, transparent 1px);
+} /* closes #gridContainer */
+
+.wall, .object {
+  position: absolute;
+  box-sizing: border-box;
+  user-select: none;
+} /* closes .wall,.object */
+
+.wall {
+  background: gray;
+} /* closes .wall */
+
+.object svg {
+  width: 100%;
+  height: 100%;
+} /* closes svg */
+
+.selected {
+  outline: 3px solid yellow;
+} /* closes .selected */
+
+#ariaLive {
+  position: absolute;
+  left: -9999px;
+} /* closes #ariaLive */
+
+#modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+} /* closes #modalOverlay */
+
+#modal {
+  background: #111;
+  padding: 16px;
+  width: 360px;
+  border: 2px solid #fff;
+} /* closes #modal */
+
+#modal label {
+  display: block;
+  margin-top: 8px;
+} /* closes label */
+</style>
+</head>
+
+<body>
+
+<div id="toolbar">
+  Map name:
+  <input id="mapName" />
+  Grid X:
+  <input id="gridX" type="number" value="20" />
+  Grid Y:
+  <input id="gridY" type="number" value="20" />
+  <button id="saveBtn">Save</button>
+  <button id="loadBtn">Load</button>
+</div>
+
+<div id="gridContainer"></div>
+<div id="ariaLive" aria-live="polite"></div>
+
+<div id="modalOverlay">
+  <div id="modal"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="modalTitle"
+       tabindex="-1">
+  </div>
+</div>
+
+<script>
+const GRID_SIZE = 40;
+const COLORS = ["gray","red","green","blue","yellow","cyan","magenta","white"];
+
+const gridContainer = document.getElementById("gridContainer");
+const modalOverlay = document.getElementById("modalOverlay");
+const modal = document.getElementById("modal");
+const ariaLive = document.getElementById("ariaLive");
+
+let items = [];
+let selectedItem = null;
+let mouseGridPos = { x: 0, y: 0 };
+let modalOpen = false;
+let lastFocused = null;
+
+function updateGridSize() {
+  gridContainer.style.width = gridX.value * GRID_SIZE + "px";
+  gridContainer.style.height = gridY.value * GRID_SIZE + "px";
+} /* closes updateGridSize */
+
+gridX.onchange = updateGridSize;
+gridY.onchange = updateGridSize;
+updateGridSize();
+
+gridContainer.addEventListener("mousemove", e => {
+  if (modalOpen) return;
+  const r = gridContainer.getBoundingClientRect();
+  mouseGridPos.x = Math.floor((e.clientX - r.left) / GRID_SIZE);
+  mouseGridPos.y = Math.floor((e.clientY - r.top) / GRID_SIZE);
+}); /* closes mousemove */
+
+function deselectAll() {
+  items.forEach(i => i.el.classList.remove("selected"));
+  selectedItem = null;
+} /* closes deselectAll */
+
+function selectItem(item) {
+  deselectAll();
+  selectedItem = item;
+  item.el.classList.add("selected");
+
+  let msg = `${item.type} ${item.name || "unnamed"}, color ${item.color}`;
+  if (item.type === "wall") msg += `, height ${item.height}`;
+  ariaLive.textContent = msg;
+} /* closes selectItem */
+
+function createWall(x, y) {
+  const el = document.createElement("div");
+  el.className = "wall";
+
+  const wall = {
+    type: "wall",
+    x, y,
+    w: 1, h: 1,
+    height: 3,
+    color: "gray",
+    name: "",
+    notes: "",
+    el
+  };
+
+  el.onclick = () => selectItem(wall);
+  gridContainer.appendChild(el);
+  items.push(wall);
+  updateItem(wall);
+  selectItem(wall);
+} /* closes createWall */
+
+function createObject(x, y) {
+  const el = document.createElement("div");
+  el.className = "object";
+
+  const obj = {
+    type: "object",
+    x, y,
+    shape: "square",
+    color: "cyan",
+    name: "",
+    notes: "",
+    el
+  };
+
+  el.onclick = () => selectItem(obj);
+  gridContainer.appendChild(el);
+  items.push(obj);
+  renderObject(obj);
+  updateItem(obj);
+  selectItem(obj);
+} /* closes createObject */
+
+function renderObject(obj) {
+  const svg = {
+    square: `<rect x="5" y="5" width="30" height="30" fill="${obj.color}"/>`,
+    circle: `<circle cx="20" cy="20" r="15" fill="${obj.color}"/>`,
+    triangle: `<polygon points="20,5 35,35 5,35" fill="${obj.color}"/>`,
+    star: `<polygon points="20,4 24,16 36,16 26,24 30,36 20,28 10,36 14,24 4,16 16,16" fill="${obj.color}"/>`
+  };
+  obj.el.innerHTML = `<svg viewBox="0 0 40 40">${svg[obj.shape]}</svg>`;
+} /* closes renderObject */
+
+function updateItem(item) {
+  item.el.style.left = item.x * GRID_SIZE + "px";
+  item.el.style.top = item.y * GRID_SIZE + "px";
+  item.el.style.width = GRID_SIZE + "px";
+  item.el.style.height = GRID_SIZE + "px";
+
+  if (item.type === "wall") {
+    item.el.style.width = item.w * GRID_SIZE + "px";
+    item.el.style.height = item.h * GRID_SIZE + "px";
+    item.el.style.background = item.color;
+  }
+} /* closes updateItem */
+
+document.addEventListener("keydown", e => {
+  if (modalOpen) return;
+
+  if (e.key === "1") createWall(mouseGridPos.x, mouseGridPos.y);
+  if (e.key === "2") createObject(mouseGridPos.x, mouseGridPos.y);
+  if (!selectedItem) return;
+  if (e.key === "Delete") {
+    selectedItem.el.remove();
+    items = items.filter(i => i !== selectedItem);
+    selectedItem = null;
+  }
+  if (e.key === "ArrowUp") selectedItem.y--;
+  if (e.key === "ArrowDown") selectedItem.y++;
+  if (e.key === "ArrowLeft") selectedItem.x--;
+  if (e.key === "ArrowRight") selectedItem.x++;
+  if (selectedItem.type === "wall") {
+    if (e.key === "8") selectedItem.h++;
+    if (e.key === "2") selectedItem.h = Math.max(1, selectedItem.h - 1);
+    if (e.key === "6") selectedItem.w++;
+    if (e.key === "4") selectedItem.w = Math.max(1, selectedItem.w - 1);
+  }
+  if (e.key === "e" || e.key === "E") openModal();
+  updateItem(selectedItem);
+}); /* closes keydown */
+
+function colorOptions(value) {
+  return COLORS.map(c => `<option ${c===value?"selected":""}>${c}</option>`).join("");
+} /* closes colorOptions */
+
+function openModal() {
+  modalOpen = true;
+  lastFocused = document.activeElement;
+  modalOverlay.style.display = "flex";
+
+  if (selectedItem.type === "wall") {
+    modal.innerHTML = `
+      <h2 id="modalTitle">Edit Wall</h2>
+      <label>Name <input id="nameInput"></label>
+      <label>Height <input id="heightInput" type="number"></label>
+      <label>Color <select id="colorInput">${colorOptions(selectedItem.color)}</select></label>
+      <label>Notes <textarea id="notesInput"></textarea></label>
+      <button id="saveBtnModal">Save</button>
+      <button id="cancelBtnModal">Cancel</button>
+    `;
+  } else {
+    modal.innerHTML = `
+      <h2 id="modalTitle">Edit Object</h2>
+      <label>Name <input id="nameInput"></label>
+      <label>Shape
+        <select id="shapeInput">
+          <option>square</option>
+          <option>circle</option>
+          <option>triangle</option>
+          <option>star</option>
+        </select>
+      </label>
+      <label>Color <select id="colorInput">${colorOptions(selectedItem.color)}</select></label>
+      <label>Notes <textarea id="notesInput"></textarea></label>
+      <button id="saveBtnModal">Save</button>
+      <button id="cancelBtnModal">Cancel</button>
+    `;
+  }
+
+  const nameInput = modal.querySelector("#nameInput");
+  const heightInput = modal.querySelector("#heightInput");
+  const shapeInput = modal.querySelector("#shapeInput");
+  const colorInput = modal.querySelector("#colorInput");
+  const notesInput = modal.querySelector("#notesInput");
+
+  nameInput.value = selectedItem.name;
+  notesInput.value = selectedItem.notes;
+  colorInput.value = selectedItem.color;
+  if (heightInput) heightInput.value = selectedItem.height;
+  if (shapeInput) shapeInput.value = selectedItem.shape;
+
+  modal.focus();
+  nameInput.focus();
+
+  modal.onkeydown = e => {
+    if (e.key === "Escape") closeModal();
+    e.stopPropagation();
+  };
+
+  modal.querySelector("#saveBtnModal").onclick = () => {
+    selectedItem.name = nameInput.value;
+    selectedItem.notes = notesInput.value;
+    selectedItem.color = colorInput.value;
+    if (heightInput) selectedItem.height = Number(heightInput.value);
+    if (shapeInput) {
+      selectedItem.shape = shapeInput.value;
+      renderObject(selectedItem);
+    }
+    updateItem(selectedItem);
+    closeModal();
+  };
+
+  modal.querySelector("#cancelBtnModal").onclick = closeModal;
+} /* closes openModal */
+
+function closeModal() {
+  modalOpen = false;
+  modalOverlay.style.display = "none";
+  modal.innerHTML = "";
+  lastFocused && lastFocused.focus();
+} /* closes closeModal */
+
+saveBtn.onclick = () => {
+  const data = {
+    mapName: mapName.value,
+    gridX: gridX.value,
+    gridY: gridY.value,
+    items: items.map(({el, ...i}) => i)
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "map.json";
+  a.click();
+}; /* closes save */
+
+loadBtn.onclick = () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json";
+  input.onchange = e => {
+    const r = new FileReader();
+    r.onload = () => {
+      const d = JSON.parse(r.result);
+      items.forEach(i => i.el.remove());
+      items = [];
+      mapName.value = d.mapName;
+      gridX.value = d.gridX;
+      gridY.value = d.gridY;
+      updateGridSize();
+      d.items.forEach(i => {
+        i.type === "wall" ? createWall(i.x,i.y) : createObject(i.x,i.y);
+        Object.assign(items.at(-1), i);
+        i.type === "wall" ? updateItem(items.at(-1)) : renderObject(items.at(-1));
+      });
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  input.click();
+}; /* closes load */
+</script>
+
+</body>
+</html>
