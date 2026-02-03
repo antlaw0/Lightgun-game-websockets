@@ -9,6 +9,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
+import WeaponManager from './weaponManager.js';
 // Editor mode flag and helpers (default OFF)
 window.engine = window.engine || { isEditorMode: false };
 
@@ -402,8 +403,23 @@ const enemyVoiceManager = new EnemyVoiceManager(
 );
 // Expose globally so Enemy.js can request voices
 window.enemyVoiceManager = enemyVoiceManager;
+// Initialize WeaponManager (loads weapon GLBs, animations, muzzle flashes)
+let weaponManager = null;
  
- 
+    weaponManager = new WeaponManager(scene, camera);
+window.weaponManager = weaponManager;
+
+weaponManager
+  .loadWeapons({
+    pistol: 'assets/models/weapons/pistol.glb',
+    shotgun: 'assets/models/weapons/shotgun.glb',
+    assault_rifle: 'assets/models/weapons/assault_rifle.glb'
+  })
+  .then(() => {
+    weaponManager.registerWeaponOrder(['pistol','shotgun','assault_rifle']);
+    weaponManager.equipWeapon('pistol'); // now it will appear
+  });
+
 // Create player now that camera exists so it can be passed in
 player = new Player({
   maxHp: 10000,
@@ -2348,12 +2364,18 @@ function handleFire() {
 
     // --- Play weapon-specific sound ---
     try {
-        if (w.fireSound) {
-            const snd = new Audio(w.fireSound);
-            snd.currentTime = 0;
-            snd.play().catch(() => {});
-        }
-    } catch (e) {}
+      let _skipLocal = false;
+      if (window.weaponManager && typeof window.weaponManager.triggerFire === 'function') {
+        try { window.weaponManager.triggerFire({ soundDelayMs: 0, muzzleFlash: true }); } catch(e) { console.warn('weaponManager.triggerFire failed', e); }
+        const wmEntry = window.weaponManager.weapons && window.weaponManager.weapons[w.id];
+        if (wmEntry && wmEntry.audio && wmEntry.audio.buffer) _skipLocal = true;
+      }
+      if (!_skipLocal && w.fireSound) {
+        const snd = new Audio(w.fireSound);
+        snd.currentTime = 0;
+        snd.play().catch(() => {});
+      }
+    } catch (e) { console.warn('play fire sound failed', e); }
 
     // Debug: log the shot
     // console.log(`Fired ${w.name} at ${now}`);
@@ -2365,6 +2387,7 @@ function triggerReload() {
    try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
     
   if (player && typeof player.reload === 'function') player.reload();
+  try { if (window.weaponManager && typeof window.weaponManager.triggerReload === 'function') window.weaponManager.triggerReload(); } catch(e) { console.warn('weaponManager.triggerReload failed', e); }
   logDebug("Player reloaded"); 
 }
 
@@ -2438,9 +2461,23 @@ function triggerFire() {
 
     lastPlayerFireMs = performance.now();
     
-	const fireSound = new Audio(w.fireSound);
-            fireSound.currentTime = 0;
-            fireSound.play();
+    // Try to trigger weapon manager animation/sound/muzzle flash if available.
+    let _skipLocalFireSound = false;
+    try {
+      if (window.weaponManager && typeof window.weaponManager.triggerFire === 'function') {
+        window.weaponManager.triggerFire({ soundDelayMs: 0, muzzleFlash: true });
+        const wmEntry = window.weaponManager.weapons && window.weaponManager.weapons[w.id];
+        if (wmEntry && wmEntry.audio && wmEntry.audio.buffer) _skipLocalFireSound = true;
+      }
+    } catch (e) { console.warn('weaponManager.triggerFire failed', e); }
+
+    if (!_skipLocalFireSound) {
+      try {
+        const fireSound = new Audio(w.fireSound);
+        fireSound.currentTime = 0;
+        fireSound.play().catch(()=>{});
+      } catch (e) {}
+    }
         
 	
     // Compute shooting origin and forward direction:

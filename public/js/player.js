@@ -511,6 +511,12 @@ try {
             switchSound.play().catch(() => {});
         } catch (_) {}
 
+        try {
+          const newId = this.currentWeapon && this.currentWeapon.id;
+          if (newId && window.weaponManager && typeof window.weaponManager.equipWeapon === 'function') {
+            window.weaponManager.equipWeapon(newId);
+          }
+        } catch (e) { console.warn('weaponManager equip failed', e); }
         
     //console.log(`Switched to weapon: ${this.currentWeapon.name}`);
   }

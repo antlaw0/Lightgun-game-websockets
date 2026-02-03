@@ -10,70 +10,63 @@ export const Scene_W1_2 = {
     far: 200
   },
   lights: [
-  // Point light 1 near end of hallway
+  // Main L-bend point light
   {
     type: "point",
     color: 16777215,
-    intensity: 1.5,
-    position: { x: 16, y: 6.5, z: 23 }, // just below wall top
-    distance: 50,
+    intensity: 5,          // boosted
+    position: { x: 1, y: 6.5, z: 2 },
+    distance: 15,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 2048, height: 2048 },
+      camera: { near: 0.5, far: 15 },
+      bias: -0.0001
+    },
+    id: "point_light_L_bend"
+  },
+  // Light near starting door
+  {
+    type: "point",
+    color: 16777215,
+    intensity: 0,
+    position: { x: 16, y: 6.5, z: 29 },
+    distance: 25,
     decay: 2,
     castShadow: true,
     shadow: {
       mapSize: { width: 1024, height: 1024 },
-      camera: { near: 0.5, far: 50 },
+      camera: { near: 0.5, far: 30 },
       bias: -0.0001
     },
-    id: "light_point_1e"
+    id: "point_light_start_door"
   },
-
-  // Point light 2 near start of hallway
+  // Light near exit door
   {
     type: "point",
     color: 16777215,
-    intensity: 1.5,
-    position: { x: 10, y: 6.5, z: 16 },
-    distance: 50,
+    intensity: 0,
+    position: { x: 3, y: 6.5, z: 17 },
+    distance: 25,
     decay: 2,
     castShadow: true,
     shadow: {
       mapSize: { width: 1024, height: 1024 },
-      camera: { near: 0.5, far: 50 },
+      camera: { near: 0.5, far: 30 },
       bias: -0.0001
     },
-    id: "light_point_2e"
+    id: "point_light_exit_door"
   },
-
-  // Directional light simulating overhead light
-  {
-    type: "directional",
-    id: "directional_1",
-    color: 0xffffff,
-    intensity: 1.2, // slightly less intense than points
-    position: { x: 15, y: 20, z: 15 }, // high above hallway
-    target: { x: 15, y: 0, z: 15 },   // pointing down to center
-    castShadow: true,
-    shadow: {
-      mapSize: { width: 4096, height: 4096 },
-      camera: {
-        left: -15,
-        right: 15,
-        top: 15,
-        bottom: -15,
-        near: 1,
-        far: 50
-      }
-    }
-  },
-
   // Ambient fill
   {
     type: "ambient",
     color: 16777215,
-    intensity: 0.6
+    intensity: 0.25
   }
 ],
-environment: {
+
+  environment: {
     staticObjects: [
       // Floor
       {
@@ -85,18 +78,18 @@ environment: {
         hp: 999,
         indestructible: true,
         hitSounds: sounds.ric,
-		texture:  "assets/textures/warehouse_floor.png",
+        texture: "assets/textures/warehouse_floor.png",
         coverType: "none"
       },
       // Ceiling
       {
         id: "ceiling_01",
         type: "floor",
-        position: { x: 15, y: 14.05, z: 15 },
+        position: { x: 15, y: 14.05, z: 15 }, // ceiling sits at wall height
         rotation: { x: 0, y: 0, z: 0 },
         size: { x: 30, y: 0.1, z: 30 },
         hp: 999,
-		texture:  "assets/textures/warehouse_ceiling.png",
+        texture: "assets/textures/warehouse_ceiling.png",
         indestructible: true,
         hitSounds: sounds.ric,
         coverType: "none"
@@ -197,7 +190,7 @@ environment: {
           coverType: "full"
         };
       }),
-      // Objects (doors)
+      // Doors / objects
       ...[
         {
           name: "exit_door",

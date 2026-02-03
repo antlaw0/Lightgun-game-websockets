@@ -1,0 +1,14 @@
+pistol offsets:
+VM71684 POSITION Vector3 {x 0.39999999999999997, y -0.3, z -0.5}
+VM71685 ROTATION Euler {isEuler true, _x 0, _y 0, _z 0, _order 'XYZ', …}
+VM71686 SCALE Vector3 {x 0.5, y 0.5, z 0.5}
+undefined
+20game.js2891 [DEBUG] hip bone not found on first enemy
+
+shotgun:
+
+weaponManager.js:129 Weapon offsets for "shotgun":
+position: { x: 3.0800, y: -1.2400, z: -2.0000 },
+rotation: { x: -0.1600, y: -7.2200, z: 0.0000 },
+scale: 6.8158
+28game.js:2886 [DEBUG] hip bone not found on first enemy
