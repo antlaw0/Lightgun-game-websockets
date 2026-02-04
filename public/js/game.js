@@ -413,10 +413,10 @@ weaponManager
   .loadWeapons({
     pistol: 'assets/models/weapons/pistol.glb',
     shotgun: 'assets/models/weapons/shotgun.glb',
-    assault_rifle: 'assets/models/weapons/assault_rifle.glb'
+    assaultRifle: 'assets/models/weapons/assault_rifle.glb'
   })
   .then(() => {
-    weaponManager.registerWeaponOrder(['pistol','shotgun','assault_rifle']);
+    weaponManager.registerWeaponOrder(['pistol','shotgun','assaultRifle']);
     weaponManager.equipWeapon('pistol'); // now it will appear
   });
 
@@ -2871,6 +2871,7 @@ function animate(nowMs) {
   try {
     const deltaSec = deltaMs / 1000;
     ENEMY_INSTANCES.forEach(e => { if (e.mixer) try { e.mixer.update(deltaSec); } catch(_){} });
+    try { if (window.weaponManager && typeof window.weaponManager.update === 'function') window.weaponManager.update(deltaSec); } catch(_) {}
     // Debug: once per second, log first enemy hip quaternion to verify animations
     try {
       if (!window._debug_last_bone_log) window._debug_last_bone_log = 0;

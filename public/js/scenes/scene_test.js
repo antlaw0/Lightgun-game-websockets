@@ -35,7 +35,7 @@ export const scene_test = {
     {
       type: "ambient",
       color: 0x0000FF,
-      intensity: 0.4
+      intensity: 0.8
     }
     ,
     {
