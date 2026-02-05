@@ -7,6 +7,17 @@ export class WeaponManager {
         this.scene = scene;
         this.camera = camera;
         this.loader = new GLTFLoader();
+        // muzzle flash texture and active emitter list
+        try {
+            // correct path where the texture lives: public/assets/muzzleFlash.png
+            this._muzzleTexture = new THREE.TextureLoader().load( 'assets/muzzleFlash.png' );
+        } catch ( e ) { this._muzzleTexture = null; }
+        this._activeMuzzleFlashes = [];
+        // Per-weapon muzzle presets (local offsets relative to the weapon model)
+        // These are used preferentially to spawn muzzle flashes when available.
+        this._muzzlePresets = {
+            // Presets disabled to force geometry-based computation
+        };
 
         // Default per-weapon offsets (position, rotation, scale).
         // These are editable at runtime via `weaponEntry.offsets` for tweaking.
@@ -165,18 +176,166 @@ async loadWeapons(map) {
                     try { w.mixer.update(deltaSec); } catch (e) {}
                 }
             }
+            // Update active muzzle flashes (simple sprite based particle bursts)
+            if (this._activeMuzzleFlashes && this._activeMuzzleFlashes.length) {
+                const now = performance.now();
+                for (let i = this._activeMuzzleFlashes.length - 1; i >= 0; --i) {
+                    const item = this._activeMuzzleFlashes[i];
+                    const elapsed = (now - item._start) / 1000;
+                    const t = Math.min(1, elapsed / item._duration);
+                    // fade out and scale
+                    const opacity = Math.max(0, 1 - t);
+                    item.sprites.forEach(s => {
+                        if (s.material) s.material.opacity = opacity;
+                        // slight outward motion
+                        s.position.addScaledVector(item._dir, item._speed * deltaSec);
+                        s.scale.setScalar(item._initialScale * (1 + t * 0.6));
+                    });
+                    if (elapsed >= item._duration) {
+                        try {
+                            item.sprites.forEach(s => { if (s.parent) s.parent.remove(s); s.material && s.material.dispose(); });
+                        } catch (e) {}
+                        this._activeMuzzleFlashes.splice(i, 1);
+                    }
+                }
+            }
+            // Debug: show computed muzzle positions as yellow spheres when debug enabled
+            try {
+                for (const k in this.weapons) {
+                    const w = this.weapons[k];
+                    if (!w || !w.group) continue;
+                    // ensure debug sphere exists
+                    if (!w._muzzleDebugSphere) {
+                        const geom = new THREE.SphereGeometry(0.05, 8, 6);
+                        const mat = new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.9 });
+                        const mesh = new THREE.Mesh(geom, mat);
+                        mesh.renderOrder = 9999999;
+                        mesh.frustumCulled = false;
+                        mesh.visible = false;
+                        // parent debug sphere to the camera so it stays fixed in view
+                        try { this.camera.add(mesh); } catch (e) { this.scene.add(mesh); }
+                        w._muzzleDebugSphere = mesh;
+                    }
+
+                    const sphere = w._muzzleDebugSphere;
+                    // Only show/manipulate the sphere for the currently equipped weapon
+                    if (k !== this.currentWeapon) {
+                        sphere.visible = false;
+                        continue;
+                    }
+                    if (!this.debugEnabled) {
+                        sphere.visible = false;
+                        continue;
+                    }
+
+                    // compute muzzle and position/scale the debug sphere
+                    // If a preset exists for this weapon, prefer it (apply any manual debug offsets/scale on top)
+                    const preset = this._muzzlePresets?.[w.name];
+
+                    let weaponLocalPos = null;
+                    let scaleVal = 0.08;
+
+                    if ( preset?.position ) {
+                        // Preset has weapon-relative position
+                        weaponLocalPos = preset.position.clone();
+                        scaleVal = preset.scale || 1.0;
+                    } else {
+                        // Fallback: Compute from geometry (world) and convert to weapon-local
+                        const muzzle = this._computeMuzzleWorldPosition( w );
+                        if ( muzzle && w.group ) {
+                            weaponLocalPos = w.group.worldToLocal( muzzle.position.clone() );
+                            scaleVal = muzzle.suggestedScale || 0.08;
+                        }
+                    }
+
+                    if ( weaponLocalPos ) {
+                        sphere.visible = true;
+                        // Apply debug offset in weapon-local space
+                        if ( w._muzzleDebugOffset ) weaponLocalPos.add( w._muzzleDebugOffset );
+
+                        // Convert final weapon-local position to world, then to camera-local for the sphere
+                        const worldPos = weaponLocalPos.clone().applyMatrix4( w.group.matrixWorld );
+                        const cameraLocalPos = this.camera.worldToLocal( worldPos );
+                        sphere.position.copy( cameraLocalPos );
+
+                        const scaleMult = ( w._muzzleDebugScale && typeof w._muzzleDebugScale === 'number' ) ? w._muzzleDebugScale : 1.0;
+                        sphere.scale.setScalar( scaleVal * scaleMult );
+                    } else {
+                        sphere.visible = false;
+                    }
+                }
+            } catch (e) {}
         } catch (e) {}
     }
 
+    // Trigger firing animation and spawn muzzle flash at the barrel tip
     triggerFire(opts = {}) {
-        const w = this.weapons[this.currentWeapon];
-        if (!w) return;
-        const a = w.actions && (w.actions.fire || w.actions['fire'] || w.actions['shoot']);
-        if (a) {
-            try { a.reset(); a.play(); } catch (e) { console.warn('triggerFire action failed', e); }
+    const w = this.weapons[this.currentWeapon];
+    if (!w) return;
+
+    // Play firing animation if available
+    const a = w.actions?.fire || w.actions?.shoot;
+    if (a) { try { a.reset(); a.play(); } catch (_) {} }
+
+    if (!opts.muzzleFlash) return;
+    if (!this._muzzleTexture) return;
+
+    let pos, dir, scaleMult;
+
+    // Use preset if available, otherwise compute from geometry
+    const preset = this._muzzlePresets?.[w.name];
+    let weaponLocalPos = null;
+
+    if ( preset?.position ) {
+        weaponLocalPos = preset.position.clone();
+        scaleMult = preset.scale || 1.0;
+    } else {
+        // Fallback: compute from geometry
+        const muzzle = this._computeMuzzleWorldPosition(w);
+        if ( muzzle ) {
+            // Convert to weapon-local
+            if ( w.group ) {
+                weaponLocalPos = w.group.worldToLocal( muzzle.position.clone() );
+            } else {
+                weaponLocalPos = muzzle.position.clone(); // Can't make it local, so it's world
+            }
+            dir = muzzle.dir.clone();
+            scaleMult = muzzle.suggestedScale * 1.4;
         }
     }
 
+    if ( weaponLocalPos ) {
+        // Apply debug offset in weapon-local space
+        if ( w._muzzleDebugOffset ) weaponLocalPos.add( w._muzzleDebugOffset );
+
+        // Convert final weapon-local position to world for spawning
+        if ( w.group ) {
+            pos = weaponLocalPos.clone().applyMatrix4( w.group.matrixWorld );
+        } else {
+            pos = weaponLocalPos; // Already world if no group
+        }
+
+    } else {
+        return;
+    }
+
+    // If dir not set by geometry fallback, assume standard forward (-Z) relative to weapon group
+    if (!dir) {
+        if (w.group) {
+            const v = new THREE.Vector3(0, 0, -1);
+            v.applyQuaternion(w.group.getWorldQuaternion(new THREE.Quaternion()));
+            dir = v;
+        } else {
+            dir = new THREE.Vector3(0, 0, -1);
+        }
+    }
+
+    // Spawn the flash
+    this._spawnMuzzleFlashAt(pos, dir, { duration: 0.1, scale: scaleMult, count: 4 });
+
+    if (this.debugEnabled) console.log('Muzzle flash at', pos.toArray(), 'dir', dir.toArray());
+}
+ 
     triggerReload() {
         const w = this.weapons[this.currentWeapon];
         if (!w) return;
@@ -184,6 +343,96 @@ async loadWeapons(map) {
         if (a) {
             try { a.reset(); a.play(); } catch (e) { console.warn('triggerReload action failed', e); }
         }
+    }
+
+    // Compute approximate muzzle world position by finding the farthest vertex
+    // along the weapon group's local forward axis (-Z). Returns { position, dir }
+    // Compute the world position and direction of the weapon's muzzle
+_computeMuzzleWorldPosition(weaponEntry) {
+    const model = weaponEntry.model;
+    if (!model) return null;
+
+    // Ensure world matrices are up to date
+    model.updateMatrixWorld(true);
+
+    const box = new THREE.Box3();
+    const invMatrix = model.matrixWorld.clone().invert();
+
+    model.traverse((child) => {
+        if (child.isMesh && child.geometry) {
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            const childBox = child.geometry.boundingBox;
+            
+            // Transform AABB from child space to model space
+            // T = inv(modelWorld) * childWorld
+            const m = invMatrix.clone().multiply(child.matrixWorld);
+            const tBox = childBox.clone().applyMatrix4(m);
+            box.union(tBox);
+        }
+    });
+
+    if (box.isEmpty()) return null;
+
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+ 
+    const tipLocal = new THREE.Vector3();
+    const dirLocal = new THREE.Vector3();
+ 
+    // Deterministically use the Z-axis to find the barrel tip (longest distance along Z).
+    // Assumes -Z forward. Tip is at min Z.
+    tipLocal.set(center.x, center.y, box.min.z);
+    dirLocal.set(0, 0, -1);
+ 
+    // Transform to world space
+    const tipWorld = tipLocal.applyMatrix4(model.matrixWorld);
+    const dirWorld = dirLocal.transformDirection(model.matrixWorld).normalize();
+
+    // Suggest scale based on weapon world size
+    const worldScale = new THREE.Vector3();
+    model.getWorldScale(worldScale);
+    const worldLen = size.z * worldScale.z;
+    // Flash size roughly proportional to weapon length, clamped
+    const suggestedScale = THREE.MathUtils.clamp(worldLen * 0.8, 0.3, 1.5);
+
+    return { position: tipWorld, dir: dirWorld, suggestedScale };
+}
+    
+	// Spawn a short-lived muzzle flash (sprite-based burst) at world `pos`.
+    _spawnMuzzleFlashAt(pos, dir, opts = {}) {
+        try {
+            if (!this._muzzleTexture) return;
+            const count = opts.count || 3;
+            const duration = opts.duration || 0.09;
+            const baseScale = 1.0; // world-units base; multiply by opts.scale
+            const sprites = [];
+            for (let i = 0; i < count; i++) {
+                const mat = new THREE.SpriteMaterial({
+                    map: this._muzzleTexture,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthTest: false,
+                    depthWrite: false,
+                    opacity: 1
+                });
+                const s = new THREE.Sprite(mat);
+                s.position.copy(pos);
+                // jitter a little around the muzzle
+                const jitter = new THREE.Vector3((Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.05);
+                s.position.add(jitter);
+                const scaleFactor = (opts.scale && typeof opts.scale === 'number') ? opts.scale : 0.5;
+                const scale = baseScale * scaleFactor * (0.8 + Math.random() * 0.4);
+                s.scale.setScalar(scale);
+                s.renderOrder = 999999;
+                this.scene.add(s);
+                sprites.push(s);
+            }
+            if (this.debugEnabled) console.log('spawned muzzle flash', pos.toArray(), 'dir', dir.toArray());
+            const speed = opts.speed || 0.8;
+            this._activeMuzzleFlashes.push({ sprites, _start: performance.now(), _duration: duration, _dir: dir.clone(), _speed: speed, _initialScale: baseScale });
+        } catch (e) {}
     }
 
     /* ---------------- EQUIP / CYCLE ---------------- */
@@ -251,6 +500,39 @@ async loadWeapons(map) {
             const weapon = this.weapons[this.currentWeapon];
             if (!weapon || !weapon.group) return;
 
+            // Quick toggle muzzle placement mode: require weapon offset debug enabled
+            if (e.code === 'KeyM' && this.debugEnabled) {
+                weapon._muzzleDebugMode = !weapon._muzzleDebugMode;
+                weapon._muzzleDebugOffset = weapon._muzzleDebugOffset || new THREE.Vector3(0,0,0);
+                weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                window.speak(weapon._muzzleDebugMode ? 'Muzzle placement enabled' : 'Muzzle placement disabled', { interrupt: true });
+                return;
+            }
+
+            // If muzzle placement mode active, intercept numpad movement/scale keys
+            if (weapon._muzzleDebugMode) {
+                const step = this.debugStep;
+                // movement
+                if (e.code === 'Numpad8') weapon._muzzleDebugOffset.y += step;
+                else if (e.code === 'Numpad2') weapon._muzzleDebugOffset.y -= step;
+                else if (e.code === 'Numpad4') weapon._muzzleDebugOffset.x -= step;
+                else if (e.code === 'Numpad6') weapon._muzzleDebugOffset.x += step;
+                else if (e.code === 'Numpad5') weapon._muzzleDebugOffset.z -= step;
+                else if (e.code === 'NumpadDecimal') weapon._muzzleDebugOffset.z += step;
+
+                // size adjustments: NumpadAdd / NumpadSubtract and also Numpad1 / Numpad7
+                else if (e.code === 'NumpadAdd' || e.code === 'Numpad1') {
+                    weapon._muzzleDebugScale = (weapon._muzzleDebugScale || 1.0) * (1 + this.debugScaleStep);
+                    window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                } else if (e.code === 'NumpadSubtract' || e.code === 'Numpad7') {
+                    weapon._muzzleDebugScale = Math.max(0.01, (weapon._muzzleDebugScale || 1.0) * (1 - this.debugScaleStep));
+                    window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                }
+
+                // prevent any other handling when muzzle placement mode is active
+                return;
+            }
+
             // Toggle debug
             if (e.code === 'Numpad0') {
                 this.debugEnabled = !this.debugEnabled;
@@ -279,13 +561,47 @@ async loadWeapons(map) {
             // Save (log only)
             if (e.code === 'NumpadMultiply') {
                 const g = weapon.group;
+                // compute muzzle sphere world position & scale for logging
+                let muzzleInfo = '';
+                try {
+                    if ( weapon._muzzleDebugSphere && weapon._muzzleDebugSphere.visible ) {
+                        const sphere = weapon._muzzleDebugSphere;
+
+                        // Capture the debug sphere's world position
+                        const worldPos = sphere.getWorldPosition( new THREE.Vector3() );
+
+                        // Convert it to weapon-local space
+                        const localPos = g.worldToLocal( worldPos.clone() );
+
+                        // The sphere's scale is already the final computed scale
+                        const finalScale = sphere.scale.x;
+
+                             // Update the runtime preset immediately
+                        if (!this._muzzlePresets[this.currentWeapon]) {
+                            this._muzzlePresets[this.currentWeapon] = {};
+                        }
+                        this._muzzlePresets[this.currentWeapon].position = localPos.clone();
+                        this._muzzlePresets[this.currentWeapon].scale = finalScale;
+
+                        // Reset debug offset since it's now baked into the preset
+                        if (weapon._muzzleDebugOffset) weapon._muzzleDebugOffset.set(0, 0, 0);
+                        weapon._muzzleDebugScale = 1.0;
+
+                        muzzleInfo = `,\nmuzzleFlash: { position: new THREE.Vector3(${localPos.x.toFixed(4)}, ${localPos.y.toFixed(4)}, ${localPos.z.toFixed(4)}), scale: ${finalScale.toFixed(4)} }`;
+
+                        // DEBUG VERIFICATION
+                        const testWorld = g.localToWorld( localPos.clone() );
+                        console.log( '[MUZZLE VERIFY] Sphere World Pos:', worldPos.toArray().map( n => n.toFixed( 4 ) ).join( ', ' ) );
+                        console.log( '[MUZZLE VERIFY] Test World Pos:  ', testWorld.toArray().map( n => n.toFixed( 4 ) ).join( ', ' ) );
+                    }
+                } catch (e) {}
                 console.log(
 `Weapon offsets for "${this.currentWeapon}":
 position: { x: ${g.position.x.toFixed(4)}, y: ${g.position.y.toFixed(4)}, z: ${g.position.z.toFixed(4)} },
 rotation: { x: ${g.rotation.x.toFixed(4)}, y: ${g.rotation.y.toFixed(4)}, z: ${g.rotation.z.toFixed(4)} },
-scale: ${g.scale.x.toFixed(4)}`
+scale: ${g.scale.x.toFixed(4)}${muzzleInfo}`
                 );
-                window.speak(`${this.currentWeapon} offsets logged`, { interrupt: true });
+                window.speak(`${this.currentWeapon} offsets saved and logged`, { interrupt: true });
                 return;
             }
 
@@ -310,7 +626,11 @@ scale: ${g.scale.x.toFixed(4)}`
                     // mark weapon as under debug control so update() will skip progressing its mixer
                     weapon._animDebugActive = true;
                     weapon._animDebug = { index: 0, time: 0, step: this._animDebug.step, action: null };
-                    window.speak(`Animation selector enabled. ${clips.length} animations. Selected ${c.name}. time zero seconds. min zero. max ${maxT.toFixed(2)} seconds. Use numpad eight and two to change animations, plus and minus on numpad to change time. Press numpad divide to exit.`, { interrupt: true });
+                    // muzzle debug state (per-weapon)
+                    weapon._muzzleDebugMode = false;
+                    weapon._muzzleDebugOffset = weapon._muzzleDebugOffset || new THREE.Vector3(0,0,0);
+                    weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                    window.speak(`Animation selector enabled. ${clips.length} animations. Selected ${c.name}. time zero seconds. min zero. max ${maxT.toFixed(2)} seconds. Use numpad eight and two to change animations, plus and minus on numpad to change time. Press numpad divide to exit. Press M to toggle muzzle debug mode (when enabled use numpad arrows to move sphere and numpad + / - to resize).`, { interrupt: true });
                     // create and play debug action, then sample first frame
                     try {
                         const a = weapon.mixer.clipAction(c);
@@ -378,24 +698,33 @@ scale: ${g.scale.x.toFixed(4)}`
                     return;
                 }
 
-                // time control: NumpadAdd / NumpadSubtract
-                if (e.code === 'NumpadAdd') {
-                    if (!weapon._animDebug) weapon._animDebug = { index: idx, time: 0, step: this._animDebug.step, action: null };
-                    weapon._animDebug.time = Math.min(maxT, (weapon._animDebug.time || 0) + (weapon._animDebug.step || 0.1));
-                    try {
-                        if (!weapon._animDebug.action) weapon._animDebug.action = weapon.mixer.clipAction(clips[weapon._animDebug.index]);
-                        try { weapon.mixer.setTime(weapon._animDebug.time); } catch (e) { weapon.mixer.update(0); }
-                    } catch(_){}
-                    window.speak(`Time ${ (weapon._animDebug.time||0).toFixed(2) } seconds. min zero. max ${ maxT.toFixed(2) } seconds`, { interrupt: true });
+                // Toggle muzzle debug mode while in animation selector: M key
+                if (e.code === 'KeyM') {
+                    weapon._muzzleDebugMode = !weapon._muzzleDebugMode;
+                    window.speak(weapon._muzzleDebugMode ? 'Muzzle debug mode enabled' : 'Muzzle debug mode disabled', { interrupt: true });
                     return;
                 }
-                if (e.code === 'NumpadSubtract') {
+
+                if (e.code === 'NumpadAdd' || e.code === 'NumpadSubtract') {
+                    // If muzzle debug mode active, use +/- to change muzzle sphere size
+                    if (weapon._muzzleDebugMode) {
+                        weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                        const delta = (e.code === 'NumpadAdd') ? 0.05 : -0.05;
+                        weapon._muzzleDebugScale = Math.max(0.05, weapon._muzzleDebugScale + delta);
+                        window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                        return;
+                    }
+                    // otherwise adjust animation time as before
                     if (!weapon._animDebug) weapon._animDebug = { index: idx, time: 0, step: this._animDebug.step, action: null };
-                    weapon._animDebug.time = Math.max(0, (weapon._animDebug.time || 0) - (weapon._animDebug.step || 0.1));
+                    if (e.code === 'NumpadAdd') {
+                        weapon._animDebug.time = Math.min(maxT, (weapon._animDebug.time || 0) + (weapon._animDebug.step || 0.1));
+                    } else {
+                        weapon._animDebug.time = Math.max(0, (weapon._animDebug.time || 0) - (weapon._animDebug.step || 0.1));
+                    }
                     try {
                         if (!weapon._animDebug.action) weapon._animDebug.action = weapon.mixer.clipAction(clips[weapon._animDebug.index]);
                         try { weapon.mixer.setTime(weapon._animDebug.time); } catch (e) { weapon.mixer.update(0); }
-                    } catch(_){}
+                    } catch(_){ }
                     window.speak(`Time ${ (weapon._animDebug.time||0).toFixed(2) } seconds. min zero. max ${ maxT.toFixed(2) } seconds`, { interrupt: true });
                     return;
                 }
@@ -447,33 +776,55 @@ scale: ${g.scale.x.toFixed(4)}`
 
             const step = this.debugStep;
 
-            if (this.debugMode === 'position') {
-                if (e.code === 'Numpad8') weapon.group.position.y += step;
-                if (e.code === 'Numpad2') weapon.group.position.y -= step;
-                if (e.code === 'Numpad4') weapon.group.position.x -= step;
-                if (e.code === 'Numpad6') weapon.group.position.x += step;
-                if (e.code === 'Numpad5') weapon.group.position.z -= step;
-                if (e.code === 'NumpadDecimal') weapon.group.position.z += step;
+            if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
+                // When muzzle debug mode is active, map numpad to adjust the muzzle sphere offset
+                if (!weapon._muzzleDebugOffset) weapon._muzzleDebugOffset = new THREE.Vector3(0,0,0);
+                if (e.code === 'Numpad8') weapon._muzzleDebugOffset.y += step;
+                if (e.code === 'Numpad2') weapon._muzzleDebugOffset.y -= step;
+                if (e.code === 'Numpad4') weapon._muzzleDebugOffset.x -= step;
+                if (e.code === 'Numpad6') weapon._muzzleDebugOffset.x += step;
+                if (e.code === 'Numpad5') weapon._muzzleDebugOffset.z -= step;
+                if (e.code === 'NumpadDecimal') weapon._muzzleDebugOffset.z += step;
             } else {
-                if (e.code === 'Numpad8') weapon.group.rotation.x -= step;
-                if (e.code === 'Numpad2') weapon.group.rotation.x += step;
-                if (e.code === 'Numpad4') weapon.group.rotation.y -= step;
-                if (e.code === 'Numpad6') weapon.group.rotation.y += step;
-                if (e.code === 'Numpad5') weapon.group.rotation.z -= step;
-                if (e.code === 'NumpadDecimal') weapon.group.rotation.z += step;
+                if (this.debugMode === 'position') {
+                    if (e.code === 'Numpad8') weapon.group.position.y += step;
+                    if (e.code === 'Numpad2') weapon.group.position.y -= step;
+                    if (e.code === 'Numpad4') weapon.group.position.x -= step;
+                    if (e.code === 'Numpad6') weapon.group.position.x += step;
+                    if (e.code === 'Numpad5') weapon.group.position.z -= step;
+                    if (e.code === 'NumpadDecimal') weapon.group.position.z += step;
+                } else {
+                    if (e.code === 'Numpad8') weapon.group.rotation.x -= step;
+                    if (e.code === 'Numpad2') weapon.group.rotation.x += step;
+                    if (e.code === 'Numpad4') weapon.group.rotation.y -= step;
+                    if (e.code === 'Numpad6') weapon.group.rotation.y += step;
+                    if (e.code === 'Numpad5') weapon.group.rotation.z -= step;
+                    if (e.code === 'NumpadDecimal') weapon.group.rotation.z += step;
+                }
             }
 
             // Scale
-            if (e.code === 'Numpad1') {
-                weapon.group.scale.multiplyScalar(1 + this.debugScaleStep);
+                if (e.code === 'Numpad1') {
+                    if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
+                        weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                        weapon._muzzleDebugScale = weapon._muzzleDebugScale * (1 + this.debugScaleStep);
+                        window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                    } else {
+                        weapon.group.scale.multiplyScalar(1 + this.debugScaleStep);
+                    }
             }
 
             if (e.code === 'Numpad7') {
-                weapon.group.scale.multiplyScalar(1 - this.debugScaleStep);
+                if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
+                    weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                    weapon._muzzleDebugScale = Math.max(0.01, weapon._muzzleDebugScale * (1 - this.debugScaleStep));
+                    window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                } else {
+                    weapon.group.scale.multiplyScalar(1 - this.debugScaleStep);
+                }
             }
         });
     } // end _bindKeyboard
 } // end WeaponManager
 
 export default WeaponManager;
-

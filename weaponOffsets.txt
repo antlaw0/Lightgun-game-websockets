@@ -1,0 +1,6 @@
+shotgun:
+{ x: 0.4000, y: 0.3200, z: -0.9000 },
+rotation: { x: 0.4400, y: -0.5800, z: 0.0000 },
+scale: 2.6388,
+muzeSphere: { worldPosition: { x: 0.7620, y: 1.6782, z: 1.8253 }, scale: 0.1735 }
+17game.js:2887 [DEBUG] hip bone not found on first enemy
