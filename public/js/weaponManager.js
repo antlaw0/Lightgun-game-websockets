@@ -16,14 +16,30 @@ export class WeaponManager {
         // Per-weapon muzzle presets (local offsets relative to the weapon model)
         // These are used preferentially to spawn muzzle flashes when available.
         this._muzzlePresets = {
-            // Presets disabled to force geometry-based computation
-        };
+    pistol: {
+        // Forward and slightly up from slide
+        position: new THREE.Vector3(0.6200, 0.8300, -0.3200),
+        scale: 0.3500
+    },
+
+    shotgun: {
+        // Long barrel, farther forward
+        position: new THREE.Vector3(66.6667, 66.7167, 1648.8500),
+        scale: 1.9
+    },
+
+    assaultRifle: {
+        // Your rifle already works, but keep it explicit
+        position: new THREE.Vector3(0.00, -0.6400, -0.95),
+        scale: 0.75
+    }
+};
 
         // Default per-weapon offsets (position, rotation, scale).
         // These are editable at runtime via `weaponEntry.offsets` for tweaking.
         this.defaultOffsets = {
             pistol: {
-                position: new THREE.Vector3(1.5200, -0.6400, -1.8400),
+                position: new THREE.Vector3(0.7600, -0.5000, -0.5),
                 rotation: new THREE.Euler(-0.5400, 2.8800, 0, 'XYZ'),
                 scale: new THREE.Vector3(0.5, 0.5, 0.5)
             },
@@ -511,7 +527,10 @@ _computeMuzzleWorldPosition(weaponEntry) {
 
             // If muzzle placement mode active, intercept numpad movement/scale keys
             if (weapon._muzzleDebugMode) {
-                const step = this.debugStep;
+                const step =
+    this.debugStep /
+    (weapon.group.scale.x || 1);
+
                 // movement
                 if (e.code === 'Numpad8') weapon._muzzleDebugOffset.y += step;
                 else if (e.code === 'Numpad2') weapon._muzzleDebugOffset.y -= step;
@@ -593,6 +612,17 @@ _computeMuzzleWorldPosition(weaponEntry) {
                         const testWorld = g.localToWorld( localPos.clone() );
                         console.log( '[MUZZLE VERIFY] Sphere World Pos:', worldPos.toArray().map( n => n.toFixed( 4 ) ).join( ', ' ) );
                         console.log( '[MUZZLE VERIFY] Test World Pos:  ', testWorld.toArray().map( n => n.toFixed( 4 ) ).join( ', ' ) );
+
+                        // Log the preset format for copy-pasting
+                        console.log(
+                            `%c[MUZZLE PRESET] Copy this into _muzzlePresets for "${this.currentWeapon}":`, 'color: #00ff00; font-weight: bold;'
+                        );
+                        console.log(
+                            `${this.currentWeapon}: {\n` +
+                            `    position: new THREE.Vector3(${localPos.x.toFixed(4)}, ${localPos.y.toFixed(4)}, ${localPos.z.toFixed(4)}),\n` +
+                            `    scale: ${finalScale.toFixed(4)}\n` +
+                            `},`
+                        );
                     }
                 } catch (e) {}
                 console.log(
