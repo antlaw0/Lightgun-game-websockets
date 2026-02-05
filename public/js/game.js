@@ -2384,7 +2384,10 @@ function handleFire() {
 
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
-   try { const reloadSound = new Audio('sounds/reload.ogg'); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
+   const w = player?.currentWeapon;
+   const soundPath = (w && w.reloadSound) ? w.reloadSound : 'sounds/reload.ogg';
+
+   try { const reloadSound = new Audio(soundPath); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
     
   if (player && typeof player.reload === 'function') player.reload();
   try { if (window.weaponManager && typeof window.weaponManager.triggerReload === 'function') window.weaponManager.triggerReload(); } catch(e) { console.warn('weaponManager.triggerReload failed', e); }

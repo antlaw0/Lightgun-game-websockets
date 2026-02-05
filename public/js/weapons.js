@@ -94,7 +94,7 @@ export const WEAPON_DEFS = {
   shotgun: baseWeapon({
     name: "Shotgun",
     fireSound: "assets/sfx/weapons/shotgun_fire.ogg",
-    reloadSound: "assets/sfx/shotgun_reload.ogg",
+    reloadSound: "assets/sfx/weapons/shotgun_reload.ogg",
     reloadTime: 2000,
 
     fireMode: "semi-auto",
@@ -119,7 +119,7 @@ export const WEAPON_DEFS = {
   assaultRifle: baseWeapon({
     name: "Assault Rifle",
     fireSound: "assets/sfx/weapons/assault_fire.ogg",
-    reloadSound: "assets/sfx/assault_reload.ogg",
+    reloadSound: "assets/sfx/weapons/assault_reload.ogg",
     reloadTime: 1800,
 
     fireMode: "auto",

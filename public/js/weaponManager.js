@@ -137,6 +137,15 @@ async loadWeapons(map) {
             }
         };
 
+        // Find magazine node for procedural animations (assault rifle etc)
+        let magazineNode = null;
+        model.traverse(c => {
+            if (c.isMesh && /mag|clip/i.test(c.name)) {
+                magazineNode = c;
+            }
+        });
+        weaponEntry.magazineNode = magazineNode;
+
         try {
             const clips = (gltf && Array.isArray(gltf.animations)) ? gltf.animations.slice() : [];
             if (clips.length) {
@@ -146,9 +155,20 @@ async loadWeapons(map) {
                     try {
                         const action = weaponEntry.mixer.clipAction(clip);
                         // configure looping defaults
-                        if (/idle/i.test(clip.name)) { action.loop = THREE.LoopRepeat; }
-                        if (/fire/i.test(clip.name)) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; }
-                        if (/reload/i.test(clip.name)) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; }
+                        if (/idle/i.test(clip.name)) { 
+                            action.loop = THREE.LoopRepeat;
+                            weaponEntry.actions['idle'] = action;
+                        }
+                        if (/fire|shoot/i.test(clip.name)) { 
+                            action.loop = THREE.LoopOnce; 
+                            action.clampWhenFinished = true;
+                            weaponEntry.actions['fire'] = action;
+                        }
+                        if (/reload/i.test(clip.name)) { 
+                            action.loop = THREE.LoopOnce; 
+                            action.clampWhenFinished = true;
+                            weaponEntry.actions['reload'] = action;
+                        }
                         if (/inspect|holster/i.test(clip.name)) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; }
                         weaponEntry.actions[key] = action;
                     } catch (e) {
@@ -185,11 +205,16 @@ async loadWeapons(map) {
         try {
             for (const k in this.weapons) {
                 const w = this.weapons[k];
-                if (w && w.mixer) {
-                    // If this weapon is under manual animation debug control,
-                    // do not auto-advance its mixer here (we'll sample manually).
-                    if (w._animDebugActive) continue;
-                    try { w.mixer.update(deltaSec); } catch (e) {}
+                if (w) {
+                    if (w.mixer && !w._animDebugActive) {
+                        // If this weapon is under manual animation debug control,
+                        // do not auto-advance its mixer here (we'll sample manually).
+                        try { w.mixer.update(deltaSec); } catch (e) {}
+                    }
+                    // Update procedural reload if active
+                    if (w._proceduralReloadActive) {
+                        this._updateProceduralReload(w, deltaSec);
+                    }
                 }
             }
             // Update active muzzle flashes (simple sprite based particle bursts)
@@ -358,6 +383,99 @@ async loadWeapons(map) {
         const a = w.actions && (w.actions.reload || w.actions['reload']);
         if (a) {
             try { a.reset(); a.play(); } catch (e) { console.warn('triggerReload action failed', e); }
+        } else {
+            // Fallback: Procedural reload (e.g. for Assault Rifle)
+            this._startProceduralReload(w);
+        }
+    }
+
+    _startProceduralReload(w) {
+        if (w._proceduralReloadActive) return;
+        
+        // Capture rest transform from offsets (home coordinates)
+        const restPos = w.offsets.position.clone();
+        const restRot = w.offsets.rotation.clone();
+        
+        // Define dip target: down (-Y), forward (-Z), tilt (X/Z)
+        // Adjust these values to taste for the "Dip" phase
+        const dipPos = restPos.clone().add(new THREE.Vector3(-0.1, -0.25, -0.2)); 
+        const dipRot = new THREE.Euler(
+            restRot.x + 0.3, // pitch down
+            restRot.y + 0.1, // yaw slightly
+            restRot.z + 0.5, // roll (tilt weapon to side)
+            restRot.order
+        );
+
+        w._proceduralReloadActive = true;
+        w._proceduralState = {
+            phase: 'dip',
+            timer: 0,
+            restPos,
+            restRot,
+            dipPos,
+            dipRot,
+            magSwapped: false
+        };
+    }
+
+    _updateProceduralReload(w, delta) {
+        const s = w._proceduralState;
+        if (!s) return;
+        
+        s.timer += delta;
+        
+        // Phase durations
+        const D_DIP = 0.3;
+        const D_SWAP = 0.8;
+        const D_RETURN = 0.5;
+        const smooth = (t) => t * t * (3 - 2 * t);
+
+        if (s.phase === 'dip') {
+            const t = Math.min(1, s.timer / D_DIP);
+            const alpha = smooth(t);
+            
+            w.group.position.lerpVectors(s.restPos, s.dipPos, alpha);
+            w.group.rotation.x = THREE.MathUtils.lerp(s.restRot.x, s.dipRot.x, alpha);
+            w.group.rotation.y = THREE.MathUtils.lerp(s.restRot.y, s.dipRot.y, alpha);
+            w.group.rotation.z = THREE.MathUtils.lerp(s.restRot.z, s.dipRot.z, alpha);
+            
+            if (t >= 1) {
+                s.phase = 'swap';
+                s.timer = 0;
+                if (w.magazineNode) w.magazineNode.visible = false;
+            }
+        } else if (s.phase === 'swap') {
+            // Bob
+            const bob = Math.sin(s.timer * 15) * 0.015;
+            w.group.position.copy(s.dipPos);
+            w.group.position.y += bob;
+            w.group.rotation.copy(s.dipRot);
+            
+            // Swap mag halfway
+            if (s.timer > D_SWAP * 0.5 && !s.magSwapped) {
+                if (w.magazineNode) w.magazineNode.visible = true;
+                s.magSwapped = true;
+            }
+            
+            if (s.timer >= D_SWAP) {
+                s.phase = 'return';
+                s.timer = 0;
+            }
+        } else if (s.phase === 'return') {
+            const t = Math.min(1, s.timer / D_RETURN);
+            const alpha = smooth(t);
+            
+            w.group.position.lerpVectors(s.dipPos, s.restPos, alpha);
+            w.group.rotation.x = THREE.MathUtils.lerp(s.dipRot.x, s.restRot.x, alpha);
+            w.group.rotation.y = THREE.MathUtils.lerp(s.dipRot.y, s.restRot.y, alpha);
+            w.group.rotation.z = THREE.MathUtils.lerp(s.dipRot.z, s.restRot.z, alpha);
+            
+            if (t >= 1) {
+                w._proceduralReloadActive = false;
+                w.group.position.copy(s.restPos);
+                w.group.rotation.copy(s.restRot);
+                if (w.magazineNode) w.magazineNode.visible = true;
+            }
         }
     }
 
