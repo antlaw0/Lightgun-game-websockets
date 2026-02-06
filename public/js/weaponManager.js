@@ -19,7 +19,7 @@ export class WeaponManager {
     pistol: {
         // Forward and slightly up from slide
         position: new THREE.Vector3(0.6200, 0.8300, -0.3200),
-        scale: 0.3500
+        scale: 0.3000
     },
 
     shotgun: {

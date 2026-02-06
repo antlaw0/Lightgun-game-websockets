@@ -323,6 +323,7 @@ ws.onmessage = (ev) => {
       const w = player?.currentWeapon;
       if (pFire && !window._lastControllerFire) {
         // rising edge: single-shot for semi-auto, start continuous for auto
+        if (w) w._dryFirePlayed = false;
         if (w && w.fireMode === 'semi-auto') {
           triggerFire();
         } else {
@@ -555,6 +556,7 @@ document.addEventListener('keyup', (e) => {
 window.addEventListener("mousedown", (e) => {
     if (e.button === 0) {
         isFiring = true;
+        if (player?.currentWeapon) player.currentWeapon._dryFirePlayed = false;
         sendDesktopPayload({ fire: true });
     }
 });
@@ -1135,6 +1137,7 @@ document.addEventListener('keydown', (e) => {
 
     const w = player?.currentWeapon;
     if (!w) return;
+    if (w.isReloading) return;
 
     // Only reload if ammoInClip < clipSize
     if (w.ammoInClip < w.clipSize) {
@@ -2321,6 +2324,13 @@ function handleFire() {
 
     // --- Ammo check ---
     if (!(player && player.useAmmo && player.useAmmo(1))) {
+        if (w.isReloading) return;
+
+        if (w.fireMode === 'auto') {
+            if (w._dryFirePlayed) return;
+            w._dryFirePlayed = true;
+        }
+
         logDebug("No ammo!");
         try { new Audio('sounds/click.ogg').play().catch(() => {}); } catch(e) {}
         return;
@@ -2385,6 +2395,7 @@ function handleFire() {
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
    const w = player?.currentWeapon;
+   if (w && w.isReloading) return;
    const soundPath = (w && w.reloadSound) ? w.reloadSound : 'sounds/reload.ogg';
 
    try { const reloadSound = new Audio(soundPath); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
@@ -2453,6 +2464,9 @@ function triggerFire() {
   if (!w) return false;
 
   if (!(player && player.useAmmo && player.useAmmo(1))) {
+        if (w.isReloading) return false;
+        if (w.fireMode === 'auto') w._dryFirePlayed = true;
+
         logDebug("No ammo! Reload first.");
         try {
             const clickSound = new Audio('sounds/click.ogg');

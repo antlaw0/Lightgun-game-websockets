@@ -100,7 +100,8 @@ this.meleeCooldownMs = _meleeDef.attackSpeed || 600;
 
         ammoInClip,
         totalAmmo: 0, // now handled by ammoPools
-        lastShotTime: 0
+        lastShotTime: 0,
+        isReloading: false
       };
     });
 
@@ -525,6 +526,8 @@ try {
     const weapon = this.currentWeapon;
     if (!weapon) return false;
 
+    if (weapon.isReloading) return false;
+
     if (weapon.ammoInClip >= amount) {
       weapon.ammoInClip -= amount;
       this._emitAmmo();
@@ -537,6 +540,8 @@ try {
     const weapon = this.currentWeapon;
     if (!weapon) return;
 
+    if (weapon.isReloading) return;
+
     const ammoType = weapon.ammoType;
     const pool = this.ammoPools[ammoType] || 0;
 
@@ -544,11 +549,21 @@ try {
     const toLoad = Math.min(needed, pool);
 
     if (toLoad <= 0) return; // nothing to reload
+    
+    weapon.isReloading = true;
 
-    weapon.ammoInClip += toLoad;
-    this.ammoPools[ammoType] -= toLoad;
+    setTimeout(() => {
+      const currentPool = this.ammoPools[ammoType] || 0;
+      const currentNeeded = weapon.clipSize - weapon.ammoInClip;
+      const amount = Math.min(currentNeeded, currentPool);
 
-    this._emitAmmo();
+      if (amount > 0) {
+        weapon.ammoInClip += amount;
+        this.ammoPools[ammoType] -= amount;
+        this._emitAmmo();
+      }
+      weapon.isReloading = false;
+    }, weapon.reloadTime || 1000);
   }
 
   switchWeapon(index) {
@@ -630,4 +645,3 @@ _playRandomTaunt() {
     );
   }
 }
-
