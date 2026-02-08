@@ -129,6 +129,8 @@ let items = [];
 let selectedItem = null;
 let modalOpen = false;
 let lastFocused = null;
+let mouseGridX = 0;
+let mouseGridY = 0;
 
 /* ================= GRID ================= */
 
@@ -140,6 +142,16 @@ function updateGridSize() {
 gridX.onchange = updateGridSize;
 gridY.onchange = updateGridSize;
 updateGridSize();
+
+/* ================= MOUSE TRACKING ================= */
+
+gridContainer.addEventListener("mousemove", e => {
+  const rect = gridContainer.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  mouseGridX = Math.floor(x / GRID_SIZE);
+  mouseGridY = Math.floor(y / GRID_SIZE);
+});
 
 /* ================= SELECTION ================= */
 
@@ -186,30 +198,6 @@ function attachItemHandlers(item) {
   };
 }
 
-function createWall(x, y) {
-  const el = document.createElement("div");
-  el.className = "wall";
-
-  const wall = {
-    type: "wall",
-    x, y,
-    w: 1,
-    h: 1,
-    height: 3,
-    color: "gray",
-    name: "",
-    notes: "",
-    propertiesRaw: "",
-    properties: {},
-    el
-  };
-
-  attachItemHandlers(wall);
-  gridContainer.appendChild(el);
-  items.push(wall);
-  updateItem(wall);
-}
-
 function createObject(x, y) {
   const el = document.createElement("div");
   el.className = "object";
@@ -217,7 +205,10 @@ function createObject(x, y) {
   const obj = {
     type: "object",
     x, y,
-    shape: "square",
+    w: 1,
+    h: 1,
+    height: 1,
+    shape: "resizable",
     color: "cyan",
     name: "",
     notes: "",
@@ -238,16 +229,17 @@ function createObject(x, y) {
 function renderObject(obj) {
   const svg = {
     square: `<rect x="5" y="5" width="30" height="30" fill="${obj.color}"/>`,
-    circle: `<circle cx="20" cy="20" r="15" fill="${obj.color}"/>`
+    circle: `<circle cx="20" cy="20" r="15" fill="${obj.color}"/>`,
+    star: `<polygon points="20,5 24,18 37,18 26,25 30,37 20,30 10,37 14,25 3,18 16,18" fill="${obj.color}"/>`,
   };
-  obj.el.innerHTML = `<svg viewBox="0 0 40 40">${svg[obj.shape]}</svg>`;
+  obj.el.innerHTML = `<svg viewBox="0 0 40 40">${svg[obj.shape] || svg.square}</svg>`;
 }
 
 function updateItem(item) {
   item.el.style.left = item.x * GRID_SIZE + "px";
   item.el.style.top = item.y * GRID_SIZE + "px";
 
-  if (item.type === "wall") {
+  if (item.shape === "resizable") {
     item.el.style.width = item.w * GRID_SIZE + "px";
     item.el.style.height = item.h * GRID_SIZE + "px";
     item.el.style.background = item.color;
@@ -277,6 +269,14 @@ function openEditModal(item) {
       <input id="editColor" value="${item.color}">
     </label>
 
+    <label>Shape
+      <select id="editShape">
+        <option value="resizable">resizable</option>
+        <option value="circle">circle</option>
+        <option value="star">star</option>
+      </select>
+    </label>
+
     <label>Notes
       <textarea id="editNotes">${item.notes}</textarea>
     </label>
@@ -289,13 +289,16 @@ function openEditModal(item) {
     <button id="closeBtn">Close</button>
   `;
 
+  document.getElementById("editShape").value = item.shape || "resizable";
+
   document.getElementById("applyBtn").onclick = () => {
     item.name = document.getElementById("editName").value;
     item.color = document.getElementById("editColor").value;
     item.notes = document.getElementById("editNotes").value;
     item.propertiesRaw = document.getElementById("editProps").value;
+    item.shape = document.getElementById("editShape").value;
 
-    if (item.type === "object") renderObject(item);
+    renderObject(item);
     updateItem(item);
     closeModal();
   };
@@ -325,6 +328,68 @@ document.addEventListener("keydown", e => {
 
   if (e.key === "Escape" && modalOpen) {
     closeModal();
+    e.preventDefault();
+  }
+
+  /* ================= MOVE / RESIZE ================= */
+
+  if (!selectedItem) return;
+
+  const moveAmount = 1;
+
+  // Arrow keys move
+  switch (e.key) {
+    case "ArrowUp":
+      selectedItem.y = Math.max(0, selectedItem.y - moveAmount);
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "ArrowDown":
+      selectedItem.y += moveAmount;
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "ArrowLeft":
+      selectedItem.x = Math.max(0, selectedItem.x - moveAmount);
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "ArrowRight":
+      selectedItem.x += moveAmount;
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+  }
+
+  // Numpad resize only for resizable
+  if (selectedItem.shape === "resizable") {
+    switch (e.code) {
+      case "Numpad8": // increase height
+        selectedItem.h += 1;
+        updateItem(selectedItem);
+        e.preventDefault();
+        break;
+      case "Numpad2": // decrease height
+        selectedItem.h = Math.max(1, selectedItem.h - 1);
+        updateItem(selectedItem);
+        e.preventDefault();
+        break;
+      case "Numpad6": // increase width
+        selectedItem.w += 1;
+        updateItem(selectedItem);
+        e.preventDefault();
+        break;
+      case "Numpad4": // decrease width
+        selectedItem.w = Math.max(1, selectedItem.w - 1);
+        updateItem(selectedItem);
+        e.preventDefault();
+        break;
+    }
+  }
+
+  // Spawn object at mouse with 1 key
+  if (e.key === "1" && !modalOpen) {
+    createObject(mouseGridX, mouseGridY);
     e.preventDefault();
   }
 });
@@ -369,13 +434,13 @@ loadBtn.onclick = () => {
       updateGridSize();
 
       d.items.forEach(i => {
-        i.type === "wall" ? createWall(i.x, i.y) : createObject(i.x, i.y);
+        createObject(i.x, i.y);
         const item = items.at(-1);
         const el = item.el;
         Object.assign(item, i);
         item.el = el;
         attachItemHandlers(item);
-        if (item.type === "object") renderObject(item);
+        renderObject(item);
         updateItem(item);
       });
     };
@@ -406,12 +471,12 @@ exportBtn.onclick = () => {
 
       const position = {
         x,
-        y: type === "wall" ? height / 2 : 0,
+        y: shape === "resizable" ? height / 2 : 0,
         z: y
       };
 
       const size =
-        type === "wall"
+        shape === "resizable"
           ? { x: w, y: height, z: h }
           : { x: 1, y: 1, z: 1 };
 
