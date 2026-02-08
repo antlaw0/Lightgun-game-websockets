@@ -1,7 +1,7 @@
 import sounds from "../listOfSounds.js";
 
 export const Scene_Exported = {
-  name: "map_L_hallway",
+  name: "generated scene of map_L_hallway",
   camera: {
     position: { x: 15, y: 10, z: 50 },
     lookAt: { x: 15, y: 3.5, z: 15 },
@@ -161,14 +161,7 @@ export const Scene_Exported = {
       }),
       // Objects
       ...[
-        {
-          name: "exit_door",
-          x: 3,
-          z: 17,
-          shape: "square",
-          color: "magenta",
-          notes: "exit door end of L hallway"
-        },
+        
         {
           name: "starting_door",
           x: 15,

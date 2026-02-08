@@ -10,14 +10,14 @@ body {
   background: #000;
   color: #fff;
   font-family: sans-serif;
-} /* closes body */
+}
 
 #toolbar {
   padding: 8px;
   display: flex;
   gap: 8px;
   align-items: center;
-} /* closes #toolbar */
+}
 
 #gridContainer {
   position: relative;
@@ -27,31 +27,31 @@ body {
   background-image:
     linear-gradient(to right, #fff 1px, transparent 1px),
     linear-gradient(to bottom, #fff 1px, transparent 1px);
-} /* closes #gridContainer */
+}
 
 .wall, .object {
   position: absolute;
   box-sizing: border-box;
   user-select: none;
-} /* closes .wall,.object */
+}
 
 .wall {
   background: gray;
-} /* closes .wall */
+}
 
 .object svg {
   width: 100%;
   height: 100%;
-} /* closes svg */
+}
 
 .selected {
   outline: 3px solid yellow;
-} /* closes .selected */
+}
 
 #ariaLive {
   position: absolute;
   left: -9999px;
-} /* closes #ariaLive */
+}
 
 #modalOverlay {
   position: fixed;
@@ -60,19 +60,24 @@ body {
   display: none;
   align-items: center;
   justify-content: center;
-} /* closes #modalOverlay */
+}
 
 #modal {
   background: #111;
   padding: 16px;
-  width: 360px;
+  width: 380px;
   border: 2px solid #fff;
-} /* closes #modal */
+}
 
 #modal label {
   display: block;
   margin-top: 8px;
-} /* closes label */
+}
+
+textarea, input, select {
+  width: 100%;
+  box-sizing: border-box;
+}
 </style>
 </head>
 
@@ -87,6 +92,7 @@ body {
   <input id="gridY" type="number" value="20" />
   <button id="saveBtn">Save</button>
   <button id="loadBtn">Load</button>
+  <button id="exportBtn">Export</button>
 </div>
 
 <div id="gridContainer"></div>
@@ -101,9 +107,18 @@ body {
   </div>
 </div>
 
-<script>
+<script type="module">
+import { generateSceneJS } from "./sceneAdaptorCore.js";
+
+const saveBtn = document.getElementById("saveBtn");
+const loadBtn = document.getElementById("loadBtn");
+const exportBtn = document.getElementById("exportBtn");
+
+const mapName = document.getElementById("mapName");
+const gridX = document.getElementById("gridX");
+const gridY = document.getElementById("gridY");
+
 const GRID_SIZE = 40;
-const COLORS = ["gray","red","green","blue","yellow","cyan","magenta","white"];
 
 const gridContainer = document.getElementById("gridContainer");
 const modalOverlay = document.getElementById("modalOverlay");
@@ -112,40 +127,64 @@ const ariaLive = document.getElementById("ariaLive");
 
 let items = [];
 let selectedItem = null;
-let mouseGridPos = { x: 0, y: 0 };
 let modalOpen = false;
 let lastFocused = null;
 
+/* ================= GRID ================= */
+
 function updateGridSize() {
-  gridContainer.style.width = gridX.value * GRID_SIZE + "px";
-  gridContainer.style.height = gridY.value * GRID_SIZE + "px";
-} /* closes updateGridSize */
+  gridContainer.style.width = Number(gridX.value) * GRID_SIZE + "px";
+  gridContainer.style.height = Number(gridY.value) * GRID_SIZE + "px";
+}
 
 gridX.onchange = updateGridSize;
 gridY.onchange = updateGridSize;
 updateGridSize();
 
-gridContainer.addEventListener("mousemove", e => {
-  if (modalOpen) return;
-  const r = gridContainer.getBoundingClientRect();
-  mouseGridPos.x = Math.floor((e.clientX - r.left) / GRID_SIZE);
-  mouseGridPos.y = Math.floor((e.clientY - r.top) / GRID_SIZE);
-}); /* closes mousemove */
+/* ================= SELECTION ================= */
 
 function deselectAll() {
   items.forEach(i => i.el.classList.remove("selected"));
   selectedItem = null;
-} /* closes deselectAll */
+}
 
 function selectItem(item) {
   deselectAll();
   selectedItem = item;
   item.el.classList.add("selected");
 
-  let msg = `${item.type} ${item.name || "unnamed"}, color ${item.color}`;
-  if (item.type === "wall") msg += `, height ${item.height}`;
-  ariaLive.textContent = msg;
-} /* closes selectItem */
+  ariaLive.textContent =
+    `${item.type} ${item.name || "unnamed"} selected`;
+}
+
+/* ================= DELETE ================= */
+
+function deleteSelectedItem() {
+  if (!selectedItem || modalOpen) return;
+
+  const idx = items.indexOf(selectedItem);
+  if (idx === -1) return;
+
+  selectedItem.el.remove();
+  items.splice(idx, 1);
+
+  ariaLive.textContent =
+    `${selectedItem.type} ${selectedItem.name || "unnamed"} deleted`;
+
+  selectedItem = null;
+}
+
+/* ================= ITEM CREATION ================= */
+
+function attachItemHandlers(item) {
+  item.el.onclick = () => selectItem(item);
+
+  item.el.oncontextmenu = e => {
+    e.preventDefault();
+    selectItem(item);
+    openEditModal(item);
+  };
+}
 
 function createWall(x, y) {
   const el = document.createElement("div");
@@ -154,20 +193,22 @@ function createWall(x, y) {
   const wall = {
     type: "wall",
     x, y,
-    w: 1, h: 1,
+    w: 1,
+    h: 1,
     height: 3,
     color: "gray",
     name: "",
     notes: "",
+    propertiesRaw: "",
+    properties: {},
     el
   };
 
-  el.onclick = () => selectItem(wall);
+  attachItemHandlers(wall);
   gridContainer.appendChild(el);
   items.push(wall);
   updateItem(wall);
-  selectItem(wall);
-} /* closes createWall */
+}
 
 function createObject(x, y) {
   const el = document.createElement("div");
@@ -180,184 +221,224 @@ function createObject(x, y) {
     color: "cyan",
     name: "",
     notes: "",
+    propertiesRaw: "",
+    properties: {},
     el
   };
 
-  el.onclick = () => selectItem(obj);
+  attachItemHandlers(obj);
   gridContainer.appendChild(el);
   items.push(obj);
   renderObject(obj);
   updateItem(obj);
-  selectItem(obj);
-} /* closes createObject */
+}
+
+/* ================= RENDER ================= */
 
 function renderObject(obj) {
   const svg = {
     square: `<rect x="5" y="5" width="30" height="30" fill="${obj.color}"/>`,
-    circle: `<circle cx="20" cy="20" r="15" fill="${obj.color}"/>`,
-    triangle: `<polygon points="20,5 35,35 5,35" fill="${obj.color}"/>`,
-    star: `<polygon points="20,4 24,16 36,16 26,24 30,36 20,28 10,36 14,24 4,16 16,16" fill="${obj.color}"/>`
+    circle: `<circle cx="20" cy="20" r="15" fill="${obj.color}"/>`
   };
   obj.el.innerHTML = `<svg viewBox="0 0 40 40">${svg[obj.shape]}</svg>`;
-} /* closes renderObject */
+}
 
 function updateItem(item) {
   item.el.style.left = item.x * GRID_SIZE + "px";
   item.el.style.top = item.y * GRID_SIZE + "px";
-  item.el.style.width = GRID_SIZE + "px";
-  item.el.style.height = GRID_SIZE + "px";
 
   if (item.type === "wall") {
     item.el.style.width = item.w * GRID_SIZE + "px";
     item.el.style.height = item.h * GRID_SIZE + "px";
     item.el.style.background = item.color;
+  } else {
+    item.el.style.width = GRID_SIZE + "px";
+    item.el.style.height = GRID_SIZE + "px";
   }
-} /* closes updateItem */
+}
 
-document.addEventListener("keydown", e => {
-  if (modalOpen) return;
+/* ================= MODAL ================= */
 
-  if (e.key === "1") createWall(mouseGridPos.x, mouseGridPos.y);
-  if (e.key === "2") createObject(mouseGridPos.x, mouseGridPos.y);
-  if (!selectedItem) return;
-  if (e.key === "Delete") {
-    selectedItem.el.remove();
-    items = items.filter(i => i !== selectedItem);
-    selectedItem = null;
-  }
-  if (e.key === "ArrowUp") selectedItem.y--;
-  if (e.key === "ArrowDown") selectedItem.y++;
-  if (e.key === "ArrowLeft") selectedItem.x--;
-  if (e.key === "ArrowRight") selectedItem.x++;
-  if (selectedItem.type === "wall") {
-    if (e.key === "8") selectedItem.h++;
-    if (e.key === "2") selectedItem.h = Math.max(1, selectedItem.h - 1);
-    if (e.key === "6") selectedItem.w++;
-    if (e.key === "4") selectedItem.w = Math.max(1, selectedItem.w - 1);
-  }
-  if (e.key === "e" || e.key === "E") openModal();
-  updateItem(selectedItem);
-}); /* closes keydown */
+function openEditModal(item) {
+  if (!item) return;
 
-function colorOptions(value) {
-  return COLORS.map(c => `<option ${c===value?"selected":""}>${c}</option>`).join("");
-} /* closes colorOptions */
-
-function openModal() {
-  modalOpen = true;
   lastFocused = document.activeElement;
+  modalOpen = true;
   modalOverlay.style.display = "flex";
 
-  if (selectedItem.type === "wall") {
-    modal.innerHTML = `
-      <h2 id="modalTitle">Edit Wall</h2>
-      <label>Name <input id="nameInput"></label>
-      <label>Height <input id="heightInput" type="number"></label>
-      <label>Color <select id="colorInput">${colorOptions(selectedItem.color)}</select></label>
-      <label>Notes <textarea id="notesInput"></textarea></label>
-      <button id="saveBtnModal">Save</button>
-      <button id="cancelBtnModal">Cancel</button>
-    `;
-  } else {
-    modal.innerHTML = `
-      <h2 id="modalTitle">Edit Object</h2>
-      <label>Name <input id="nameInput"></label>
-      <label>Shape
-        <select id="shapeInput">
-          <option>square</option>
-          <option>circle</option>
-          <option>triangle</option>
-          <option>star</option>
-        </select>
-      </label>
-      <label>Color <select id="colorInput">${colorOptions(selectedItem.color)}</select></label>
-      <label>Notes <textarea id="notesInput"></textarea></label>
-      <button id="saveBtnModal">Save</button>
-      <button id="cancelBtnModal">Cancel</button>
-    `;
-  }
+  modal.innerHTML = `
+    <h2 id="modalTitle">Edit ${item.type}</h2>
 
-  const nameInput = modal.querySelector("#nameInput");
-  const heightInput = modal.querySelector("#heightInput");
-  const shapeInput = modal.querySelector("#shapeInput");
-  const colorInput = modal.querySelector("#colorInput");
-  const notesInput = modal.querySelector("#notesInput");
+    <label>Name
+      <input id="editName" value="${item.name}">
+    </label>
 
-  nameInput.value = selectedItem.name;
-  notesInput.value = selectedItem.notes;
-  colorInput.value = selectedItem.color;
-  if (heightInput) heightInput.value = selectedItem.height;
-  if (shapeInput) shapeInput.value = selectedItem.shape;
+    <label>Color
+      <input id="editColor" value="${item.color}">
+    </label>
 
-  modal.focus();
-  nameInput.focus();
+    <label>Notes
+      <textarea id="editNotes">${item.notes}</textarea>
+    </label>
 
-  modal.onkeydown = e => {
-    if (e.key === "Escape") closeModal();
-    e.stopPropagation();
-  };
+    <label>Properties (raw JSON)
+      <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
+    </label>
 
-  modal.querySelector("#saveBtnModal").onclick = () => {
-    selectedItem.name = nameInput.value;
-    selectedItem.notes = notesInput.value;
-    selectedItem.color = colorInput.value;
-    if (heightInput) selectedItem.height = Number(heightInput.value);
-    if (shapeInput) {
-      selectedItem.shape = shapeInput.value;
-      renderObject(selectedItem);
-    }
-    updateItem(selectedItem);
+    <button id="applyBtn">Apply</button>
+    <button id="closeBtn">Close</button>
+  `;
+
+  document.getElementById("applyBtn").onclick = () => {
+    item.name = document.getElementById("editName").value;
+    item.color = document.getElementById("editColor").value;
+    item.notes = document.getElementById("editNotes").value;
+    item.propertiesRaw = document.getElementById("editProps").value;
+
+    if (item.type === "object") renderObject(item);
+    updateItem(item);
     closeModal();
   };
 
-  modal.querySelector("#cancelBtnModal").onclick = closeModal;
-} /* closes openModal */
+  document.getElementById("closeBtn").onclick = closeModal;
+  modal.focus();
+}
 
 function closeModal() {
-  modalOpen = false;
   modalOverlay.style.display = "none";
-  modal.innerHTML = "";
-  lastFocused && lastFocused.focus();
-} /* closes closeModal */
+  modalOpen = false;
+  if (lastFocused) lastFocused.focus();
+}
+
+/* ================= KEYBOARD ================= */
+
+document.addEventListener("keydown", e => {
+  if ((e.key === "Delete" || e.key === "Backspace") && selectedItem) {
+    deleteSelectedItem();
+    e.preventDefault();
+  }
+
+  if ((e.key === "e" || e.key === "E") && !modalOpen && selectedItem) {
+    openEditModal(selectedItem);
+    e.preventDefault();
+  }
+
+  if (e.key === "Escape" && modalOpen) {
+    closeModal();
+    e.preventDefault();
+  }
+});
+
+/* ================= SAVE / LOAD / EXPORT ================= */
 
 saveBtn.onclick = () => {
   const data = {
     mapName: mapName.value,
-    gridX: gridX.value,
-    gridY: gridY.value,
-    items: items.map(({el, ...i}) => i)
+    gridX: Number(gridX.value),
+    gridY: Number(gridY.value),
+    items: items.map(({ el, ...i }) => i)
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json"
+  });
+
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "map.json";
   a.click();
-}; /* closes save */
+};
 
 loadBtn.onclick = () => {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "application/json";
+
   input.onchange = e => {
     const r = new FileReader();
     r.onload = () => {
       const d = JSON.parse(r.result);
+
       items.forEach(i => i.el.remove());
       items = [];
+      selectedItem = null;
+
       mapName.value = d.mapName;
       gridX.value = d.gridX;
       gridY.value = d.gridY;
       updateGridSize();
+
       d.items.forEach(i => {
-        i.type === "wall" ? createWall(i.x,i.y) : createObject(i.x,i.y);
-        Object.assign(items.at(-1), i);
-        i.type === "wall" ? updateItem(items.at(-1)) : renderObject(items.at(-1));
+        i.type === "wall" ? createWall(i.x, i.y) : createObject(i.x, i.y);
+        const item = items.at(-1);
+        const el = item.el;
+        Object.assign(item, i);
+        item.el = el;
+        attachItemHandlers(item);
+        if (item.type === "object") renderObject(item);
+        updateItem(item);
       });
     };
     r.readAsText(e.target.files[0]);
   };
+
   input.click();
-}; /* closes load */
+};
+
+exportBtn.onclick = () => {
+  const mapData = {
+    mapName: mapName.value || "unnamed_map",
+    gridX: Number(gridX.value),
+    gridY: Number(gridY.value),
+    items: items.map(({ el, propertiesRaw, type, name, x, y, w, h, height, shape, color, notes }) => {
+      let props = {};
+      if (propertiesRaw && propertiesRaw.trim() !== "") {
+        try {
+          props = JSON.parse(propertiesRaw);
+        } catch (e) {
+          console.warn("Invalid JSON in propertiesRaw for", name, e);
+        }
+      }
+
+      const id = name
+        ? name.replace(/\s+/g, "_") + "_" + type
+        : type + "_" + Math.floor(Math.random() * 1000);
+
+      const position = {
+        x,
+        y: type === "wall" ? height / 2 : 0,
+        z: y
+      };
+
+      const size =
+        type === "wall"
+          ? { x: w, y: height, z: h }
+          : { x: 1, y: 1, z: 1 };
+
+      return {
+        id,
+        type: type === "object" && props.type === "point" ? "light" : type,
+        position,
+        size,
+        shape,
+        color,
+        notes,
+        properties: props
+      };
+    })
+  };
+
+  const sceneJS = generateSceneJS(mapData);
+
+  const blob = new Blob([sceneJS], {
+    type: "application/javascript"
+  });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `Scene_${mapData.mapName}.js`;
+  a.click();
+};
 </script>
 
 </body>

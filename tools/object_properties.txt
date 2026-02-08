@@ -1,0 +1,44 @@
+Available kinds:
+- wall
+- door
+- light
+- object
+
+Properties for kind "wall":
+- id
+- type
+- position
+- size
+- hp
+- maxHp
+- indestructible
+- coverType
+
+Properties for kind "door":
+- id
+- type
+- position
+- rotationY
+- targetRotation
+- duration
+- texture
+- openSound
+
+Properties for kind "light":
+- id
+- type
+- color
+- intensity
+- position
+- distance
+- decay
+- castShadow
+- shadow
+
+Properties for kind "object":
+- id
+- type
+- position
+- size
+- texture
+
