@@ -38,7 +38,8 @@
           },
           "bias": -0.0001
         }
-      }
+      },
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -48,11 +49,12 @@
       "h": 10,
       "height": 7,
       "shape": "resizable",
-      "color": "gray",
-      "name": "wall_righte_vertical",
+      "color": "yellow",
+      "name": "wall_left_vertical",
       "notes": "",
       "propertiesRaw": "{\n\"height\":  7\n}",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -66,7 +68,8 @@
       "name": "wall_righte_vertical",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -80,7 +83,8 @@
       "name": "wall_left_2_horizontal",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -94,7 +98,8 @@
       "name": "wall_right_2_horizontal",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -108,7 +113,8 @@
       "name": "wall_end_piecee_vertical",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -122,7 +128,8 @@
       "name": "wall_piece_end_2e_vertical",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "object",
@@ -136,7 +143,8 @@
       "name": "exit_door",
       "notes": "exit door end of L hallway",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -150,7 +158,8 @@
       "name": "wall_beginning_piece_1e_horizontal",
       "notes": "",
       "propertiesRaw": "{\n\"height\":  7\n}",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "wall",
@@ -164,7 +173,8 @@
       "name": "wall_beginning_right_horizontal",
       "notes": "",
       "propertiesRaw": "{\n\"height\":  7\n}",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "object",
@@ -178,7 +188,8 @@
       "name": "starting_door",
       "notes": "door at beginning of scene",
       "propertiesRaw": "{\n\"id\":  \"starting_door\",\n\"texture\":  \"assets/textures/metal_door.png\",\n\"height\":  5\n}",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "object",
@@ -192,7 +203,8 @@
       "name": "light_point_2",
       "notes": "Use this to define the light:\n  type: \"point\",\n  color: 16777215,            // white\n  intensity: 1.5,             // slightly boosted to compensate for shadows\n  position: {\n    x: 0,\n    y: 5,\n    z: 0\n  },\n  distance: 50,\n  decay: 2,                   // physically correct falloff\n\n  castShadow: true,\n\n  shadow: {\n    mapSize: {\n      width: 1024,\n      height: 1024\n    },\n    camera: {\n      near: 0.5,\n      far: 50                  // should match distance\n    },\n    bias: -0.0001              // reduces shadow acne\n  }\n}\n\n",
       "propertiesRaw": "{\n  \"type\": \"point\",\n  \"color\": 16777215,         \n  \"intensity\": 1.5,       \n  \"height\":  6.5,\n  \"distance\": 50,            \n  \"decay\": 2,\n  \"castShadow\": true,\n  \"shadow\": {\n    \"mapSize\": { \"width\": 1024, \"height\": 1024 },\n    \"camera\": { \"near\": 0.5, \"far\": 50 },\n    \"bias\": -0.0001\n  }\n}",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
     },
     {
       "type": "object",
@@ -206,7 +218,40 @@
       "name": "cameraStart",
       "notes": "",
       "propertiesRaw": "",
-      "properties": {}
+      "properties": {},
+      "layer": "middle"
+    },
+    {
+      "type": "tile",
+      "x": 4,
+      "y": 24,
+      "w": 2,
+      "h": 2,
+      "height": 0,
+      "shape": "resizable",
+      "color": "transparent",
+      "name": "floor_1",
+      "notes": "",
+      "texture": "/assets/textures/yellow.png",
+      "propertiesRaw": "",
+      "properties": {},
+      "layer": "floor"
+    },
+    {
+      "type": "tile",
+      "x": 5,
+      "y": 26,
+      "w": 1,
+      "h": 1,
+      "height": 6,
+      "shape": "resizable",
+      "color": "transparent",
+      "name": "ceiling_1",
+      "notes": "",
+      "texture": "/assets/textures/yellow.png",
+      "propertiesRaw": "",
+      "properties": {},
+      "layer": "ceiling"
     }
   ]
 }

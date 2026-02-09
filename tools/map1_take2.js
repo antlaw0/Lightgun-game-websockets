@@ -70,12 +70,12 @@ export const Scene_map1 = {
   environment: {
     staticObjects: [
   {
-    id: "wall_righte_vertical_wall",
+    id: "wall_left_vertical_wall",
     type: "wall",
     position: {
-      x: 13,
+      x: 13.5,
       y: 3.5,
-      z: 19
+      z: 24
     },
     size: {
       x: 1,
@@ -91,9 +91,9 @@ export const Scene_map1 = {
     id: "wall_righte_vertical_wall",
     type: "wall",
     position: {
-      x: 19,
+      x: 19.5,
       y: 3.5,
-      z: 14
+      z: 21.5
     },
     size: {
       x: 1,
@@ -109,9 +109,9 @@ export const Scene_map1 = {
     id: "wall_left_2_horizontal_wall",
     type: "wall",
     position: {
-      x: 4,
+      x: 8.5,
       y: 3.5,
-      z: 19
+      z: 19.5
     },
     size: {
       x: 9,
@@ -127,9 +127,9 @@ export const Scene_map1 = {
     id: "wall_right_2_horizontal_wall",
     type: "wall",
     position: {
-      x: 3,
+      x: 11.5,
       y: 3.5,
-      z: 13
+      z: 13.5
     },
     size: {
       x: 17,
@@ -145,9 +145,9 @@ export const Scene_map1 = {
     id: "wall_end_piecee_vertical_wall",
     type: "wall",
     position: {
-      x: 3,
+      x: 3.5,
       y: 3.5,
-      z: 18
+      z: 19
     },
     size: {
       x: 1,
@@ -163,9 +163,9 @@ export const Scene_map1 = {
     id: "wall_piece_end_2e_vertical_wall",
     type: "wall",
     position: {
-      x: 3,
+      x: 3.5,
       y: 3.5,
-      z: 14
+      z: 15.5
     },
     size: {
       x: 1,
@@ -181,9 +181,9 @@ export const Scene_map1 = {
     id: "exit_door_object",
     type: "object",
     position: {
-      x: 3,
+      x: 3.5,
       y: 0,
-      z: 17
+      z: 17.5
     },
     size: {
       x: 1,
@@ -196,9 +196,9 @@ export const Scene_map1 = {
     id: "wall_beginning_piece_1e_horizontal_wall",
     type: "wall",
     position: {
-      x: 13,
+      x: 14.5,
       y: 3.5,
-      z: 29
+      z: 29.5
     },
     size: {
       x: 3,
@@ -214,9 +214,9 @@ export const Scene_map1 = {
     id: "wall_beginning_right_horizontal_wall",
     type: "wall",
     position: {
-      x: 17,
+      x: 18.5,
       y: 3.5,
-      z: 29
+      z: 29.5
     },
     size: {
       x: 3,
@@ -232,9 +232,9 @@ export const Scene_map1 = {
     id: "starting_door_object",
     type: "object",
     position: {
-      x: 16,
+      x: 16.5,
       y: 0,
-      z: 29
+      z: 29.5
     },
     size: {
       x: 1,
@@ -247,9 +247,9 @@ export const Scene_map1 = {
     id: "cameraStart_object",
     type: "object",
     position: {
-      x: 16,
+      x: 16.5,
       y: 0,
-      z: 30
+      z: 30.5
     },
     size: {
       x: 1,
@@ -257,6 +257,46 @@ export const Scene_map1 = {
       z: 1
     },
     texture: "default"
+  },
+  {
+    id: "floor_1_tile",
+    type: "tile",
+    layer: "floor",
+    position: {
+      x: 5,
+      y: 0,
+      z: 25
+    },
+    size: {
+      x: 2,
+      y: 1,
+      z: 2
+    },
+    texture: "/assets/textures/yellow.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
+  },
+  {
+    id: "ceiling_1_tile",
+    type: "tile",
+    layer: "ceiling",
+    position: {
+      x: 5.5,
+      y: 6,
+      z: 26.5
+    },
+    size: {
+      x: 1,
+      y: 1,
+      z: 1
+    },
+    texture: "/assets/textures/yellow.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
   }
 ]
   },

@@ -574,8 +574,9 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     // Lights must be created AFTER room and AFTER sceneDef exists
     this._createLights();
-// After room + lights are ready
-this._applyCameraSettings();
+
+    // After room + lights are ready
+    this._applyCameraSettings();
 
     // Enemy firing callback
     const fireCallback = (origin, target, speed = 28) => {

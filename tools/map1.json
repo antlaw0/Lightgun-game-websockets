@@ -1,191 +1,22 @@
 {
-  "mapName": "tmap_L_hallway",
-  "gridX": 30,
-  "gridY": 30,
+  "mapName": "test",
+  "gridX": 20,
+  "gridY": 20,
   "items": [
     {
       "type": "object",
-      "x": 16,
-      "y": 23,
-      "shape": "circle",
-      "color": "yellow",
-      "name": "light_point_1ee",
-      "notes": "use this data:\n  type: \"point\",\n  color: 16777215,            // white\n  intensity: 1.5,             // slightly boosted to compensate for shadows\n  position: {\n    x: 0,\n    y: 5,\n    z: 0\n  },\n  distance: 50,\n  decay: 2,                   // physically correct falloff\n\n  castShadow: true,\n\n  shadow: {\n    mapSize: {\n      width: 1024,\n      height: 1024\n    },\n    camera: {\n      near: 0.5,\n      far: 50                  // should match distance\n    },\n    bias: -0.0001              // reduces shadow acne\n  }\n}\n\n",
-      "propertiesRaw": "{\n  \"type\": \"point\",\n  \"color\": 16777215,         \n  \"intensity\": 1.5,       \n  \"position\": {\n    \"x\": 0,\n    \"y\": 5,\n    \"z\": 0\n  },\n  \"distance\": 50,            \n  \"decay\": 2,\n  \"castShadow\": true,\n  \"shadow\": {\n    \"mapSize\": { \"width\": 1024, \"height\": 1024 },\n    \"camera\": { \"near\": 0.5, \"far\": 50 },\n    \"bias\": -0.0001\n  }\n}",
-      "properties": {
-        "type": "point",
-        "color": 16777215,
-        "intensity": 1.5,
-        "position": {
-          "x": 0,
-          "y": 5,
-          "z": 0
-        },
-        "distance": 50,
-        "decay": 2,
-        "castShadow": true,
-        "shadow": {
-          "mapSize": {
-            "width": 1024,
-            "height": 1024
-          },
-          "camera": {
-            "near": 0.5,
-            "far": 50
-          },
-          "bias": -0.0001
-        }
-      }
-    },
-    {
-      "type": "wall",
-      "x": 13,
-      "y": 19,
-      "w": 1,
-      "h": 10,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_righte_vertical",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 0,
-      "y": 0,
-      "w": 1,
-      "h": 1,
-      "height": 3,
-      "color": "gray",
-      "name": "",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 19,
-      "y": 14,
-      "w": 1,
-      "h": 15,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_righte_vertical",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 4,
-      "y": 19,
-      "w": 9,
-      "h": 1,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_left_2_horizontal",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 3,
-      "y": 13,
-      "w": 17,
-      "h": 1,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_right_2_horizontal",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 3,
-      "y": 18,
-      "w": 1,
-      "h": 2,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_end_piecee_vertical",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 3,
-      "y": 14,
-      "w": 1,
-      "h": 3,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_piece_end_2e_vertical",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "object",
-      "x": 3,
-      "y": 17,
-      "shape": "square",
-      "color": "magenta",
-      "name": "exit_door",
-      "notes": "exit door end of L hallway",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 13,
-      "y": 29,
+      "x": 7,
+      "y": 9,
       "w": 3,
       "h": 1,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_beginning_piece_1e_horizontal",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "wall",
-      "x": 17,
-      "y": 29,
-      "w": 3,
-      "h": 1,
-      "height": 7,
-      "color": "gray",
-      "name": "wall_beginning_right_horizontal",
-      "notes": "",
-      "propertiesRaw": "",
-      "properties": {}
-    },
-    {
-      "type": "object",
-      "x": 16,
-      "y": 29,
-      "shape": "square",
-      "color": "magenta",
-      "name": "starting_door",
-      "notes": "door at beginning of scene",
-      "propertiesRaw": "{\n\"id\":  \"starting_door\",\n\"texture\":  \"assets/textures/metal_door.png\"\n}",
-      "properties": {}
-    },
-    {
-      "type": "object",
-      "x": 10,
-      "y": 16,
-      "shape": "circle",
+      "height": 1,
+      "shape": "resizable",
       "color": "yellow",
-      "name": "light_point_2e",
-      "notes": "Use this to define the light:\n  type: \"point\",\n  color: 16777215,            // white\n  intensity: 1.5,             // slightly boosted to compensate for shadows\n  position: {\n    x: 0,\n    y: 5,\n    z: 0\n  },\n  distance: 50,\n  decay: 2,                   // physically correct falloff\n\n  castShadow: true,\n\n  shadow: {\n    mapSize: {\n      width: 1024,\n      height: 1024\n    },\n    camera: {\n      near: 0.5,\n      far: 50                  // should match distance\n    },\n    bias: -0.0001              // reduces shadow acne\n  }\n}\n\n",
-      "propertiesRaw": "",
-      "properties": {}
+      "name": "wall",
+      "notes": "",
+      "propertiesRaw": "{\n\"height\":  7\n}",
+      "properties": {},
+      "layer": "middle"
     }
   ]
 }

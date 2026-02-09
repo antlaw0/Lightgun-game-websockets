@@ -29,7 +29,7 @@ body {
     linear-gradient(to bottom, #fff 1px, transparent 1px);
 }
 
-.wall, .object {
+.wall, .object, .tile {
   position: absolute;
   box-sizing: border-box;
   user-select: none;
@@ -44,8 +44,37 @@ body {
   height: 100%;
 }
 
+.tile {
+  border: 2px solid #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+}
+
+.tile-content {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile-label {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
 .selected {
   outline: 3px solid yellow;
+}
+
+.transparent {
+  opacity: 0.3;
 }
 
 #ariaLive {
@@ -93,6 +122,9 @@ textarea, input, select {
   <button id="saveBtn">Save</button>
   <button id="loadBtn">Load</button>
   <button id="exportBtn">Export</button>
+  <span id="layerIndicator" style="margin-left: 20px; padding: 8px; background: #333; border: 1px solid #555;">
+    Layer: <strong id="currentLayerName">middle</strong> (Page Up/Down to switch)
+  </span>
 </div>
 
 <div id="gridContainer"></div>
@@ -117,8 +149,10 @@ const exportBtn = document.getElementById("exportBtn");
 const mapName = document.getElementById("mapName");
 const gridX = document.getElementById("gridX");
 const gridY = document.getElementById("gridY");
+const currentLayerName = document.getElementById("currentLayerName");
 
 const GRID_SIZE = 40;
+const LAYERS = ["floor", "middle", "ceiling"];
 
 const gridContainer = document.getElementById("gridContainer");
 const modalOverlay = document.getElementById("modalOverlay");
@@ -131,6 +165,35 @@ let modalOpen = false;
 let lastFocused = null;
 let mouseGridX = 0;
 let mouseGridY = 0;
+let currentLayer = "middle"; // "floor", "middle", or "ceiling"
+
+/* ================= LAYER MANAGEMENT ================= */
+
+function setCurrentLayer(layer) {
+  if (!LAYERS.includes(layer)) return;
+  currentLayer = layer;
+  currentLayerName.textContent = layer;
+  deselectAll();
+  updateLayerVisibility();
+}
+
+function updateLayerVisibility() {
+  items.forEach(item => {
+    if (item.layer === currentLayer) {
+      item.el.classList.remove("transparent");
+      item.el.style.opacity = "1";
+      item.el.style.pointerEvents = "auto";
+    } else if (item.layer === "middle" && currentLayer !== "middle") {
+      item.el.classList.add("transparent");
+      item.el.style.opacity = "0.3";
+      item.el.style.pointerEvents = "none";
+    } else {
+      item.el.classList.remove("transparent");
+      item.el.style.opacity = "0";
+      item.el.style.pointerEvents = "none";
+    }
+  });
+}
 
 /* ================= GRID ================= */
 
@@ -161,6 +224,12 @@ function deselectAll() {
 }
 
 function selectItem(item) {
+  // Can only select items on current layer
+  if (item.layer !== currentLayer) {
+    ariaLive.textContent = "Cannot select item on different layer";
+    return;
+  }
+  
   deselectAll();
   selectedItem = item;
   item.el.classList.add("selected");
@@ -173,6 +242,7 @@ function selectItem(item) {
 
 function deleteSelectedItem() {
   if (!selectedItem || modalOpen) return;
+  if (selectedItem.layer !== currentLayer) return;
 
   const idx = items.indexOf(selectedItem);
   if (idx === -1) return;
@@ -194,7 +264,9 @@ function attachItemHandlers(item) {
   item.el.oncontextmenu = e => {
     e.preventDefault();
     selectItem(item);
-    openEditModal(item);
+    if (item.layer === currentLayer) {
+      openEditModal(item);
+    }
   };
 }
 
@@ -207,13 +279,14 @@ function createObject(x, y) {
     x, y,
     w: 1,
     h: 1,
-    height: 1,
+    height: currentLayer === "middle" ? 7 : 1,
     shape: "resizable",
     color: "cyan",
     name: "",
     notes: "",
     propertiesRaw: "",
     properties: {},
+    layer: currentLayer,
     el
   };
 
@@ -222,6 +295,37 @@ function createObject(x, y) {
   items.push(obj);
   renderObject(obj);
   updateItem(obj);
+}
+
+function createTile(x, y) {
+  const el = document.createElement("div");
+  el.className = "tile";
+
+  const isFloor = currentLayer === "floor";
+  const defaultHeight = isFloor ? 0 : 6;
+
+  const tile = {
+    type: "tile",
+    x, y,
+    w: 1,
+    h: 1,
+    height: defaultHeight,
+    shape: "resizable",
+    color: "transparent",
+    name: "",
+    notes: "",
+    texture: "",
+    propertiesRaw: "",
+    properties: {},
+    layer: currentLayer,
+    el
+  };
+
+  attachItemHandlers(tile);
+  gridContainer.appendChild(el);
+  items.push(tile);
+  renderTile(tile);
+  updateItem(tile);
 }
 
 /* ================= RENDER ================= */
@@ -235,6 +339,15 @@ function renderObject(obj) {
   obj.el.innerHTML = `<svg viewBox="0 0 40 40">${svg[obj.shape] || svg.square}</svg>`;
 }
 
+function renderTile(tile) {
+  const bgImage = tile.texture ? `url('${tile.texture}')` : `linear-gradient(45deg, #666, #999)`;
+  tile.el.innerHTML = `
+    <div class="tile-content" style="background-image: ${bgImage}">
+      ${tile.name ? `<span class="tile-label">${tile.name}</span>` : ""}
+    </div>
+  `;
+}
+
 function updateItem(item) {
   item.el.style.left = item.x * GRID_SIZE + "px";
   item.el.style.top = item.y * GRID_SIZE + "px";
@@ -242,11 +355,15 @@ function updateItem(item) {
   if (item.shape === "resizable") {
     item.el.style.width = item.w * GRID_SIZE + "px";
     item.el.style.height = item.h * GRID_SIZE + "px";
-    item.el.style.background = item.color;
+    if (item.type === "object") {
+      item.el.style.background = item.color;
+    }
   } else {
     item.el.style.width = GRID_SIZE + "px";
     item.el.style.height = GRID_SIZE + "px";
   }
+
+  updateLayerVisibility();
 }
 
 /* ================= MODAL ================= */
@@ -258,59 +375,107 @@ function openEditModal(item) {
   modalOpen = true;
   modalOverlay.style.display = "flex";
 
-  modal.innerHTML = `
-    <h2 id="modalTitle">Edit ${item.type}</h2>
+  // Different modal content for tiles vs objects
+  if (item.type === "tile") {
+    modal.innerHTML = `
+      <h2 id="modalTitle">Edit Tile (${item.layer})</h2>
 
-    <label>Name
-      <input id="editName" value="${item.name}">
-    </label>
+      <label>Name
+        <input id="editName" value="${item.name}">
+      </label>
 
-    <label>Color
-  <select id="editColor">
-    <option value="yellow">yellow</option>
-    <option value="white">white</option>
-    <option value="blue">blue</option>
-    <option value="red">red</option>
-    <option value="orange">orange</option>
-    <option value="black">black</option>
-    <option value="magenta">magenta</option>
-    <option value="green">green</option>
-  </select>
-</label>
+      <label>Texture Path (e.g., assets/textures/floor_01.png)
+        <input id="editTexture" value="${item.texture}" placeholder="assets/textures/texture.png">
+      </label>
 
-    <label>Shape
-      <select id="editShape">
-        <option value="resizable">resizable</option>
-        <option value="circle">circle</option>
-        <option value="star">star</option>
-      </select>
-    </label>
+      <label>Notes
+        <textarea id="editNotes">${item.notes}</textarea>
+      </label>
 
-    <label>Notes
-      <textarea id="editNotes">${item.notes}</textarea>
-    </label>
+      <label>Height
+        <input id="editHeight" type="number" value="${item.height}">
+      </label>
 
-    <label>Properties (raw JSON)
-      <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
-    </label>
+      <label>Properties (raw JSON)
+        <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
+      </label>
 
-    <button id="applyBtn">Apply</button>
-    <button id="closeBtn">Close</button>
-  `;
+      <button id="applyBtn">Apply</button>
+      <button id="closeBtn">Close</button>
+    `;
 
-  document.getElementById("editShape").value = item.shape || "resizable";
+    document.getElementById("applyBtn").onclick = () => {
+      item.name = document.getElementById("editName").value;
+      item.texture = document.getElementById("editTexture").value;
+      item.notes = document.getElementById("editNotes").value;
+      item.height = Number(document.getElementById("editHeight").value);
+      item.propertiesRaw = document.getElementById("editProps").value;
 
-  document.getElementById("applyBtn").onclick = () => {
-    item.name = document.getElementById("editName").value;
-    item.color = document.getElementById("editColor").value;
-    item.notes = document.getElementById("editNotes").value;
-    item.propertiesRaw = document.getElementById("editProps").value;
-    item.shape = document.getElementById("editShape").value;
+      renderTile(item);
+      updateItem(item);
+      closeModal();
+    };
+  } else {
+    // Object modal (existing code)
+    modal.innerHTML = `
+      <h2 id="modalTitle">Edit ${item.type}</h2>
 
-    renderObject(item);
-    updateItem(item);
-    closeModal();
-  };
+      <label>Name
+        <input id="editName" value="${item.name}">
+      </label>
+
+      <label>Color
+    <select id="editColor">
+      <option value="yellow">yellow</option>
+      <option value="white">white</option>
+      <option value="blue">blue</option>
+      <option value="red">red</option>
+      <option value="orange">orange</option>
+      <option value="black">black</option>
+      <option value="magenta">magenta</option>
+      <option value="green">green</option>
+    </select>
+  </label>
+
+      <label>Shape
+        <select id="editShape">
+          <option value="resizable">resizable</option>
+          <option value="circle">circle</option>
+          <option value="star">star</option>
+        </select>
+      </label>
+
+      <label>Notes
+        <textarea id="editNotes">${item.notes}</textarea>
+      </label>
+
+      <label>Height
+        <input id="editHeight" type="number" value="${item.height}">
+      </label>
+
+      <label>Properties (raw JSON)
+        <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
+      </label>
+
+      <button id="applyBtn">Apply</button>
+      <button id="closeBtn">Close</button>
+    `;
+
+    document.getElementById("editShape").value = item.shape || "resizable";
+
+    document.getElementById("applyBtn").onclick = () => {
+      item.name = document.getElementById("editName").value;
+      item.color = document.getElementById("editColor").value;
+      item.notes = document.getElementById("editNotes").value;
+      item.height = Number(document.getElementById("editHeight").value);
+      item.propertiesRaw = document.getElementById("editProps").value;
+      item.shape = document.getElementById("editShape").value;
+
+      renderObject(item);
+      updateItem(item);
+      closeModal();
+    };
+  }
 
   document.getElementById("closeBtn").onclick = closeModal;
   modal.focus();
@@ -325,6 +490,23 @@ function closeModal() {
 /* ================= KEYBOARD ================= */
 
 document.addEventListener("keydown", e => {
+  // Layer switching
+  if (e.key === "PageUp") {
+    const idx = LAYERS.indexOf(currentLayer);
+    const newIdx = (idx - 1 + LAYERS.length) % LAYERS.length;
+    setCurrentLayer(LAYERS[newIdx]);
+    ariaLive.textContent = `Switched to ${LAYERS[newIdx]} layer`;
+    e.preventDefault();
+  }
+
+  if (e.key === "PageDown") {
+    const idx = LAYERS.indexOf(currentLayer);
+    const newIdx = (idx + 1) % LAYERS.length;
+    setCurrentLayer(LAYERS[newIdx]);
+    ariaLive.textContent = `Switched to ${LAYERS[newIdx]} layer`;
+    e.preventDefault();
+  }
+
   if ((e.key === "Delete" || e.key === "Backspace") && selectedItem) {
     deleteSelectedItem();
     e.preventDefault();
@@ -342,65 +524,73 @@ document.addEventListener("keydown", e => {
 
   /* ================= MOVE / RESIZE ================= */
 
-  if (!selectedItem) return;
-
-  const moveAmount = 1;
-
-  // Arrow keys move
-  switch (e.key) {
-    case "ArrowUp":
-      selectedItem.y = Math.max(0, selectedItem.y - moveAmount);
-      updateItem(selectedItem);
-      e.preventDefault();
-      break;
-    case "ArrowDown":
-      selectedItem.y += moveAmount;
-      updateItem(selectedItem);
-      e.preventDefault();
-      break;
-    case "ArrowLeft":
-      selectedItem.x = Math.max(0, selectedItem.x - moveAmount);
-      updateItem(selectedItem);
-      e.preventDefault();
-      break;
-    case "ArrowRight":
-      selectedItem.x += moveAmount;
-      updateItem(selectedItem);
-      e.preventDefault();
-      break;
-  }
-
-  // Numpad resize only for resizable
-  if (selectedItem.shape === "resizable") {
-    switch (e.code) {
-      case "Numpad8": // increase height
-        selectedItem.h += 1;
-        updateItem(selectedItem);
-        e.preventDefault();
-        break;
-      case "Numpad2": // decrease height
-        selectedItem.h = Math.max(1, selectedItem.h - 1);
-        updateItem(selectedItem);
-        e.preventDefault();
-        break;
-      case "Numpad6": // increase width
-        selectedItem.w += 1;
-        updateItem(selectedItem);
-        e.preventDefault();
-        break;
-      case "Numpad4": // decrease width
-        selectedItem.w = Math.max(1, selectedItem.w - 1);
-        updateItem(selectedItem);
-        e.preventDefault();
-        break;
-    }
-  }
-
-  // Spawn object at mouse with 1 key
-  if (e.key === "1" && !modalOpen) {
+// Spawn object / tile with 1 key
+if (e.key === "1" && !modalOpen) {
+  if (currentLayer === "middle") {
     createObject(mouseGridX, mouseGridY);
-    e.preventDefault();
+    ariaLive.textContent = "Object created on middle layer";
+  } else {
+    createTile(mouseGridX, mouseGridY);
+    ariaLive.textContent = `${currentLayer} tile created`;
   }
+  e.preventDefault();
+  return;
+}
+
+/* ================= MOVE / RESIZE ================= */
+
+// From this point on, we REQUIRE a selection
+if (!selectedItem || selectedItem.layer !== currentLayer) return;
+
+// Arrow keys move
+switch (e.key) {
+  case "ArrowUp":
+    selectedItem.y = Math.max(0, selectedItem.y - 1);
+    updateItem(selectedItem);
+    e.preventDefault();
+    break;
+  case "ArrowDown":
+    selectedItem.y += 1;
+    updateItem(selectedItem);
+    e.preventDefault();
+    break;
+  case "ArrowLeft":
+    selectedItem.x = Math.max(0, selectedItem.x - 1);
+    updateItem(selectedItem);
+    e.preventDefault();
+    break;
+  case "ArrowRight":
+    selectedItem.x += 1;
+    updateItem(selectedItem);
+    e.preventDefault();
+    break;
+}
+
+// Numpad resize
+if (selectedItem.shape === "resizable") {
+  switch (e.code) {
+    case "Numpad8":
+      selectedItem.h += 1;
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "Numpad2":
+      selectedItem.h = Math.max(1, selectedItem.h - 1);
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "Numpad6":
+      selectedItem.w += 1;
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+    case "Numpad4":
+      selectedItem.w = Math.max(1, selectedItem.w - 1);
+      updateItem(selectedItem);
+      e.preventDefault();
+      break;
+  }
+}
 });
 
 /* ================= SAVE / LOAD / EXPORT ================= */
@@ -443,15 +633,33 @@ loadBtn.onclick = () => {
       updateGridSize();
 
       d.items.forEach(i => {
-        createObject(i.x, i.y);
-        const item = items.at(-1);
-        const el = item.el;
-        Object.assign(item, i);
-        item.el = el;
-        attachItemHandlers(item);
-        renderObject(item);
-        updateItem(item);
+        if (i.type === "tile") {
+          // Create tile
+          const el = document.createElement("div");
+          el.className = "tile";
+          const tile = {
+            ...i,
+            el
+          };
+          attachItemHandlers(tile);
+          gridContainer.appendChild(el);
+          items.push(tile);
+          renderTile(tile);
+          updateItem(tile);
+        } else {
+          // Create object
+          createObject(i.x, i.y);
+          const item = items.at(-1);
+          const el = item.el;
+          Object.assign(item, i);
+          item.el = el;
+          attachItemHandlers(item);
+          renderObject(item);
+          updateItem(item);
+        }
       });
+
+      updateLayerVisibility();
     };
     r.readAsText(e.target.files[0]);
   };
@@ -464,7 +672,7 @@ exportBtn.onclick = () => {
     mapName: mapName.value || "unnamed_map",
     gridX: Number(gridX.value),
     gridY: Number(gridY.value),
-    items: items.map(({ el, propertiesRaw, type, name, x, y, w, h, height, shape, color, notes }) => {
+    items: items.map(({ el, propertiesRaw, type, name, x, y, w, h, height, shape, color, notes, texture, layer }) => {
       let props = {};
       if (propertiesRaw && propertiesRaw.trim() !== "") {
         try {
@@ -478,24 +686,20 @@ exportBtn.onclick = () => {
         ? name.replace(/\s+/g, "_") + "_" + type
         : type + "_" + Math.floor(Math.random() * 1000);
 
-      const position = {
-        x,
-        y: shape === "resizable" ? height / 2 : 0,
-        z: y
-      };
-
-      const size =
-        shape === "resizable"
-          ? { x: w, y: height, z: h }
-          : { x: 1, y: 1, z: 1 };
+      // Store grid coordinates as-is
+      let position, size;
+      position = { x, y, z: y };
+      size = { x: w, y: h, z: 1 };
 
       return {
         id,
         type: type === "object" && props.type === "point" ? "light" : type,
+        layer,
         position,
         size,
         shape,
         color,
+        texture,
         notes,
         properties: props
       };
@@ -517,3 +721,4 @@ exportBtn.onclick = () => {
 
 </body>
 </html>
+

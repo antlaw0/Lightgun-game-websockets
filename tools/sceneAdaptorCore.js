@@ -32,11 +32,11 @@ export function generateSceneJS(map2D) {
   function adaptWall(item, index) {
     const p = item.properties || {};
 
-    const height = p.height ?? item.size?.y ?? 3;
+    const height = p.height ?? 3;
 
     const basePosition = {
       x: item.position.x,
-      y: height / 2,
+      y: item.position.y ?? 0,
       z: item.position.z
     };
 
@@ -64,7 +64,7 @@ export function generateSceneJS(map2D) {
     const p = item.properties || {};
 
     const position = mergePosition(
-      { x: item.position.x, y: 0, z: item.position.z },
+      { x: item.position.x, y: item.position.y ?? 0, z: item.position.z },
       p.position
     );
 
@@ -83,11 +83,11 @@ export function generateSceneJS(map2D) {
   function adaptGenericObject(item) {
     const p = item.properties || {};
 
-    const height = p.height ?? item.size?.y ?? 1;
+    const height = p.height ?? 1;
 
     const basePosition = {
       x: item.position.x,
-      y: 0,
+      y: item.position.y ?? 0,
       z: item.position.z
     };
 
@@ -111,9 +111,10 @@ export function generateSceneJS(map2D) {
   function adaptLight(item) {
     const p = item.properties || {};
 
+    // Lights don't have size; position is used directly
     const basePosition = {
       x: item.position.x,
-      y: p.height ?? 5,
+      y: p.height ?? (item.position.y ?? 5),
       z: item.position.z
     };
 
@@ -131,6 +132,39 @@ export function generateSceneJS(map2D) {
       shadow: p.shadow || undefined
     };
   } /* closes adaptLight */
+
+  function adaptTile(item, index) {
+    const p = item.properties || {};
+
+    const tileHeight = p.height ?? 1;
+
+    const basePosition = {
+      x: item.position.x,
+      y: item.position.y ?? 0,
+      z: item.position.z
+    };
+
+    const position = mergePosition(basePosition, p.position);
+
+    const size = {
+      x: p.size?.x ?? item.size?.x ?? 1,
+      y: p.size?.y ?? item.size?.y ?? tileHeight,
+      z: p.size?.z ?? item.size?.z ?? 1
+    };
+
+    return {
+      id: item.id || `tile_${index}`,
+      type: "tile",
+      layer: item.layer || "middle",
+      position,
+      size,
+      texture: item.texture || p.texture || "default",
+      notes: item.notes || "",
+      hp: 9999,
+      maxHp: 9999,
+      indestructible: true
+    };
+  } /* closes adaptTile */
 
   /* ================= SERIALIZER ================= */
 
@@ -163,6 +197,11 @@ export function generateSceneJS(map2D) {
 
     if (isPointLight(item)) {
       lights.push(adaptLight(item));
+      return;
+    }
+
+    if (item.type === "tile") {
+      staticObjects.push(adaptTile(item, index));
       return;
     }
 
