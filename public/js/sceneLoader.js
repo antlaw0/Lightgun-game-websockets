@@ -9,7 +9,8 @@ import { Explosion } from './explosion.js';
 
 import { Enemy } from "./enemy.js";
 import { Prop as PropClass } from "./prop.js";
-import { ENEMY_DEFS } from "./scenes.js";
+import { ENEMY_DEFS } from "./listOfEnemies.js";
+import { PROP_DEFS } from "./listOfprops.js";
 import { Projectile } from "./projectile.js";
 
 export class SceneLoader {
@@ -258,7 +259,13 @@ _applyCameraSettings() {
 const staticObjects = sceneDef.environment?.staticObjects ?? [];
 
 for (let idx = 0; idx < staticObjects.length; idx++) {
-  const pdef = staticObjects[idx];
+  let pdef = staticObjects[idx];
+  
+  // Apply base definition if present
+  if (pdef.def && PROP_DEFS[pdef.def]) {
+    pdef = { ...PROP_DEFS[pdef.def], ...pdef };
+  }
+
   if (!pdef.id) pdef.id = `prop_${idx}`;
 
   // =============================
@@ -519,13 +526,19 @@ if (pdef.type === "prefab" && pdef.prefab) {
 // Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
-      if (!edef.type) return;
-      const def = ENEMY_DEFS[edef.type];
+      // Resolve base definition
+      let def = null;
+      if (edef.def && ENEMY_DEFS[edef.def]) {
+        def = ENEMY_DEFS[edef.def];
+      } else if (edef.type && ENEMY_DEFS[edef.type]) {
+        def = ENEMY_DEFS[edef.type];
+      }
+
       // Diagnostic: log enemy entries and whether a type definition exists
       try {
-        console.log(`SceneLoader: enemy entry id='${edef.id}' type='${edef.type}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
+        console.log(`SceneLoader: enemy entry id='${edef.id}' type='${edef.type}' def='${edef.def}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
       } catch (e) { /* ignore logging errors */ }
-      if (!def) { console.warn(`SceneLoader: unknown enemy type '${edef.type}' for id='${edef.id}'`); return; }
+      if (!def) { console.warn(`SceneLoader: unknown enemy type/def '${edef.type || edef.def}' for id='${edef.id}'`); return; }
 
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;

@@ -506,7 +506,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
       }
     }
 
-    if (mergedDef.displayName === "Grunt Soldier") {
+    if (mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt") {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
       // place mesh at given position (but snap Y to global ground)

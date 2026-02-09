@@ -3,7 +3,7 @@
 // <script type="module" src="js/game.js"></script>
 import { SceneManager } from './sceneManager.js';
 import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
-import { spawnEnemy, LIST_OF_ENEMIES } from './listOfEnemies.js';
+
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
@@ -1948,8 +1948,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // ------------------ Scene / Level management ------------------
 window.sceneLoader = new SceneLoader(scene, camera, player);
 // Expose spawn helper and enemy list for console testing
-window.spawnEnemy = spawnEnemy;
-window.LIST_OF_ENEMIES = LIST_OF_ENEMIES;
+
+
 let currentLevel = Level_Warehouse;
 let currentSceneIndex = 0;
 window.sceneManager = new SceneManager(camera, sceneLoader);

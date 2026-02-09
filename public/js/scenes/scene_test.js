@@ -84,7 +84,14 @@ export const scene_test = {
   },
 
   enemies: [
-    {
+  {
+	def:  "grunt_pistol",
+id: "grunt_testing_defs",
+position:  	{x:  -2, y:  0,  z:  -6},
+active:  true
+  },
+	
+	{
       id: "grunt_test",
       type: "Grunt",
       displayName: "Grunt Soldier",
