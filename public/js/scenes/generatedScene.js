@@ -76,9 +76,9 @@ export const Scene__Exported = {
     id: "wall_left_vertical_wall",
     type: "wall",
     position: {
-      x: 13.5,
-      y: 3.5,
-      z: 24
+      x: 13,
+      y: 0,
+      z: 19
     },
     size: {
       x: 1,
@@ -94,9 +94,9 @@ export const Scene__Exported = {
     id: "wall_righte_vertical_wall",
     type: "wall",
     position: {
-      x: 19.5,
-      y: 3.5,
-      z: 21.5
+      x: 19,
+      y: 0,
+      z: 14
     },
     size: {
       x: 1,
@@ -112,13 +112,13 @@ export const Scene__Exported = {
     id: "wall_left_2_horizontal_wall",
     type: "wall",
     position: {
-      x: 8.5,
-      y: 3.5,
-      z: 19.5
+      x: 4,
+      y: 0,
+      z: 19
     },
     size: {
       x: 9,
-      y: 7,
+      y: 3,
       z: 1
     },
     hp: 9999,
@@ -130,13 +130,13 @@ export const Scene__Exported = {
     id: "wall_right_2_horizontal_wall",
     type: "wall",
     position: {
-      x: 11.5,
-      y: 3.5,
-      z: 13.5
+      x: 3,
+      y: 0,
+      z: 13
     },
     size: {
       x: 17,
-      y: 7,
+      y: 3,
       z: 1
     },
     hp: 9999,
@@ -148,13 +148,13 @@ export const Scene__Exported = {
     id: "wall_end_piecee_vertical_wall",
     type: "wall",
     position: {
-      x: 3.5,
-      y: 3.5,
-      z: 19
+      x: 3,
+      y: 0,
+      z: 18
     },
     size: {
       x: 1,
-      y: 7,
+      y: 3,
       z: 2
     },
     hp: 9999,
@@ -166,13 +166,13 @@ export const Scene__Exported = {
     id: "wall_piece_end_2e_vertical_wall",
     type: "wall",
     position: {
-      x: 3.5,
-      y: 3.5,
-      z: 15.5
+      x: 3,
+      y: 0,
+      z: 14
     },
     size: {
       x: 1,
-      y: 7,
+      y: 3,
       z: 3
     },
     hp: 9999,
@@ -184,9 +184,9 @@ export const Scene__Exported = {
     id: "exit_door_object",
     type: "object",
     position: {
-      x: 3.5,
+      x: 3,
       y: 0,
-      z: 17.5
+      z: 17
     },
     size: {
       x: 1,
@@ -199,9 +199,9 @@ export const Scene__Exported = {
     id: "wall_beginning_piece_1e_horizontal_wall",
     type: "wall",
     position: {
-      x: 14.5,
-      y: 3.5,
-      z: 29.5
+      x: 13,
+      y: 0,
+      z: 29
     },
     size: {
       x: 3,
@@ -217,9 +217,9 @@ export const Scene__Exported = {
     id: "wall_beginning_right_horizontal_wall",
     type: "wall",
     position: {
-      x: 18.5,
-      y: 3.5,
-      z: 29.5
+      x: 17,
+      y: 0,
+      z: 29
     },
     size: {
       x: 3,
@@ -235,9 +235,9 @@ export const Scene__Exported = {
     id: "starting_door_object",
     type: "object",
     position: {
-      x: 16.5,
+      x: 16,
       y: 0,
-      z: 29.5
+      z: 29
     },
     size: {
       x: 1,
@@ -250,9 +250,9 @@ export const Scene__Exported = {
     id: "cameraStart_object",
     type: "object",
     position: {
-      x: 16.5,
+      x: 16,
       y: 0,
-      z: 30.5
+      z: 30
     },
     size: {
       x: 1,
@@ -266,9 +266,9 @@ export const Scene__Exported = {
     type: "tile",
     layer: "floor",
     position: {
-      x: 5,
+      x: 4,
       y: 0,
-      z: 25
+      z: 24
     },
     size: {
       x: 2,
@@ -286,9 +286,9 @@ export const Scene__Exported = {
     type: "tile",
     layer: "ceiling",
     position: {
-      x: 5.5,
+      x: 5,
       y: 6,
-      z: 26.5
+      z: 26
     },
     size: {
       x: 1,
@@ -303,6 +303,7 @@ export const Scene__Exported = {
   }
 ]
   },
+
 
   enemies: [],
   objective: null,

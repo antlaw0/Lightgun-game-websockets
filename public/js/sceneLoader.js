@@ -256,10 +256,33 @@ _applyCameraSettings() {
     console.log(`SceneLoader loading scene: ${sceneDef.name}`);
 
     // Props (including full-cover walls)
-const staticObjects = sceneDef.environment?.staticObjects ?? [];
+    const staticObjects = sceneDef.environment?.staticObjects ?? [];
 
-for (let idx = 0; idx < staticObjects.length; idx++) {
-  let pdef = staticObjects[idx];
+    // Helper: convert edge-based (min-corner) position -> center-based position
+    function _ensureCenterPosition(def) {
+      if (!def || !def.position) return;
+      // avoid double conversion
+      if (def._convertedToCenter) return;
+
+      const sx = Number(def.size?.x ?? 1);
+      const sz = Number(def.size?.z ?? 1);
+
+      const cx = (def.position.x ?? 0) + sx / 2;
+      const cz = (def.position.z ?? 0) + sz / 2;
+      const by = def.position.y ?? 0; // keep y as base (bottom)
+
+      def.position = { x: cx, y: by, z: cz };
+      def._convertedToCenter = true;
+    }
+
+    for (let idx = 0; idx < staticObjects.length; idx++) {
+      let pdef = staticObjects[idx];
+
+      // Convert edge-based authored maps into center-based positions/sizes
+      // (map export uses min-corner grid coordinates; Three.js expects centered geometry positions)
+      if (pdef && pdef.position && pdef.size) {
+        _ensureCenterPosition(pdef);
+      }
   
   // Apply base definition if present
   if (pdef.def && PROP_DEFS[pdef.def]) {
@@ -440,10 +463,11 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     const door = new THREE.Mesh(geo, mat);
 
+    // pdef.position is converted above to center-x/center-z and base-y
     door.position.set(
-      pdef.position.x + width / 2,
-      pdef.position.y + height / 2,
-      pdef.position.z
+      pdef.position.x ?? 0,
+      (pdef.position.y ?? 0) + height / 2,
+      pdef.position.z ?? 0
     );
 
     if (pdef.rotationY !== undefined) {
@@ -539,6 +563,18 @@ if (pdef.type === "prefab" && pdef.prefab) {
         console.log(`SceneLoader: enemy entry id='${edef.id}' type='${edef.type}' def='${edef.def}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
       } catch (e) { /* ignore logging errors */ }
       if (!def) { console.warn(`SceneLoader: unknown enemy type/def '${edef.type || edef.def}' for id='${edef.id}'`); return; }
+
+      // Convert enemy instance edge-based positions to center-based (if present)
+      if (edef && edef.position) {
+        const sx = Number(edef.size?.x ?? def?.size?.x ?? 1);
+        const sz = Number(edef.size?.z ?? def?.size?.z ?? 1);
+        edef.position = {
+          x: (edef.position.x ?? 0) + sx / 2,
+          y: edef.position.y ?? 0,
+          z: (edef.position.z ?? 0) + sz / 2
+        };
+        edef._convertedToCenter = true;
+      }
 
       const e = new Enemy(this.scene, def, edef, this.player, () => {});
       e.lastHitFrame = -1;

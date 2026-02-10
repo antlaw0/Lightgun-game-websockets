@@ -485,6 +485,12 @@ function closeModal() {
 /* ================= KEYBOARD ================= */
 
 document.addEventListener("keydown", e => {
+  // Skip processing if typing in a form field
+  const target = e.target;
+  if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+    return;
+  }
+
   // Layer switching
   if (e.key === "PageUp") {
     const idx = LAYERS.indexOf(currentLayer);
@@ -697,7 +703,7 @@ exportBtn.onclick = () => {
       } else {
         position = {
           x,
-          y: shape === "resizable" ? height / 2 : 0,
+          y: 0,
           z: y
         };
         size =

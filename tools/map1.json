@@ -5,10 +5,10 @@
   "items": [
     {
       "type": "object",
-      "x": 7,
-      "y": 9,
-      "w": 3,
-      "h": 1,
+      "x": 5,
+      "y": 14,
+      "w": 2,
+      "h": 2,
       "height": 1,
       "shape": "resizable",
       "color": "yellow",

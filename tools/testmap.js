@@ -22,36 +22,16 @@ export const Scene_test = {
     id: "wall_object",
     type: "object",
     position: {
-      x: 7,
-      y: 0.5,
-      z: 9
-    },
-    size: {
-      x: 3,
-      y: 7,
-      z: 1
-    },
-    texture: "default"
-  },
-  {
-    id: "ceiling_tile",
-    type: "tile",
-    layer: "ceiling",
-    position: {
-      x: 4,
-      y: 7,
-      z: 4
+      x: 5,
+      y: 0,
+      z: 12
     },
     size: {
       x: 2,
-      y: 1,
+      y: 7,
       z: 2
     },
-    texture: "assets/textures/yellow.png",
-    notes: "",
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true
+    texture: "default"
   }
 ]
   },
