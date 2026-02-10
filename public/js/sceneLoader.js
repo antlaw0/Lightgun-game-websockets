@@ -50,6 +50,9 @@ window.sceneLoader = this;
     this.roomDepth = 12;
 
     this.padding = 2;
+    
+    // No room-based centering; all objects use absolute world positions
+    this.roomCenterOffset = new THREE.Vector3(0, 0, 0);
 
     this.sceneLights = [];
     // audio helpers
@@ -86,6 +89,9 @@ window.sceneLoader = this;
     enemyInstance.mesh.traverse(obj => {
       if (!obj.isMesh) return;
       try {
+        // Shadow setup
+        obj.castShadow = true;
+        obj.receiveShadow = true;
         // Only register mesh parts for hit-tests if the enemy is active.
         if (enemyInstance._isActive) {
           if (!this.enemyMeshes.includes(obj)) this.enemyMeshes.push(obj);
@@ -587,29 +593,11 @@ if (pdef.type === "prefab" && pdef.prefab) {
       this.addEnemy(e);
     });
 
-        // Construct room around enemies/props
-        // If the scene explicitly provides a `room` definition, use it and create the room.
-        // Otherwise calculate bounds. If the scene defines environment.staticObjects (for
-        // example a floor/walls), assume the scene author intends those to be the room
-        // geometry and do NOT create the implicit room (walls/ceiling) here.
-    if (sceneDef.room) {
-      this._useDefinedRoom(sceneDef.room);
-      this._createRoom();
-    } else {
-      this._calculateRoomBounds();
-      const staticObjs = sceneDef.environment?.staticObjects ?? [];
-      const hasRoomLikeObject = staticObjs.some(o => {
-        const t = (o && o.type) ? String(o.type).toLowerCase() : "";
-        return t === 'floor' || t === 'wall' || t === 'ceiling' || t === 'room' || t === 'backwall';
-      });
-      if (!hasRoomLikeObject) {
-        this._createRoom();
-      }
-    }
+        // Use absolute world positions - no room centering or bounds calculation needed
+        // Scene author defines exact positions. If they want walls/floor, add them as staticObjects.
 
-
-    // Lights must be created AFTER room and AFTER sceneDef exists
-    this._createLights();
+        // Lights created after props/enemies loaded
+        this._createLights();
 
     // After room + lights are ready
     this._applyCameraSettings();
@@ -634,219 +622,13 @@ if (pdef.type === "prefab" && pdef.prefab) {
     //this._notifyLoaded();
   }
 
-  // -----------------------------
-  // Calculate Room Bounds (adjusted to arrays)
-  // -----------------------------
-  _calculateRoomBounds() {
-    let minX = Infinity, maxX = -Infinity;
-    let minZ = Infinity, maxZ = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-
-    // Props: iterate array
-    this.props.forEach(p => {
-      const sx = p.size.x / 2;
-      const sy = p.size.y;
-      const sz = p.size.z / 2;
-
-      minX = Math.min(minX, p.position.x - sx);
-      maxX = Math.max(maxX, p.position.x + sx);
-      minY = Math.min(minY, p.position.y);
-      maxY = Math.max(maxY, p.position.y + sy);
-      minZ = Math.min(minZ, p.position.z - sz);
-      maxZ = Math.max(maxZ, p.position.z + sz);
-    });
-this.staticObjects.forEach(o => {
-  o.position = o.mesh.position;
-});
-
-    // Enemies: iterate array
-    this.enemies.forEach(e => {
-      const pos = e.mesh?.position ?? { x: 0, y: 0, z: 0 };
-      minX = Math.min(minX, pos.x);
-      maxX = Math.max(maxX, pos.x);
-      minY = Math.min(minY, pos.y);
-      maxY = Math.max(maxY, pos.y + 1);
-      minZ = Math.min(minZ, pos.z);
-      maxZ = Math.max(maxZ, pos.z);
-    });
-
-    // Padding
-    minX -= this.padding;
-    maxX += this.padding;
-    minY -= this.padding;
-    maxY += this.padding;
-    minZ -= this.padding;
-    maxZ += this.padding;
-
-    // Room size
-    this.roomWidth = maxX - minX;
-    this.roomHeight = maxY - minY;
-    this.roomDepth = maxZ - minZ;
-
-    // Room center offset
-    this.roomCenterOffset = new THREE.Vector3(
-      (minX + maxX) / 2,
-      (minY + maxY) / 2,
-      (minZ + maxZ) / 2
-    );
-
-// Shift props and enemies ONLY if room was auto-calculated
-if (!this.sceneDef.room) {
-  this.props.forEach(p => {
-    p.mesh.position.sub(this.roomCenterOffset);
-  });
-
-  this.enemies.forEach(e => {
-    if (e.mesh) e.mesh.position.sub(this.roomCenterOffset);
-    if (e.basePosition) e.basePosition.sub(this.roomCenterOffset);
-  });
-}
-  }
-
-_useDefinedRoom(roomDef) {
-  this.roomWidth  = roomDef.width;
-  this.roomHeight = roomDef.height;
-  this.roomDepth  = roomDef.depth;
-
-  // Default center is origin
-  this.roomCenterOffset = new THREE.Vector3(0, 0, 0);
-
-  // Optional center override
-  if (roomDef.center) {
-    this.roomCenterOffset.set(
-      roomDef.center.x ?? 0,
-      roomDef.center.y ?? 0,
-      roomDef.center.z ?? 0
-    );
-  }
-}
+  // Legacy room methods removed - scenes now use absolute world positions
+  // No longer needed: room centering, bounds calculation, or implicit room generation
+  // Scene author defines exact positions; room-like objects should be staticObjects
 
 
-  // -----------------------------
-  // Create Room (unchanged)
-  // -----------------------------
-_createRoom() {
-  const w = this.roomWidth;
-  const h = this.roomHeight;
-  const d = this.roomDepth;
-
-  const thickness = 0.25; // collision thickness for all room surfaces
-
-  const texLoader = new THREE.TextureLoader();
-  const roomTex = this.sceneDef.roomTextures || {};
-
-  // --- Materials ---
-  const floorMat = roomTex.floor
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.floor) })
-    : new THREE.MeshStandardMaterial({ color: 0x444444 });
-
-  const ceilingMat = roomTex.ceiling
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.ceiling) })
-    : new THREE.MeshStandardMaterial({ color: 0x666666 });
-
-  const wallMat = roomTex.wall
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.wall) })
-    : new THREE.MeshStandardMaterial({ color: 0x888888 });
-
-  const backWallMat = roomTex.backWall
-    ? new THREE.MeshStandardMaterial({ map: texLoader.load(roomTex.backWall) })
-    : wallMat;
-
-  // -----------------
-  // Floor
-  // -----------------
-  const floorGeo = new THREE.BoxGeometry(w, thickness, d);
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.position.set(0, -thickness / 2, 0);
-  floor.position.sub(this.roomCenterOffset);
-  floor.receiveShadow = true;
-  floor.castShadow = false;
-  floor.userData = { type: "room", solid: true, 
-    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
-  };
-  this.scene.add(floor);
-  this.roomMeshes.push(floor);
-
-  // -----------------
-  // Ceiling
-  // -----------------
-  const ceilingGeo = new THREE.BoxGeometry(w, thickness, d);
-  const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
-  ceiling.position.set(0, h + thickness / 2, 0);
-  ceiling.position.sub(this.roomCenterOffset);
-  ceiling.receiveShadow = true;
-  ceiling.castShadow = false;
-  ceiling.userData = { type: "room", solid: true, 
-      hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
-
-  };
-  this.scene.add(ceiling);
-  this.roomMeshes.push(ceiling);
-
-  // -----------------
-  // Back Wall
-  // -----------------
-  const backWallGeo = new THREE.BoxGeometry(w, h, thickness);
-  const backWall = new THREE.Mesh(backWallGeo, backWallMat);
-  backWall.position.set(0, h / 2, -d / 2 - thickness / 2);
-  backWall.position.sub(this.roomCenterOffset);
-  backWall.castShadow = true;
-  backWall.receiveShadow = true;
-  backWall.userData = { type: "room", solid: true,
-    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
-
-  };
-  this.scene.add(backWall);
-  this.roomMeshes.push(backWall);
-
-  // -----------------
-  // Left Wall
-  // -----------------
-  const sideWallGeo = new THREE.BoxGeometry(thickness, h, d);
-  const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
-  leftWall.position.set(-w / 2 - thickness / 2, h / 2, 0);
-  leftWall.position.sub(this.roomCenterOffset);
-  leftWall.castShadow = true;
-  leftWall.receiveShadow = true;
-  leftWall.userData = { type: "room", solid: true,
-    hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
-
-  };
-  this.scene.add(leftWall);
-  this.roomMeshes.push(leftWall);
-
-  // -----------------
-  // Right Wall
-  // -----------------
-  const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
-  rightWall.position.set(w / 2 + thickness / 2, h / 2, 0);
-  rightWall.position.sub(this.roomCenterOffset);
-  rightWall.castShadow = true;
-  rightWall.receiveShadow = true;
-  rightWall.userData = { type: "room", solid: true, 
-      hitSounds: ["assets/sfx/ric1.ogg", "assets/sfx/ric2.ogg"]
-
-  };
-  this.scene.add(rightWall);
-  this.roomMeshes.push(rightWall);
-
-  // -----------------
-  // Enable shadows on props and enemies
-  // -----------------
-  this.props.forEach(p => {
-    if (p.mesh) {
-      p.mesh.castShadow = true;
-      p.mesh.receiveShadow = true;
-    }
-  });
-
-  this.enemies.forEach(e => {
-    if (e.mesh) {
-      e.mesh.castShadow = true;
-      e.mesh.receiveShadow = true;
-    }
-  });
-}
+  // Room creation removed - define walls/floor/ceiling as staticObjects in scene instead.
+  // This provides full control and simplifies scene authoring without implicit room generation.
   
   // -----------------------------
   // Projectiles (unchanged)

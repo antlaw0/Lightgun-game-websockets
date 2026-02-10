@@ -4,20 +4,9 @@
 
 export const Scene__Exported = {
   name: "map1",
-  background: {
-    texture: "assets/backgrounds/black_bg.png",
-    width: 0,
-    height: 0,
-    position: { x: 0, y: 0, z: 0 }
-  },
-
+  
   // Large flat area, no enclosure
-  room: {
-    width: 50,
-    height: 20,
-    depth: 50
-  },
-
+  
   camera: {
     position: { x: 15, y: 10, z: 0 },
     lookAt: { x: 15, y: 3.5, z: 15 },
