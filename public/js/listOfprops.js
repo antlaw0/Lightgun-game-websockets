@@ -1,9 +1,22 @@
 // js/props/listOfProps.js
 // Centralized reusable prop base definitions
 // Scene instances should reference these via { def: "name", ...overrides }
+import sounds from "./listOfSounds.js";
 
 export const PROP_DEFS = {
-
+wall:  {
+indestructible:  true,
+hp:  9999,
+maxHp: 9999,
+hitSounds:  sounds.ric	,
+texture:  "assets/textures/blue.png"
+},
+tile: {
+hp:  9999,
+maxHp:  9999,
+indestructible:  true,
+hitSounds:  sounds.ric	
+},
   // -------------------------------------------------
   // Wooden crate (low cover, destructible)
   // -------------------------------------------------

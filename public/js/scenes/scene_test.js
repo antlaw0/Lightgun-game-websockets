@@ -3,27 +3,13 @@
 export const scene_test = {
   name: "Weapon Test Range",
 
-  background: {
-    texture: "assets/backgrounds/black_bg.png",
-    width: 0,
-    height: 0,
-    position: { x: 0, y: 0, z: 0 }
-  },
-
-  // Large flat area, no enclosure
-  room: {
-    width: 50,
-    height: 0,   // no ceiling
-    depth: 50
-  },
-
   cameraRails: {
     intro: [],
     exit: []
   },
 
   camera: {
-    position: { x: 0, y: 1.7, z: 0 },
+    position: { x: 8, y: 1.7, z: 12 },
     lookAt: { x: 0, y: 1.4, z: -6 },
     fov: 60,
     near: 0.1,
@@ -41,8 +27,8 @@ export const scene_test = {
     {
       type: "directional",
       color: 0xffffff,
-      intensity: 1.6,
-      position: { x: 5, y: 10, z: 5 },
+      intensity: 3.6,
+      position: { x: 0, y: 10, z: 0 },
       target: { x: 0, y: 1.4, z: -6 },
       castShadow: true,
       shadow: {
@@ -52,35 +38,63 @@ export const scene_test = {
     }
   ],
 
-  // Only a floor texture, everything else intentionally absent
-  roomTextures: {
-    floor: "assets/textures/warehouse_floor.png",
-    ceiling: null,
-    wall: null,
-    backWall: null
-  },
 
   environment: {
     staticObjects: [
-      {
-        id: "crate_test",
-        type: "crate",
-        position: { x: 0, y: 0.5, z: -5 },
-        size: { x: 1, y: 1, z: 1 },
-        hp: 100,
-        maxHp: 100,
-        coverType: "low",
-        material: {
-          map: "assets/props/crate.png",
-          color: 0xffffff,
-          roughness: 0.75,
-          metalness: 0.0
-        },
-        hitSounds: ["assets/sfx/props/crate_hit1.ogg"],
-        deathSounds: ["assets/sfx/props/crate_break.ogg"],
-        deathAction: "break"
-      }
-    ]
+  {
+    def:  "tile",
+	id: "floor_1_tile",
+    type: "tile",
+    layer: "floor",
+    position: {
+      x: 2,
+      y: 0,
+      z: 2
+    },
+    size: {
+      x: 25,
+      y: 1,
+      z: 16
+    },
+    texture: "assets/textures/warehouse_floor.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
+  },
+  {
+    def:  "wall",
+	id: "wall_1_object",
+    type: "object",
+    position: {
+      x: 25,
+      y: 0,
+      z: 15
+    },
+    size: {
+      x: 2,
+      y: 4,
+      z: 2
+    },
+    texture: "assets/textures/blue.png"
+  },
+  {
+    def:  "wall",
+	id: "wall_2_object",
+    type: "object",
+    position: {
+      x: 4,
+      y: 0,
+      z: 14
+    },
+    size: {
+      x: 1,
+      y: 4,
+      z: 1
+    },
+    texture: "assets/textures/blue.png"
+  }
+]
   },
 
   enemies: [
