@@ -88,7 +88,7 @@ export const scene_test = {
 	def:  "grunt_pistol",
 id: "grunt_testing_defs",
 position:  	{x:  -2, y:  0,  z:  -6},
-active:  true
+active:  false
   },
 	
 	{

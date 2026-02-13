@@ -540,8 +540,10 @@ _computeMuzzleWorldPosition(weaponEntry) {
             if (!this._muzzleTexture) return;
             const count = opts.count || 3;
             const duration = opts.duration || 0.09;
-            const baseScale = 1.0; // world-units base; multiply by opts.scale
-            const sprites = [];
+const baseScale = 1.0;
+const scaleFactor = (opts.scale && typeof opts.scale === 'number') ? opts.scale : 0.5;
+            
+			const sprites = [];
             for (let i = 0; i < count; i++) {
                 const mat = new THREE.SpriteMaterial({
                     map: this._muzzleTexture,
@@ -565,8 +567,16 @@ _computeMuzzleWorldPosition(weaponEntry) {
             }
             if (this.debugEnabled) console.log('spawned muzzle flash', pos.toArray(), 'dir', dir.toArray());
             const speed = opts.speed || 0.8;
-            this._activeMuzzleFlashes.push({ sprites, _start: performance.now(), _duration: duration, _dir: dir.clone(), _speed: speed, _initialScale: baseScale });
-        } catch (e) {}
+this._activeMuzzleFlashes.push({ 
+    sprites, 
+    _start: performance.now(), 
+    _duration: duration, 
+    _dir: dir.clone(), 
+    _speed: speed, 
+    _initialScale: baseScale * scaleFactor
+});
+        
+		} catch (e) {}
     }
 
     /* ---------------- EQUIP / CYCLE ---------------- */
