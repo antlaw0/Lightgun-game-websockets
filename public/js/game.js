@@ -2940,8 +2940,13 @@ function animate(nowMs) {
   // --- FPS Mode Movement ---
   if (isFPSMode) {
     const moveSpeed = fpsState.speed * (deltaMs / 1000);
+    // Flatten movement vectors to XZ plane so WASD doesn't change height
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    forward.y = 0;
+    forward.normalize();
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    right.y = 0;
+    right.normalize();
 
     if (fpsState.keys.w) camera.position.addScaledVector(forward, moveSpeed);
     if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveSpeed);
@@ -2970,8 +2975,10 @@ function animate(nowMs) {
   }
 
   // --- Ducking/Zooming ---
-  const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
-  camera.position.y += (targetY - camera.position.y) * 0.1;
+  if (!isFPSMode) {
+    const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
+    camera.position.y += (targetY - camera.position.y) * 0.1;
+  }
   const targetFov = zoomed ? 30 : 60;
   camera.fov += (targetFov - camera.fov) * 0.1;
   camera.updateProjectionMatrix();
