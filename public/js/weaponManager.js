@@ -479,6 +479,46 @@ async loadWeapons(map) {
         }
     }
 
+    getMuzzlePosition(weaponName) {
+        const name = weaponName || this.currentWeapon;
+        if (!name) return null;
+
+        const w = this.weapons[name];
+        const preset = this._muzzlePresets?.[name];
+
+        // 1. Use preset if available (preferred)
+        if (preset?.position) {
+            const weaponLocalPos = preset.position.clone();
+            // Apply debug offset if any (only if weapon entry exists)
+            if (w && w._muzzleDebugOffset) weaponLocalPos.add(w._muzzleDebugOffset);
+            
+            // If weapon model is loaded and attached, transform by its matrix
+            if (w && w.group) {
+                return weaponLocalPos.applyMatrix4(w.group.matrixWorld);
+            }
+            
+            // Fallback: If model not loaded/equipped, compute theoretical position relative to camera
+            // using default offsets.
+            if (this.defaultOffsets[name] && this.camera) {
+                const def = this.defaultOffsets[name];
+                // Apply default transform chain: Scale -> Rotation -> Position -> Camera World
+                if (def.scale) weaponLocalPos.multiply(def.scale);
+                if (def.rotation) weaponLocalPos.applyEuler(def.rotation);
+                if (def.position) weaponLocalPos.add(def.position);
+                
+                return weaponLocalPos.applyMatrix4(this.camera.matrixWorld);
+            }
+        }
+
+        // 2. Fallback: Compute from geometry (only if loaded)
+        if (w) {
+            const computed = this._computeMuzzleWorldPosition(w);
+            if (computed) return computed.position;
+        }
+
+        return null;
+    }
+
     // Compute approximate muzzle world position by finding the farthest vertex
     // along the weapon group's local forward axis (-Z). Returns { position, dir }
     // Compute the world position and direction of the weapon's muzzle
@@ -540,10 +580,8 @@ _computeMuzzleWorldPosition(weaponEntry) {
             if (!this._muzzleTexture) return;
             const count = opts.count || 3;
             const duration = opts.duration || 0.09;
-const baseScale = 1.0;
-const scaleFactor = (opts.scale && typeof opts.scale === 'number') ? opts.scale : 0.5;
-            
-			const sprites = [];
+            const baseScale = 1.0; // world-units base; multiply by opts.scale
+            const sprites = [];
             for (let i = 0; i < count; i++) {
                 const mat = new THREE.SpriteMaterial({
                     map: this._muzzleTexture,
@@ -567,16 +605,8 @@ const scaleFactor = (opts.scale && typeof opts.scale === 'number') ? opts.scale 
             }
             if (this.debugEnabled) console.log('spawned muzzle flash', pos.toArray(), 'dir', dir.toArray());
             const speed = opts.speed || 0.8;
-this._activeMuzzleFlashes.push({ 
-    sprites, 
-    _start: performance.now(), 
-    _duration: duration, 
-    _dir: dir.clone(), 
-    _speed: speed, 
-    _initialScale: baseScale * scaleFactor
-});
-        
-		} catch (e) {}
+            this._activeMuzzleFlashes.push({ sprites, _start: performance.now(), _duration: duration, _dir: dir.clone(), _speed: speed, _initialScale: baseScale });
+        } catch (e) {}
     }
 
     /* ---------------- EQUIP / CYCLE ---------------- */
@@ -970,19 +1000,17 @@ scale: ${g.scale.x.toFixed(4)}${muzzleInfo}`
                     } else {
                         weapon.group.scale.multiplyScalar(1 + this.debugScaleStep);
                     }
-            }
-
-            if (e.code === 'Numpad7') {
-                if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
-                    weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
-                    weapon._muzzleDebugScale = Math.max(0.01, weapon._muzzleDebugScale * (1 - this.debugScaleStep));
-                    window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
-                } else {
-                    weapon.group.scale.multiplyScalar(1 - this.debugScaleStep);
                 }
-            }
+
+                if (e.code === 'Numpad7') {
+                    if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
+                        weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
+                        weapon._muzzleDebugScale = Math.max(0.01, weapon._muzzleDebugScale * (1 - this.debugScaleStep));
+                        window.speak(`Muzzle size ${weapon._muzzleDebugScale.toFixed(2)} meters`, { interrupt: true });
+                    } else {
+                        weapon.group.scale.multiplyScalar(1 - this.debugScaleStep);
+                    }
+                }
         });
     } // end _bindKeyboard
 } // end WeaponManager
-
-export default WeaponManager;

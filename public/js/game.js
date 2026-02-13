@@ -4,12 +4,18 @@
 import { SceneManager } from './sceneManager.js';
 import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
 
+import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/SSAOPass.js';
+import { FXAAShader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/shaders/FXAAShader.js';
+import { ShaderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/ShaderPass.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
-import WeaponManager from './weaponManager.js';
+import { WeaponManager } from './weaponManager.js';
 // Editor mode flag and helpers (default OFF)
 window.engine = window.engine || { isEditorMode: false };
 
@@ -292,10 +298,6 @@ function sendDesktopPayload(overrides = {}) {
 
     ws.send(JSON.stringify({ type: "controller", payload }));
 }
-
-
-function resize() { cw = canvas.width = window.innerWidth; ch = canvas.height = window.innerHeight; }
-window.addEventListener('resize', resize);
 
 // WebSocket setup (unchanged)
 // Use secure WS when page is HTTPS, otherwise plain WS.
@@ -1438,6 +1440,32 @@ renderer.toneMappingExposure = 1.0;
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
 
+// --- Post-processing ---
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.3, 0.4, 0.85);
+composer.addPass(bloomPass);
+
+const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+ssaoPass.kernelRadius = 16;
+composer.addPass(ssaoPass);
+
+const fxaaPass = new ShaderPass(FXAAShader);
+fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
+composer.addPass(fxaaPass);
+
+function resize() {
+    cw = canvas.width = window.innerWidth;
+    ch = canvas.height = window.innerHeight;
+    renderer.setSize(cw, ch);
+    composer.setSize(cw, ch);
+    fxaaPass.material.uniforms['resolution'].value.set(1 / cw, 1 / ch);
+    ssaoPass.setSize(cw, ch);
+}
+window.addEventListener('resize', resize);
+
 // ------------------ Editor Grid (visual + snapping) ------------------
 window.engine = window.engine || {};
 window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
@@ -2345,12 +2373,21 @@ function handleFire() {
     );
     raycaster.setFromCamera(retNDC, camera);
 
-    // Aim direction is the camera ray through the reticle (so projectiles travel through reticle)
-    const forwardDir = raycaster.ray.direction.clone().normalize();
+    // 1. Find target point in world space (what we are aiming at)
+    const intersectables = window.sceneLoader ? window.sceneLoader.getIntersectableMeshes() : [];
+    const hits = raycaster.intersectObjects(intersectables, true);
+    const targetPoint = (hits.length > 0) ? hits[0].point : raycaster.ray.at(100, new THREE.Vector3());
 
-    // Compute a muzzle origin relative to the camera so bullets visually come from lower-center
-    const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6); // moved lower: down and forward in camera space
-    const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
+    // 2. Determine shoot origin (muzzle)
+    let shootOrigin = window.weaponManager ? window.weaponManager.getMuzzlePosition(w.id) : null;
+    if (!shootOrigin) {
+        // Fallback to camera relative if no weapon model/muzzle found
+        const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
+        shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
+    }
+
+    // 3. Determine direction from muzzle to target
+    const forwardDir = new THREE.Vector3().subVectors(targetPoint, shootOrigin).normalize();
 
     // --- Generate spread directions ---
     // Factor player recoil into weapon accuracy: recoilPx reduces effective accuracy.
@@ -2501,11 +2538,21 @@ function triggerFire() {
     // Aim along the camera ray through the reticle so projectiles pass through the reticle center.
     const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
     raycaster.setFromCamera(retNDC, camera);
-    const forwardDir = raycaster.ray.direction.clone().normalize();
 
-    // Spawn from a camera-relative muzzle (bottom-center of view)
-    const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
-    const shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
+    // 1. Find target point in world space (what we are aiming at)
+    const intersectables = window.sceneLoader ? window.sceneLoader.getIntersectableMeshes() : [];
+    const hits = raycaster.intersectObjects(intersectables, true);
+    const targetPoint = (hits.length > 0) ? hits[0].point : raycaster.ray.at(100, new THREE.Vector3());
+
+    // 2. Determine shoot origin (muzzle)
+    let shootOrigin = window.weaponManager ? window.weaponManager.getMuzzlePosition() : null;
+    if (!shootOrigin) {
+        const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
+        shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
+    }
+
+    // 3. Determine direction from muzzle to target
+    const forwardDir = new THREE.Vector3().subVectors(targetPoint, shootOrigin).normalize();
 
     // Generate spread directions around the aim direction (pass accuracy adjusted by recoil)
     const recoilInfluence2 = Math.min(0.9, (player.recoilPx || 0) / (Math.min(window.innerWidth, window.innerHeight) * 0.5));
@@ -2884,6 +2931,46 @@ function animate(nowMs) {
   requestAnimationFrame(animate);
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
+
+  // --- FPS Mode Movement ---
+  if (isFPSMode) {
+    const moveSpeed = fpsState.speed * (deltaMs / 1000);
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+    if (fpsState.keys.w) camera.position.addScaledVector(forward, moveSpeed);
+    if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveSpeed);
+    if (fpsState.keys.a) camera.position.addScaledVector(right, -moveSpeed);
+    if (fpsState.keys.d) camera.position.addScaledVector(right, moveSpeed);
+    if (fpsState.keys.q) camera.position.y += moveSpeed; // ascend
+    if (fpsState.keys.z) camera.position.y -= moveSpeed; // descend
+  }
+
+  // --- Reticle Smoothing ---
+  if (!isFPSMode) {
+    displayedRet.x += (ret.x - displayedRet.x) * LERP_SPEED;
+    displayedRet.y += (ret.y - displayedRet.y) * LERP_SPEED;
+    if (reticleDiv) {
+      reticleDiv.style.left = `${displayedRet.x}px`;
+      reticleDiv.style.top = `${displayedRet.y}px`;
+    }
+  } else {
+    // In FPS mode, reticle is always centered
+    displayedRet.x = cw / 2;
+    displayedRet.y = ch / 2;
+    if (reticleDiv) {
+      reticleDiv.style.left = `${cw / 2}px`;
+      reticleDiv.style.top = `${ch / 2}px`;
+    }
+  }
+
+  // --- Ducking/Zooming ---
+  const targetY = ducking ? 1.2 : 1.7;
+  camera.position.y += (targetY - camera.position.y) * 0.1;
+  const targetFov = zoomed ? 30 : 60;
+  camera.fov += (targetFov - camera.fov) * 0.1;
+  camera.updateProjectionMatrix();
+
   // Update enemy animation mixers (advance three.js AnimationMixers)
   try {
     const deltaSec = deltaMs / 1000;
@@ -2907,75 +2994,39 @@ function animate(nowMs) {
       }
     } catch (e) {}
   } catch (e) {}
-// HUD.update moved to end of loop so camera rails/scene updates happen first
-// FPS movement: apply continuous movement when enabled
-  if (isFPSMode) {
-    const moveDist = fpsState.speed * (deltaMs / 1000);
-    // Use camera world forward projected to XZ plane for FPS-style movement
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    forward.y = 0; forward.normalize();
-    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
-    if (fpsState.keys.w) camera.position.addScaledVector(forward, moveDist);
-    if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveDist);
-    if (fpsState.keys.a) camera.position.addScaledVector(right, -moveDist);
-    if (fpsState.keys.d) camera.position.addScaledVector(right, moveDist);
-    // Q ascends, Z descends (keep these consistent with original mapping)
-    if (fpsState.keys.q) camera.position.y += moveDist; // ascend
-    if (fpsState.keys.z) camera.position.y -= moveDist; // descend
-    // Keep camera within reasonable Y (optional clamp)
-    if (camera.position.y < -50) camera.position.y = -50;
-    if (camera.position.y > 200) camera.position.y = 200;
-    // ensure reticle stays centered while in FPS
-    ret.x = cw / 2; ret.y = ch / 2;
-  }
 
-    // **Sync player position with camera**
-    player.position.copy(camera.position);
-  
-  
-      handleFire(); // <-- centralized firing
-  updateSparks(deltaMs);
+  // Update HUD
+  if (window.hud) window.hud.update(deltaMs / 1000);
 
-  // Update displayed reticle
-  displayedRet.x += (ret.x - displayedRet.x) * LERP;
-  displayedRet.y += (ret.y - displayedRet.y) * LERP;
-  if (reticleDiv) {
-    reticleDiv.style.left = `${displayedRet.x}px`;
-    reticleDiv.style.top = `${displayedRet.y}px`;
-  }
+  // Update Scene (enemies, etc)
+  if (window.sceneLoader) window.sceneLoader.update(deltaMs, nowMs);
 
-
-  updateDynamicReticle({
-    camera,
-    weapon: player?.currentWeapon
-  });
-
-  // Update player recoil decay each frame (deltaMs)
-  try { player.updateRecoil && player.updateRecoil(deltaMs); } catch(_) {}
-  try { player.updateArm && player.updateArm(deltaMs); } catch(_) {}
-
-  // Ducking & zoom
-  // Only enforce default ground height when NOT in FPS mode; in FPS mode vertical movement is controlled by keys
-  if (!isFPSMode) camera.position.y = 1.7 - (ducking ? 0.8 : 0);
-  camera.fov = zoomed ? 30 : 60;
-  camera.updateProjectionMatrix();
-
-  // Update scene loader (enemies AI)
-  sceneLoader.update(deltaMs, nowMs);
+  // Update projectiles
   updateProjectiles(deltaMs);
   updateEnemyProjectiles(deltaMs);
 
-  // Apply HUD visual/frame-based effects after scene/camera updates
-  HUD.update(deltaMs / 1000);
+  // Update sparks
+  updateSparks(deltaMs / 1000);
 
-  renderer.render(scene, camera);
+  // Update auto-fire
+  updateAutoFire(nowMs);
+
+  // Update player arm/recoil
+  if (player) {
+      if (typeof player.updateArm === 'function') player.updateArm(deltaMs);
+      if (typeof player.updateRecoil === 'function') player.updateRecoil(deltaMs);
+  }
+
+  // Update reticle
+  if (player && player.currentWeapon) {
+      updateDynamicReticle({
+          camera: camera,
+          weapon: player.currentWeapon
+      });
+  }
+
+  // Render
+  composer.render();
 }
+
 requestAnimationFrame(animate);
-
-// ------------------ Start by loading level/scene ------------------
-loadLevel(Level_Warehouse);
-
-// Expose nextScene globally so UI or user can advance after onSceneComplete
-window.nextScene = nextScene;
-window.player = player;

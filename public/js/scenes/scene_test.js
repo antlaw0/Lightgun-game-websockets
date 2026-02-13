@@ -22,8 +22,30 @@ export const scene_test = {
       type: "ambient",
       color: 0x0000FF,
       intensity: 0.8
-    }
-    ,
+    },
+    ,{
+    type: "hemisphere",
+    skyColor: 16777215,
+    groundColor: 4473924,
+    intensity: 0.6,
+    id: "light_hemisphere",
+    position: {
+        x: 0,
+        y: 15,
+        z: 0
+    },
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 1,
+        y: 1,
+        z: 1
+    },
+    color: 16777215
+},
     {
       type: "directional",
       color: 0xffffff,
