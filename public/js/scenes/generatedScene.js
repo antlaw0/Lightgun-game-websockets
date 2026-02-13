@@ -60,8 +60,32 @@ export const Scene__Exported = {
 
   environment: {
     staticObjects: [
+  
   {
-    id: "wall_left_vertical_wall",
+    def:  "tile",
+	id: "floor_1_tile",
+    type: "tile",
+    layer: "floor",
+    position: {
+      x: 0,
+      y: 0,
+      z: 0
+    },
+    size: {
+      x: 30,
+      y: 0.5,
+      z: 50
+    },
+    texture: "assets/textures/warehouse_floor.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
+  },
+  
+  {
+    def:  "wall",
+	id: "wall_left_vertical_wall",
     type: "wall",
     position: {
       x: 13,
@@ -70,7 +94,7 @@ export const Scene__Exported = {
     },
     size: {
       x: 1,
-      y: 7,
+      y: 3,
       z: 10
     },
     hp: 9999,
@@ -79,7 +103,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_righte_vertical_wall",
+    def:  "wall",
+	id: "wall_righte_vertical_wall",
     type: "wall",
     position: {
       x: 19,
@@ -88,7 +113,7 @@ export const Scene__Exported = {
     },
     size: {
       x: 1,
-      y: 7,
+      y: 3,
       z: 15
     },
     hp: 9999,
@@ -97,7 +122,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_left_2_horizontal_wall",
+    def:  "wall",
+	id: "wall_left_2_horizontal_wall",
     type: "wall",
     position: {
       x: 4,
@@ -115,7 +141,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_right_2_horizontal_wall",
+    def:  "wall",
+	id: "wall_right_2_horizontal_wall",
     type: "wall",
     position: {
       x: 3,
@@ -133,7 +160,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_end_piecee_vertical_wall",
+    def:  "wall",
+	id: "wall_end_piecee_vertical_wall",
     type: "wall",
     position: {
       x: 3,
@@ -151,7 +179,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_piece_end_2e_vertical_wall",
+    def:  "wall",
+	id: "wall_piece_end_2e_vertical_wall",
     type: "wall",
     position: {
       x: 3,
@@ -184,7 +213,8 @@ export const Scene__Exported = {
     texture: "default"
   },
   {
-    id: "wall_beginning_piece_1e_horizontal_wall",
+    def:  "wall",
+	id: "wall_beginning_piece_1e_horizontal_wall",
     type: "wall",
     position: {
       x: 13,
@@ -193,7 +223,7 @@ export const Scene__Exported = {
     },
     size: {
       x: 3,
-      y: 7,
+      y: 3,
       z: 1
     },
     hp: 9999,
@@ -202,7 +232,8 @@ export const Scene__Exported = {
     coverType: "full"
   },
   {
-    id: "wall_beginning_right_horizontal_wall",
+    def:  "wall",
+	id: "wall_beginning_right_horizontal_wall",
     type: "wall",
     position: {
       x: 17,
@@ -211,7 +242,7 @@ export const Scene__Exported = {
     },
     size: {
       x: 3,
-      y: 7,
+      y: 3,
       z: 1
     },
     hp: 9999,
@@ -250,7 +281,8 @@ export const Scene__Exported = {
     texture: "default"
   },
   {
-    id: "floor_1_tile",
+    def:  "tile",
+	id: "floor_test_tile",
     type: "tile",
     layer: "floor",
     position: {

@@ -78,7 +78,20 @@ export const scene_test = {
       y: 1,
       z: 16
     },
-    texture: "assets/textures/warehouse_floor.png",
+    texture: "assets/textures/cobblestone.png",
+	material: {
+  map: "assets/textures/cobblestone.png",                  // base color / albedo
+  normalMap: "assets/textures/normalMapCobblestone.png",  // normal map for bumps
+  roughnessMap: "assets/textures/roughnessMapCobblestone.png", // roughness map
+  aoMap: "assets/textures/aoMapCobblestone.png",          // ambient occlusion
+  roughness: 1.0,       // base roughness, multiplied by roughnessMap
+  metalness: 0.0,       // stone is not metallic
+  color: 0xffffff,      // optional tint
+  transparent: false,   // only true if you have alpha
+  opacity: 1.0,         // ignored unless transparent=true
+  emissive: 0x000000    // cobblestone does not emit light
+},
+
     notes: "",
     hp: 9999,
     maxHp: 9999,
