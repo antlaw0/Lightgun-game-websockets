@@ -100,8 +100,7 @@ async loadWeapons(map) {
         model.rotation.set(-0.45, 0, Math.PI / 8);
 
         // Make sure weapon meshes are not culled and do not cast/receive scene shadows.
-        // Do NOT forcibly change material depthTest/depthWrite/transparent/side here
-        // because that can make skinned weapons invisible or appear distorted.
+        // Disable depth test/write so weapons render over the environment (FPS style).
         model.traverse(c => {
             if (c.isMesh || c.isSkinnedMesh) {
                 try {
@@ -109,6 +108,13 @@ async loadWeapons(map) {
                     c.receiveShadow = false;
                     c.frustumCulled = false;
                     c.renderOrder = 9999;
+                    if (c.material) {
+                        const mats = Array.isArray(c.material) ? c.material : [c.material];
+                        mats.forEach(m => {
+                            m.depthTest = false;
+                            m.depthWrite = false;
+                        });
+                    }
                 } catch (_) {}
             }
         });
