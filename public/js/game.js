@@ -387,6 +387,7 @@ try {
 
 // FPS mode state (toggle with Tab). When true: WASD + mouse look, reticle centered.
 let isFPSMode = false;
+let playerStandingHeight = 1.7;
 const fpsState = {
   yaw: camera.rotation.y,
   pitch: camera.rotation.x,
@@ -2148,6 +2149,10 @@ function nextScene() {
 // Hook sceneLoaded event to announce
 window.addEventListener("sceneLoaded", (e) => {
   logDebug(`sceneLoaded: ${e.detail.scene.name}`);
+  // Sync player height and FPS state to the new scene camera
+  playerStandingHeight = camera.position.y;
+  fpsState.yaw = camera.rotation.y;
+  fpsState.pitch = camera.rotation.x;
 });
 
 // Hook enemyDied event for info
@@ -2965,7 +2970,7 @@ function animate(nowMs) {
   }
 
   // --- Ducking/Zooming ---
-  const targetY = ducking ? 1.2 : 1.7;
+  const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
   camera.position.y += (targetY - camera.position.y) * 0.1;
   const targetFov = zoomed ? 30 : 60;
   camera.fov += (targetFov - camera.fov) * 0.1;
@@ -3028,5 +3033,8 @@ function animate(nowMs) {
   // Render
   composer.render();
 }
+
+// Start the first level immediately
+loadLevel(Level_Warehouse);
 
 requestAnimationFrame(animate);

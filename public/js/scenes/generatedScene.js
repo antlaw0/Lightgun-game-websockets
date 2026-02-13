@@ -5,11 +5,10 @@
 export const Scene__Exported = {
   name: "map1",
   
-  // Large flat area, no enclosure
   
   camera: {
-    position: { x: 15, y: 10, z: 0 },
-    lookAt: { x: 15, y: 3.5, z: 15 },
+    position: { x: 16, y: 1.7, z: 31 },
+    lookAt: { x: 16, y: 1.7, z: 35 },
     fov: 60,
     near: 0.1,
     far: 200

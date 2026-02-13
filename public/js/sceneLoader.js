@@ -619,7 +619,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     this.objective = sceneDef.objective ?? null;
 
-    //this._notifyLoaded();
+    this._notifyLoaded();
   }
 
   // Legacy room methods removed - scenes now use absolute world positions
@@ -1035,6 +1035,9 @@ getIntersectableMeshes() {
     if (typeof window.onSceneLoaded === "function") {
       window.onSceneLoaded(this.sceneDef);
     }
+    window.dispatchEvent(new CustomEvent("sceneLoaded", {
+      detail: { scene: this.sceneDef }
+    }));
   }
 
   // -----------------------------
