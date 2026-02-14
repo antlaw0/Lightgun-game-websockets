@@ -17,7 +17,7 @@ const DEBUG_MATERIALS = false;
 
 const textureLoader = new THREE.TextureLoader();
 
-function loadTexture(path) {
+function loadTexture(path, repeatX = 1, repeatY = 1) {
   if (!path) return null;
 
   const tex = textureLoader.load(
@@ -30,6 +30,10 @@ function loadTexture(path) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
+
+  if (repeatX !== 1 || repeatY !== 1) {
+    tex.repeat.set(repeatX, repeatY);
+  }
 
   return tex;
 }
@@ -44,14 +48,16 @@ function createMaterial(
   texturePath,
   color = 0xffffff,
   roughness = 0.5,
-  metalness = 0.0
+  metalness = 0.0,
+  repeatX = 1,
+  repeatY = 1
 ) {
   if (DEBUG_MATERIALS) {
     return new THREE.MeshBasicMaterial({ color: 0xff00ff });
   }
 
   return new THREE.MeshStandardMaterial({
-    map: texturePath ? loadTexture(texturePath) : null,
+    map: texturePath ? loadTexture(texturePath, repeatX, repeatY) : null,
     color: color ?? 0xffffff,
     roughness,
     metalness,
@@ -105,17 +111,17 @@ export function buildMetalBarrel(data = {}) {
   //
   // Material
   //
-  const texLoader = new THREE.TextureLoader();
+  const matData = data.material ?? {};
+  const repeatX = matData.horizontalRepeat ?? 1;
+  const repeatY = matData.verticalRepeat ?? 1;
+
+  const loadTex = (path) => loadTexture(path, repeatX, repeatY);
 
   const material = new THREE.MeshStandardMaterial({
-    map: data.material?.map
-      ? texLoader.load(data.material.map, () => console.log("Texture loaded"))
-      : null,
-    normalMap: data.material?.normalMap
-      ? texLoader.load(data.material.normalMap)
-      : null,
-    roughness: data.material?.roughness ?? 0.6,
-    metalness: data.material?.metalness ?? 0.8
+    map: matData.map ? loadTex(matData.map) : null,
+    normalMap: matData.normalMap ? loadTex(matData.normalMap) : null,
+    roughness: matData.roughness ?? 0.6,
+    metalness: matData.metalness ?? 0.8
   });
 
   //
@@ -184,7 +190,9 @@ function buildCrate(data) {
     matData.map ?? null,
     matData.color ?? 0xffffff,
     matData.roughness ?? 0.75,
-    matData.metalness ?? 0.0
+    matData.metalness ?? 0.0,
+    matData.horizontalRepeat ?? 1,
+    matData.verticalRepeat ?? 1
   );
 
   const mesh = new THREE.Mesh(geometry, material);

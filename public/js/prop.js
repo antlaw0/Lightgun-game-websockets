@@ -174,24 +174,33 @@ console.log("indestructible?", this.indestructible);
       opacity: this.materialDef.opacity ?? 1
     };
 
+    const repeatX = this.materialDef.horizontalRepeat ?? 1;
+    const repeatY = this.materialDef.verticalRepeat ?? 1;
+
+    const loadTex = (path) => {
+      const tex = texLoader.load(path);
+      if (repeatX !== 1 || repeatY !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(repeatX, repeatY);
+      }
+      return tex;
+    };
+
     // Legacy texture support
     if (this.texture) {
-      matParams.map = texLoader.load(this.texture);
+      matParams.map = loadTex(this.texture);
     }
 
     // PBR maps
-    if (this.materialDef.map) {
-      matParams.map = texLoader.load(this.materialDef.map);
-    }
-    if (this.materialDef.normalMap) {
-      matParams.normalMap = texLoader.load(this.materialDef.normalMap);
-    }
-    if (this.materialDef.roughnessMap) {
-      matParams.roughnessMap = texLoader.load(this.materialDef.roughnessMap);
-    }
-    if (this.materialDef.metalnessMap) {
-      matParams.metalnessMap = texLoader.load(this.materialDef.metalnessMap);
-    }
+    if (this.materialDef.map) matParams.map = loadTex(this.materialDef.map);
+    if (this.materialDef.normalMap) matParams.normalMap = loadTex(this.materialDef.normalMap);
+    if (this.materialDef.roughnessMap) matParams.roughnessMap = loadTex(this.materialDef.roughnessMap);
+    if (this.materialDef.metalnessMap) matParams.metalnessMap = loadTex(this.materialDef.metalnessMap);
+    if (this.materialDef.aoMap) matParams.aoMap = loadTex(this.materialDef.aoMap);
+    if (this.materialDef.emissiveMap) matParams.emissiveMap = loadTex(this.materialDef.emissiveMap);
+    if (this.materialDef.displacementMap) matParams.displacementMap = loadTex(this.materialDef.displacementMap);
+    if (this.materialDef.alphaMap) matParams.alphaMap = loadTex(this.materialDef.alphaMap);
 
     const mat = new THREE.MeshStandardMaterial(matParams);
     const mesh = new THREE.Mesh(geo, mat);

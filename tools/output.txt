@@ -1,0 +1,345 @@
+meshes: 32
+ mesh[0] name='SM_Ambient001_M_AmbientRoom001_0' primitives=1
+  prim[0] mode=4 material=0 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+   >>> MISSING POSITION attribute
+ mesh[1] name='SM_Ambient001_M_AmbientRoom001_Glow_0' primitives=1
+  prim[0] mode=4 material=1 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[2] name='SM_Ambient001_M_AmbientRoom001_Ambient_0' primitives=1
+  prim[0] mode=4 material=2 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[3] name='arm_fps01_arm_fps01_m01_Glass_0' primitives=1
+  prim[0] mode=4 material=3 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[4] name='arm_fps01_arm_fps01_m01_0' primitives=1
+  prim[0] mode=4 material=4 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[5] name='arm_fps01_arm_anim02_m01_0' primitives=1
+  prim[0] mode=4 material=5 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[6] name='arm_fps01_arm_anim01_m01_0' primitives=1
+  prim[0] mode=4 material=6 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[7] name='arm_fps01_arm_anim03_m01_0' primitives=1
+  prim[0] mode=4 material=7 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[8] name='cs5_bodyunder001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[9] name='0' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[10] name='1' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[11] name='2' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[12] name='3' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[13] name='ReflexScope001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[14] name='cs5_compensator_001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[15] name='cs5_handguard_001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[16] name='cs5_handguard_002_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[17] name='cs5_handguard_003_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[18] name='cs5_mag_001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[19] name='ReflexScope01_Acc001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[20] name='cs5_mag_002_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=JOINTS_0,NORMAL,POSITION,TANGENT,TEXCOORD_0,WEIGHTS_0
+ mesh[21] name='4' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[22] name='5' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[23] name='6' primitives=1
+  prim[0] mode=4 material=9 attributes=JOINTS_0,NORMAL,POSITION,TEXCOORD_0,WEIGHTS_0
+ mesh[24] name='Copy:ReflexScope01_Acc001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[25] name='Copy:ReflexScope001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[26] name='Copy:cs5_mag_001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[27] name='Copy:cs5_handguard_003_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[28] name='Copy:cs5_handguard_002_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[29] name='Copy:cs5_compensator_001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[30] name='Copy:cs5_bodyunder001_M_McMillanCS5_UV1_0' primitives=1
+  prim[0] mode=4 material=8 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+ mesh[31] name='Copy:cs5_handguard_001_M_McMillanCS5_UV2_0' primitives=1
+  prim[0] mode=4 material=10 attributes=NORMAL,POSITION,TANGENT,TEXCOORD_0
+nodes: 278
+ node[0] name='Sketchfab_model'
+ node[1] name='fbx_merge.fbx'
+ node[2] name='Object_2'
+ node[3] name='RootNode'
+ node[4] name='Object_4'
+ node[5] name='_rootJoint'
+ node[6] name='Object_6'
+ node[7] name='Object_7' mesh=0   
+ node[8] name='Object_8' mesh=1   
+ node[9] name='Object_9' mesh=2   
+ node[10] name='root_terrain_0130'
+ node[11] name='root'
+ node[12] name='pelvis'
+ node[13] name='pelvis_01'
+ node[14] name='spine_01'
+ node[15] name='spine_02'
+ node[16] name='spine_03'
+ node[17] name='Object_17'
+ node[18] name='_rootJoint'
+ node[19] name='spine_04_00'
+ node[20] name='spine_05_01'
+ node[21] name='clavicle_l_014'
+ node[22] name='upperarm_l_015'
+ node[23] name='lowerarm_l_016'
+ node[24] name='hand_l_017'
+ node[25] name='thumb_00_l_018'
+ node[26] name='thumb_01_l_019'
+ node[27] name='thumb_02_l_020'
+ node[28] name='thumb_03_l_021'
+ node[29] name='index_00_l_022'
+ node[30] name='index_01_l_023'
+ node[31] name='index_02_l_024'
+ node[32] name='index_03_l_025'
+ node[33] name='middle_00_l_026'
+ node[34] name='middle_01_l_027'
+ node[35] name='middle_02_l_028'
+ node[36] name='middle_03_l_029'
+ node[37] name='ring_00_l_030'
+ node[38] name='ring_01_l_031'
+ node[39] name='ring_02_l_032'
+ node[40] name='ring_03_l_033'
+ node[41] name='pinky_00_l_034'
+ node[42] name='pinky_01_l_035'
+ node[43] name='pinky_02_l_036'
+ node[44] name='pinky_03_l_037'
+ node[45] name='lowerarm_twist_01_l_038'
+ node[46] name='upperarm_twist_01_l_039'
+ node[47] name='upperarm_tricep_l00_040'
+ node[48] name='upperarm_tricep_l01_041'
+ node[49] name='upperarm_bicep_l00_042'
+ node[50] name='upperarm_bicep_l01_043'
+ node[51] name='spine_04_belly_l00_044'
+ node[52] name='spine_04_belly_l01_045'
+ node[53] name='clavicle_r_046'
+ node[54] name='upperarm_r_047'
+ node[55] name='lowerarm_r_048'
+ node[56] name='hand_r_049'
+ node[57] name='thumb_00_r_050'
+ node[58] name='thumb_01_r_051'
+ node[59] name='thumb_02_r_052'
+ node[60] name='thumb_03_r_053'
+ node[61] name='index_00_r_054'
+ node[62] name='index_01_r_055'
+ node[63] name='index_02_r_056'
+ node[64] name='index_03_r_057'
+ node[65] name='middle_00_r_058'
+ node[66] name='middle_01_r_059'
+ node[67] name='middle_02_r_060'
+ node[68] name='middle_03_r_061'
+ node[69] name='ring_00_r_062'
+ node[70] name='ring_01_r_063'
+ node[71] name='ring_02_r_064'
+ node[72] name='ring_03_r_065'
+ node[73] name='pinky_00_r_066'
+ node[74] name='pinky_01_r_067'
+ node[75] name='pinky_02_r_068'
+ node[76] name='pinky_03_r_069'
+ node[77] name='lowerarm_twist_01_r_070'
+ node[78] name='upperarm_twist_01_r_071'
+ node[79] name='upperarm_tricep_r00_072'
+ node[80] name='upperarm_tricep_r01_073'
+ node[81] name='upperarm_bicep_r00_074'
+ node[82] name='upperarm_bicep_r01_075'
+ node[83] name='spine_04_belly_r00_076'
+ node[84] name='spine_04_belly_r01_077'
+ node[85] name='neck_00_02'
+ node[86] name='neck_01_03'
+ node[87] name='head_04'
+ node[88] name='facialRoot_05'
+ node[89] name='jaw_06'
+ node[90] name='jaw_tip_07'
+ node[91] name='eye_right_08'
+ node[92] name='eye_left_09'
+ node[93] name='eyelidLower_left_010'
+ node[94] name='eyelidLower_right_011'
+ node[95] name='eyelidUpper_left_012'
+ node[96] name='eyelidUpper_right_013'
+ node[97] name='spine_04_breast_r00_078'
+ node[98] name='spine_04_breast_r01_079'
+ node[99] name='spine_04_breast_l00_080'
+ node[100] name='spine_04_breast_l01_081'
+ node[101] name='spine_03_belly00'
+ node[102] name='spine_03_belly01'
+ node[103] name='Object_103'
+ node[104] name='Object_104' mesh=3   
+ node[105] name='Object_105' mesh=4   
+ node[106] name='Object_106' mesh=5   
+ node[107] name='Object_107' mesh=6   
+ node[108] name='Object_108' mesh=7   
+ node[109] name='spine_02_belly00'
+ node[110] name='spine_02_belly01'
+ node[111] name='spine_01_belly00'
+ node[112] name='spine_01_belly01'
+ node[113] name='pelvis_bicep_bl00'
+ node[114] name='pelvis_bicep_bl01'
+ node[115] name='pelvis_bicep_br00'
+ node[116] name='pelvis_bicep_br01'
+ node[117] name='thigh_l'
+ node[118] name='calf_l'
+ node[119] name='foot_l'
+ node[120] name='ball_l'
+ node[121] name='calf_twist_01_l'
+ node[122] name='calf_bicep_bl00'
+ node[123] name='calf_bicep_bl01'
+ node[124] name='thigh_twist_01_l'
+ node[125] name='thigh_bicep_bl00'
+ node[126] name='thigh_bicep_bl01'
+ node[127] name='thigh_bicep_fl00'
+ node[128] name='thigh_bicep_fl01'
+ node[129] name='thigh_r'
+ node[130] name='calf_r'
+ node[131] name='foot_r'
+ node[132] name='ball_r'
+ node[133] name='calf_twist_01_r'
+ node[134] name='calf_bicep_br00'
+ node[135] name='calf_bicep_br01'
+ node[136] name='thigh_twist_01_r'
+ node[137] name='thigh_bicep_br00'
+ node[138] name='thigh_bicep_br01'
+ node[139] name='thigh_bicep_fr00'
+ node[140] name='thigh_bicep_fr01'
+ node[141] name='interaction'
+ node[142] name='ik_foot_root'
+ node[143] name='ik_foot_l'
+ node[144] name='ik_foot_r'
+ node[145] name='center_of_mass'
+ node[146] name='ik_hand_root'
+ node[147] name='ik_hand_gun'
+ node[148] name='ik_hand_l'
+ node[149] name='ik_hand_r'
+ node[150] name='root_camera'
+ node[151] name='spine_cam_01'
+ node[152] name='spine_cam_02'
+ node[153] name='spine_cam_03'
+ node[154] name='neck_camera'
+ node[155] name='head_camera'
+ node[156] name='eye_camera'
+ node[157] name='arm_fps01'
+ node[158] name='weaponrig501:root_cs5'
+ node[159] name='Object_159'
+ node[160] name='_rootJoint'
+ node[161] name='weaponrig501:body_083'
+ node[162] name='weaponrig501:Mag_hold_0114'
+ node[163] name='weaponrig501:MagHandle_082'
+ node[164] name='weaponrig501:MagHandleMain_085'
+ node[165] name='weaponrig501:Soket_MagMain_086'
+ node[166] name='weaponrig501:Soket_MagMainbullet001_087'
+ node[167] name='weaponrig501:Soket_MagMainbullet002_088'
+ node[168] name='weaponrig501:Soket_MagMainbullet003_089'
+ node[169] name='weaponrig501:Soket_MagMainbullet004_090'
+ node[170] name='weaponrig501:MagHandleSub_091'
+ node[171] name='weaponrig501:Soket_MagSub_092'
+ node[172] name='weaponrig501:Soket_MagSubbullet001_093'
+ node[173] name='weaponrig501:Soket_MagSubbullet002_094'
+ node[174] name='weaponrig501:Soket_MagSubbullet003_095'
+ node[175] name='weaponrig501:Soket_MagSubbullet004_096'
+ node[176] name='weaponrig501:BoltHandle_097'
+ node[177] name='weaponrig501:Bolt_098'
+ node[178] name='weaponrig501:Soket_bullet_099'
+ node[179] name='weaponrig501:Soket_ChargeHandle_0100'
+ node[180] name='weaponrig501:Aim_0101'
+ node[181] name='weaponrig501:Ammo_0102'
+ node[182] name='weaponrig501:Soket_Stock_0103'
+ node[183] name='weaponrig501:Soket_Barrel_084'
+ node[184] name='weaponrig501:Soket_Compensator_0104'
+ node[185] name='weaponrig501:Soket_Grip_0105'
+ node[186] name='weaponrig501:Soket_Ironsight_0106'
+ node[187] name='weaponrig501:Soket_Scope_0107'
+ node[188] name='weaponrig501:Handgaurd_0108'
+ node[189] name='weaponrig501:Soket_body_0109'
+ node[190] name='weaponrig501:Bolt_hold_L_0110'
+ node[191] name='weaponrig501:Bolt_hold_R_0111'
+ node[192] name='weaponrig501:Bolt001_0112'
+ node[193] name='weaponrig501:fire_selector_0113'
+ node[194] name='Object_194'
+ node[195] name='Object_195' mesh=8   
+ node[196] name='weaponrig501:Armature'
+ node[197] name='Object_197'
+ node[198] name='_rootJoint'
+ node[199] name='weaponrig501:soket_cs5_compensator_001_0115'
+ node[200] name='weaponrig501:soket_cs5_handguard_001_0116'
+ node[201] name='weaponrig501:soket_cs5_handguard_002_0117'
+ node[202] name='weaponrig501:soket_cs5_handguard_003_0118'
+ node[203] name='weaponrig501:soket_cs5_mag_001_0119'
+ node[204] name='weaponrig501:soket_cs5_mag_002_0120'
+ node[205] name='weaponrig501:soket_cs5_ReflexScope001_0121'
+ node[206] name='weaponrig501:soket_cs5_ReflexScope01_Acc001_0122'
+ node[207] name='bullet_rifle308:soket_bullet_rifle308_main_001_0123'
+ node[208] name='bullet_rifle308:soket_bullet_rifle308_main_002_0124'
+ node[209] name='bullet_rifle308:soket_bullet_rifle308_main_003_0125'
+ node[210] name='bullet_rifle308:soket_bullet_rifle308_sub_001_0126'
+ node[211] name='bullet_rifle308:soket_bullet_rifle308_sub_002_0127'
+ node[212] name='bullet_rifle308:soket_bullet_rifle308_sub_003_0128'
+ node[213] name='weaponrig501:soket_cs5_bullet_0129'
+ node[214] name='Object_214'
+ node[215] name='Object_215' mesh=9   
+ node[216] name='Object_216'
+ node[217] name='Object_217' mesh=10   
+ node[218] name='Object_218'
+ node[219] name='Object_219' mesh=11   
+ node[220] name='Object_220'
+ node[221] name='Object_221' mesh=12   
+ node[222] name='Object_222'
+ node[223] name='Object_223' mesh=13   
+ node[224] name='Object_224'
+ node[225] name='Object_225' mesh=14   
+ node[226] name='Object_226'
+ node[227] name='Object_227' mesh=15   
+ node[228] name='Object_228'
+ node[229] name='Object_229' mesh=16   
+ node[230] name='Object_230'
+ node[231] name='Object_231' mesh=17   
+ node[232] name='Object_232'
+ node[233] name='Object_233' mesh=18   
+ node[234] name='Object_234'
+ node[235] name='Object_235' mesh=19   
+ node[236] name='Object_236'
+ node[237] name='Object_237' mesh=20   
+ node[238] name='Object_238'
+ node[239] name='Object_239' mesh=21   
+ node[240] name='Object_240'
+ node[241] name='Object_241' mesh=22   
+ node[242] name='Object_242'
+ node[243] name='Object_243' mesh=23   
+ node[244] name='bullet_rifle308:bullet_rifle308_00'
+ node[245] name='bullet_rifle308:bullet_rifle308_main_01'
+ node[246] name='bullet_rifle308:bullet_rifle308_main_002'
+ node[247] name='bullet_rifle308:bullet_rifle308_main_003'
+ node[248] name='cs5_bodyunder001'
+ node[249] name='ReflexScope001'
+ node[250] name='cs5_compensator_001'
+ node[251] name='cs5_handguard_001'
+ node[252] name='cs5_handguard_002'
+ node[253] name='cs5_handguard_003'
+ node[254] name='cs5_mag_001'
+ node[255] name='ReflexScope01_Acc001'
+ node[256] name='cs5_mag_002'
+ node[257] name='bullet_rifle308:bullet_rifle308_sub_001'
+ node[258] name='bullet_rifle308:bullet_rifle308_sub_002'
+ node[259] name='bullet_rifle308:bullet_rifle308_sub_003'
+ node[260] name='Copy:ReflexScope01_Acc001'
+ node[261] name='Copy:ReflexScope01_Acc001_M_McMillanCS5_UV2_0' mesh=24   
+ node[262] name='Copy:ReflexScope001'
+ node[263] name='Copy:ReflexScope001_M_McMillanCS5_UV2_0' mesh=25   
+ node[264] name='Copy:cs5_mag_001'
+ node[265] name='Object_265'
+ node[266] name='Copy:cs5_mag_001_M_McMillanCS5_UV1_0' mesh=26   
+ node[267] name='Copy:cs5_handguard_003'
+ node[268] name='Copy:cs5_handguard_003_M_McMillanCS5_UV2_0' mesh=27   
+ node[269] name='Copy:cs5_handguard_002'
+ node[270] name='Copy:cs5_handguard_002_M_McMillanCS5_UV2_0' mesh=28   
+ node[271] name='Copy:cs5_compensator_001'
+ node[272] name='Copy:cs5_compensator_001_M_McMillanCS5_UV1_0' mesh=29   
+ node[273] name='Copy:cs5_bodyunder001'
+ node[274] name='Copy:cs5_bodyunder001_M_McMillanCS5_UV1_0' mesh=30   
+ node[275] name='Copy:cs5_handguard_001'
+ node[276] name='Copy:cs5_handguard_001_M_McMillanCS5_UV2_0' mesh=31   
+ node[277] name='SM_Ambient001'

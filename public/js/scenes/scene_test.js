@@ -57,7 +57,8 @@ export const scene_test = {
         mapSize: { width: 2048, height: 2048 },
         camera: { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 50 }
       }
-    }
+    },
+	
   ],
 
 
@@ -75,15 +76,17 @@ export const scene_test = {
     },
     size: {
       x: 25,
-      y: 1,
+      y: 0.5,
       z: 16
     },
     texture: "assets/textures/cobblestone.png",
 	material: {
-  map: "assets/textures/cobblestone.png",                  // base color / albedo
-  normalMap: "assets/textures/normalMapCobblestone.png",  // normal map for bumps
-  roughnessMap: "assets/textures/roughnessMapCobblestone.png", // roughness map
-  aoMap: "assets/textures/aoMapCobblestone.png",          // ambient occlusion
+  horizontalRepeat:  25,
+  verticalRepeat:  16,
+  map: "assets/textures/pavingstone.png",                  // base color / albedo
+  normalMap: "assets/textures/pavingstoneNormal.png",  // normal map for bumps
+  roughnessMap: "assets/textures/pavingstoneRoughness.png", // roughness map
+  aoMap: "assets/textures/pavingstoneAO.png",          // ambient occlusion
   roughness: 1.0,       // base roughness, multiplied by roughnessMap
   metalness: 0.0,       // stone is not metallic
   color: 0xffffff,      // optional tint
