@@ -32,6 +32,16 @@ export class WeaponManager {
         // Your rifle already works, but keep it explicit
         position: new THREE.Vector3(0.00, -0.6400, -0.95),
         scale: 0.75
+    },
+
+    sniperRifle: {
+        position: new THREE.Vector3(-0.5410, -1.4427, -7.0906),
+        scale: 1.0
+    },
+
+    rocketLauncher: {
+        position: new THREE.Vector3(0, 0, -1.0),
+        scale: 1.5
     }
 };
 
@@ -52,6 +62,16 @@ export class WeaponManager {
                 position: new THREE.Vector3(0.4, 0.32, -0.9),
                 rotation: new THREE.Euler(0.44, -0.58, 0, 'XYZ'),
                 scale: new THREE.Vector3(2.6388, 2.6388, 2.6388)
+            },
+            sniperRifle: {
+                position: new THREE.Vector3(1.4200, -0.8400, -1.5200),
+                rotation: new THREE.Euler(-0.0200, -1.0400, -1.1800, 'XYZ'),
+                scale: new THREE.Vector3(0.1109, 0.1109, 0.1109)
+            },
+            rocketLauncher: {
+                position: new THREE.Vector3(0.5, -0.5, -0.8),
+                rotation: new THREE.Euler(0, 0, 0, 'XYZ'),
+                scale: new THREE.Vector3(1, 1, 1)
             }
         };
 
@@ -998,7 +1018,7 @@ scale: ${g.scale.x.toFixed(4)}${muzzleInfo}`
             }
 
             // Scale
-                if (e.code === 'Numpad1') {
+                if (e.code === 'Numpad1' || e.code === 'NumpadAdd') {
                     if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
                         weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
                         weapon._muzzleDebugScale = weapon._muzzleDebugScale * (1 + this.debugScaleStep);
@@ -1008,7 +1028,7 @@ scale: ${g.scale.x.toFixed(4)}${muzzleInfo}`
                     }
                 }
 
-                if (e.code === 'Numpad7') {
+                if (e.code === 'Numpad7' || e.code === 'NumpadSubtract') {
                     if (this._animDebug && this._animDebug.active && weapon._muzzleDebugMode) {
                         weapon._muzzleDebugScale = weapon._muzzleDebugScale || 1.0;
                         weapon._muzzleDebugScale = Math.max(0.01, weapon._muzzleDebugScale * (1 - this.debugScaleStep));

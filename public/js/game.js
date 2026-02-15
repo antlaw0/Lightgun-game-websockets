@@ -417,10 +417,12 @@ weaponManager
   .loadWeapons({
     pistol: 'assets/models/weapons/pistol.glb',
     shotgun: 'assets/models/weapons/shotgun.glb',
-    assaultRifle: 'assets/models/weapons/assault_rifle.glb'
+    assaultRifle: 'assets/models/weapons/assault_rifle.glb',
+    sniperRifle: 'assets/models/weapons/sniper.glb',
+    rocketLauncher: 'assets/models/weapons/rpg.glb'
   })
   .then(() => {
-    weaponManager.registerWeaponOrder(['pistol','shotgun','assaultRifle']);
+    weaponManager.registerWeaponOrder(['pistol','shotgun','assaultRifle','sniperRifle','rocketLauncher']);
     weaponManager.equipWeapon('pistol'); // now it will appear
   });
 

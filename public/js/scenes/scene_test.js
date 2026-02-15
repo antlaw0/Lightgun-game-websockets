@@ -79,7 +79,7 @@ export const scene_test = {
       y: 0.5,
       z: 16
     },
-    texture: "assets/textures/cobblestone.png",
+    
 	material: {
   horizontalRepeat:  25,
   verticalRepeat:  16,
