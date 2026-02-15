@@ -40,8 +40,8 @@ export class WeaponManager {
     },
 
     rocketLauncher: {
-        position: new THREE.Vector3(0, 0, -1.0),
-        scale: 1.5
+        position: new THREE.Vector3(0.3200, -2.6600, -4.7600),
+        scale: 5
     }
 };
 
@@ -69,8 +69,8 @@ export class WeaponManager {
                 scale: new THREE.Vector3(0.1109, 0.1109, 0.1109)
             },
             rocketLauncher: {
-                position: new THREE.Vector3(0.5, -0.5, -0.8),
-                rotation: new THREE.Euler(0, 0, 0, 'XYZ'),
+                position: new THREE.Vector3(-0.1000, 0.1600, 0.1400),
+                rotation: new THREE.Euler(0.4800, -0.6200, 0.0000, 'XYZ'),
                 scale: new THREE.Vector3(1, 1, 1)
             }
         };
