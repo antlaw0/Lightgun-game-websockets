@@ -469,11 +469,17 @@ if (pdef.type === "prefab" && pdef.prefab) {
     const depth  = pdef.size?.z ?? 0.15;
 
     const geo = new THREE.BoxGeometry(width, height, depth);
-    const mat = new THREE.MeshStandardMaterial({
+    const matParams = {
       color: 0xffff00,
       roughness: 0.6,
       metalness: 0.1
-    });
+    };
+    if (pdef.texture) {
+      matParams.map = new THREE.TextureLoader().load(pdef.texture);
+      matParams.map.colorSpace = THREE.SRGBColorSpace;
+      matParams.color = 0xffffff;
+    }
+    const mat = new THREE.MeshStandardMaterial(matParams);
 
     const door = new THREE.Mesh(geo, mat);
 
@@ -498,28 +504,17 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     this.scene.add(door);
 
-    // Doors may optionally be destructible via pdef.hp / pdef.indestructible
-    const doorHp = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
-    const doorInd = !!pdef.indestructible;
+    // Create wrapper for the door
     const doorWrapper = {
       id: pdef.id,
       mesh: door,
       size: { x: width, y: height, z: depth },
-      hp: doorHp,
-      maxHp: doorHp,
-      indestructible: doorInd,
-      hitSounds: pdef.hitSounds ?? [],
-      deathSounds: pdef.deathSounds ?? [],
-      takeDamage(amount) {
-        try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; const a = new Audio(s); a.play().catch(()=>{}); } } catch(e){}
-        if (this.indestructible) return false;
-        this.hp -= amount;
-        if (this.hp <= 0) {
-          if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-          return true;
-        }
-        return false;
-      },
+      hp: 9999,
+      maxHp: 9999,
+      indestructible: true,
+      hitSounds: [],
+      deathSounds: [],
+      takeDamage(amount) { return false; },
       dispose() {
         try { if (this.mesh) { this.mesh.geometry?.dispose(); if (this.mesh.material?.map) this.mesh.material.map.dispose(); this.mesh.material?.dispose(); } } catch(e){}
       }
@@ -528,6 +523,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
     try { doorWrapper._sceneDef = pdef; } catch(e){}
     this.addProp(doorWrapper);
 
+    // Link to transition objects for animation (SceneManager)
     const transitions = this.sceneDef.transitionObjects;
     if (Array.isArray(transitions)) {
       const t = transitions.find(t => t.id === pdef.id);

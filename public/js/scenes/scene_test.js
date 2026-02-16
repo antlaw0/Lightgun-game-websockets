@@ -64,7 +64,30 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
-  
+  {
+    id: "door_01",
+    type: "door",
+    position: {
+        x: 1,
+        y: 0,
+        z: 18
+    },
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 1.2,
+        y: 2.2,
+        z: 0.15
+    },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+	texture:  "assets/textures/door_wood.png",
+    openSound: "assets/sfx/door1.ogg"
+},
   
   {
     def:  "wall",
