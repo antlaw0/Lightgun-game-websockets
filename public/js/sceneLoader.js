@@ -196,6 +196,14 @@ _applyCameraSettings() {
         );
         break;
 
+      case "hemisphere":
+        light = new THREE.HemisphereLight(
+          def.skyColor ?? def.color ?? 0xffffff,
+          def.groundColor ?? 0x444444,
+          def.intensity ?? 1
+        );
+        break;
+
       default:
         console.warn("Unknown light type:", def.type);
         return;

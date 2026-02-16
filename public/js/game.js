@@ -10,6 +10,8 @@ import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/exam
 import { SSAOPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/SSAOPass.js';
 import { FXAAShader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/shaders/FXAAShader.js';
 import { ShaderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/ShaderPass.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/environments/RoomEnvironment.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
@@ -425,6 +427,18 @@ weaponManager
     weaponManager.registerWeaponOrder(['pistol','shotgun','assaultRifle','sniperRifle','rocketLauncher']);
     weaponManager.equipWeapon('pistol'); // now it will appear
   });
+
+// Load rocket projectile model
+let rocketModel = null;
+new GLTFLoader().load('assets/models/weapons/rocket.glb', (gltf) => {
+    rocketModel = gltf.scene;
+    rocketModel.traverse(c => {
+        if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+        }
+    });
+});
 
 // Create player now that camera exists so it can be passed in
 player = new Player({
@@ -1442,6 +1456,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
+
+// --- Environment Map for PBR ---
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
 // --- Post-processing ---
 const composer = new EffectComposer(renderer);
@@ -2657,6 +2675,48 @@ function updateDynamicReticle({
   document.documentElement.style.setProperty("--reticle-size", `${(finalRadius * 2).toFixed(1)}px`);
 }
 
+// --- Smoke Trail System ---
+const smokeParticles = [];
+const smokeTexture = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(16,16,0, 16,16,16);
+    grad.addColorStop(0, 'rgba(200,200,200,1)');
+    grad.addColorStop(1, 'rgba(200,200,200,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,32,32);
+    return new THREE.CanvasTexture(canvas);
+})();
+
+function spawnSmokeTrail(pos) {
+    const spriteMaterial = new THREE.SpriteMaterial({ 
+        map: smokeTexture, 
+        color: 0xaaaaaa,
+        transparent: true, 
+        opacity: 0.4,
+        depthWrite: false 
+    });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.position.copy(pos);
+    const scale = 0.5 + Math.random() * 0.3;
+    sprite.scale.set(scale, scale, scale);
+    scene.add(sprite);
+    smokeParticles.push({ mesh: sprite, age: 0, lifetime: 0.8, velocity: new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1 + 0.2, (Math.random()-0.5)*0.1) });
+}
+
+function updateSmokeParticles(dt) {
+    const delta = dt / 1000;
+    for (let i = smokeParticles.length - 1; i >= 0; i--) {
+        const p = smokeParticles[i];
+        p.age += delta;
+        if (p.age >= p.lifetime) { scene.remove(p.mesh); p.mesh.material.dispose(); smokeParticles.splice(i, 1); continue; }
+        p.mesh.material.opacity = 0.4 * (1 - p.age / p.lifetime);
+        p.mesh.scale.addScalar(delta * 1.5);
+        p.mesh.position.addScaledVector(p.velocity, delta);
+    }
+}
+
 /**
  * Spawn a projectile (player or enemy)
  * @param {THREE.Vector3} origin - start position
@@ -2687,28 +2747,32 @@ function spawnProjectileUnified(origin, direction, options = {}) {
     const dir = direction.clone().normalize();
 
   // Geometry & material
-  let geo, mat;
+  let bullet;
   let finalSpeed = speed;
-  if (projectileType === "laser") {
+
+  if (projectileType === "rocket" && rocketModel) {
+      bullet = rocketModel.clone();
+      bullet.position.copy(origin);
+      // Align rocket to direction (assuming +Z forward model, adjust if needed)
+      bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      // Scale rocket if needed (using size param or fixed)
+      bullet.scale.setScalar(3.0); 
+  } else if (projectileType === "laser") {
     const radius = Math.max(0.005, size);
     const length = 0.5;
-    geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1);
+    const geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1);
     geo.rotateX(Math.PI / 2); // make cylinder's axis point along +Z
-    mat = new THREE.MeshBasicMaterial({ color: color ?? 0xffffff });
+    const mat = new THREE.MeshBasicMaterial({ color: color ?? 0xffffff });
     // Make lasers faster by default if caller didn't override speed
     if (typeof options.speed === 'undefined') finalSpeed = PROJECTILE_SPEED * 4;
-  } else {
-    geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
-    mat = new THREE.MeshBasicMaterial({ color });
-  }
-
-  const bullet = new THREE.Mesh(geo, mat);
-  bullet.position.copy(origin);
-
-  // Orient to travel direction
-  if (projectileType === "laser") {
+    bullet = new THREE.Mesh(geo, mat);
+    bullet.position.copy(origin);
     bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
   } else {
+    const geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    bullet = new THREE.Mesh(geo, mat);
+    bullet.position.copy(origin);
     bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
   }
 
@@ -2724,7 +2788,7 @@ function spawnProjectileUnified(origin, direction, options = {}) {
     };
 
     // Motion trail
-    if (trail) {
+    if (trail && projectileType !== "rocket") {
       const trailLength = Math.max(0.02, size * 5);
       let points;
       if (projectileType === "laser") points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -trailLength)];
@@ -2759,6 +2823,10 @@ function updateProjectiles(dt) {
 const moveDist = bullet.userData.speed * (dt / 1000);
 		
         bullet.position.addScaledVector(dir, moveDist);
+
+        if (bullet.userData.projectileType === 'rocket') {
+            spawnSmokeTrail(bullet.position);
+        }
 
         // --- LIFETIME CHECK ---
         const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
@@ -3021,6 +3089,7 @@ function animate(nowMs) {
 
   // Update sparks
   updateSparks(deltaMs / 1000);
+  updateSmokeParticles(deltaMs);
 
   // Update auto-fire
   updateAutoFire(nowMs);

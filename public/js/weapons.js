@@ -144,7 +144,7 @@ export const WEAPON_DEFS = {
   rocketLauncher: baseWeapon({
     name: "Rocket Launcher",
     fireSound: "assets/sfx/weapons/rocket_fire.ogg",
-    reloadSound: "assets/sfx/rocket_reload.ogg",
+    reloadSound: "assets/sfx/weapons/rocket_reload.ogg",
     reloadTime: 2500,
 
     fireMode: "semi-auto",

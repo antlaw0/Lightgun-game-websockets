@@ -20,9 +20,15 @@ const sounds = {
   ],
 
   // Example: environment impacts
-  metal: [
-    basePath + "metal1.ogg",
-    basePath + "metal2.ogg"
+  ricMetal: [
+    basePath + "ricMetal1.ogg",
+    basePath + "ricMetal2.ogg",
+	basePath + "ricMetal3.ogg",
+	basePath + "ricMetal4.ogg",
+	basePath + "ricMetal4.ogg"
+    
+    
+    
   ]
 }; // closes sounds object
 

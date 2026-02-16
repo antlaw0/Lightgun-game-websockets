@@ -21,7 +21,7 @@ export const scene_test = {
     {
       type: "ambient",
       color: 0x0000FF,
-      intensity: 0.8
+      intensity: 0.3
     },
     ,{
     type: "hemisphere",
@@ -64,15 +64,34 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
+  
+  
+  {
+    def:  "wall",
+	id: "wall_1_object",
+    type: "wall",
+    position: {
+      x: 0,
+      y: 0,
+      z: 0
+    },
+    size: {
+      x: 25,
+      y: 10,
+      z: 1
+    },
+    texture: "assets/textures/blue.png"
+  },
+  
   {
     def:  "tile",
 	id: "floor_1_tile",
     type: "tile",
     layer: "floor",
     position: {
-      x: 2,
+      x: 0,
       y: 0,
-      z: 2
+      z: 0
     },
     size: {
       x: 25,
@@ -121,16 +140,32 @@ export const scene_test = {
 	id: "wall_2_object",
     type: "object",
     position: {
-      x: 4,
+      x: 17,
       y: 0,
-      z: 14
+      z: 13
     },
     size: {
       x: 1,
-      y: 4,
+      y: 3,
       z: 1
     },
+		material: {
+  horizontalRepeat:  1,
+  verticalRepeat:  2,
+  map: "assets/textures/metal01/metal01Color.png",                  // base color / albedo
+  normalMap: "assets/textures/metal01/metal01Normal.png",  // normal map for bumps
+  roughnessMap: "assets/textures/metal01/metal01Roughness.png", // roughness map
+  //aoMap: "assets/textures/metal01/metal01AO.png",          // ambient occlusion
+  roughness: 0.0,       // base roughness, multiplied by roughnessMap
+  metalness: 1.0,       
+  color: 0xffffff,      // optional tint
+  transparent: false,   // only true if you have alpha
+  opacity: 1.0,         // ignored unless transparent=true
+  emissive: 0x000000    // cobblestone does not emit light
+},
+
     texture: "assets/textures/blue.png"
+	
   }
 ]
   },
