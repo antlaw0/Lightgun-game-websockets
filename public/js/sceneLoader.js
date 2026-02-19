@@ -344,11 +344,28 @@ if (pdef.type === "prefab" && pdef.prefab) {
     }
 
     if (pdef.scale) {
-        propInstance.mesh.scale.set(
-            pdef.scale.x ?? 1,
-            pdef.scale.y ?? 1,
-            pdef.scale.z ?? 1
-        );
+        if (typeof pdef.scale === 'number') {
+            const s = pdef.scale;
+            propInstance.mesh.scale.set(s, s, s);
+            // Update logical size for collision (clone to avoid mutating def)
+            if (propInstance.size) {
+                propInstance.size = { ...propInstance.size };
+                propInstance.size.x *= s;
+                propInstance.size.y *= s;
+                propInstance.size.z *= s;
+            }
+        } else {
+            const sx = pdef.scale.x ?? 1;
+            const sy = pdef.scale.y ?? 1;
+            const sz = pdef.scale.z ?? 1;
+            propInstance.mesh.scale.set(sx, sy, sz);
+            if (propInstance.size) {
+                propInstance.size = { ...propInstance.size };
+                propInstance.size.x *= sx;
+                propInstance.size.y *= sy;
+                propInstance.size.z *= sz;
+            }
+        }
     }
 
     // Traverse the mesh for shadow / hit detection

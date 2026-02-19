@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js";
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { Prop } from "./prop.js";
 
 /*
@@ -73,17 +74,15 @@ function createMaterial(
 */
 
 export function buildPrefab(type, data = {}) {
-  switch (type) {
-    case "metal_barrel":
-      return buildMetalBarrel(data);
+  // Procedural prefabs (legacy)
+  if (type === "metal_barrel") return buildMetalBarrel(data);
+  if (type === "crate") return buildCrate(data);
 
-    case "crate":
-      return buildCrate(data);
-
-    default:
-      console.warn("Unknown prefab type:", type);
-      return null;
-  }
+  // Generic GLB prefab
+  // The prefab property is the name of the glb file to be used.
+  // All glb props will be located at "assets/models/props"
+  const url = `assets/models/props/${type}`;
+  return buildGLBPrefab(url, type, data);
 }
 
 /*
@@ -219,4 +218,51 @@ function buildCrate(data) {
   mesh.userData.prop = crateProp;
 
   return crateProp;
+}
+
+/*
+=====================================================
+ GLB PREFABS
+=====================================================
+*/
+
+const gltfLoader = new GLTFLoader();
+
+function buildGLBPrefab(url, type, data) {
+  const prop = new Prop({
+    id: data.id ?? `${type}_${crypto.randomUUID()}`,
+    type: type,
+    position: data.position ?? { x: 0, y: 0, z: 0 },
+    size: data.size ?? { x: 1, y: 1, z: 1 },
+    hp: data.hp ?? 100,
+    indestructible: data.indestructible ?? true,
+    hitSounds: data.hitSounds ?? [],
+    deathSounds: data.deathSounds ?? [],
+    material: data.material
+  });
+
+  const group = new THREE.Group();
+  group.position.set(prop.position.x, prop.position.y, prop.position.z);
+  
+  group.userData.prop = prop;
+  prop.mesh = group;
+
+  gltfLoader.load(url, (gltf) => {
+    const model = gltf.scene;
+    model.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.userData.prop = prop;
+        child.userData.propId = prop.id;
+        child.userData.solid = true;
+        if (window.sceneLoader && window.sceneLoader.propMeshes) {
+          window.sceneLoader.propMeshes.push(child);
+        }
+      }
+    });
+    group.add(model);
+  }, undefined, (err) => console.error(`Failed to load prefab ${type}:`, err));
+
+  return prop;
 }

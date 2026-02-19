@@ -64,6 +64,24 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
+  
+  {
+id:  "forklift",
+type:  "prefab",
+prefab:  "forklift.glb",
+position:  {  x:  3, y:  0, z:  12 },
+scale:  {  x:  2, y:  2, z:  2  },
+hp:  9999,
+maxHp: 9999,
+indestructible:  true	  
+  },
+  {
+	id:  "crateA",
+type:  "prefab",
+prefab:  "woodenCrate01.glb",
+position:  {  x:  0, y:  0, z:  0  },
+scale:  {  x:  1, y:  1, z:  1 }	
+  },
   {
     id: "door_01",
     type: "door",
