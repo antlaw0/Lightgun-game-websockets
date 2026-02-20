@@ -9,8 +9,14 @@ const express = require('express');
 const https = require('https');
 const WebSocket = require('ws');
 
-const CERT_PATH = path.join(__dirname, 'cert.pem');
-const KEY_PATH = path.join(__dirname, 'key.pem');
+// prefer cert files in the `cert/` subfolder, fall back to project root
+const CERT_DIR = path.join(__dirname, 'cert');
+const CERT_PATH = fs.existsSync(path.join(CERT_DIR, 'cert.pem'))
+  ? path.join(CERT_DIR, 'cert.pem')
+  : path.join(__dirname, 'cert.pem');
+const KEY_PATH = fs.existsSync(path.join(CERT_DIR, 'key.pem'))
+  ? path.join(CERT_DIR, 'key.pem')
+  : path.join(__dirname, 'key.pem');
 const PORT = 8080;
 
 if (!fs.existsSync(CERT_PATH) || !fs.existsSync(KEY_PATH)) {
@@ -31,6 +37,30 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
+
+// API: list textures under public/assets/textures (recursive)
+app.get('/api/list-textures', (req, res) => {
+  const texDir = path.join(__dirname, 'public', 'assets', 'textures');
+  const exts = new Set(['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif']);
+  const out = [];
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+    for (const it of items) {
+      const p = path.join(dir, it.name);
+      if (it.isDirectory()) walk(p);
+      else if (it.isFile()) {
+        if (exts.has(path.extname(it.name).toLowerCase())) {
+          // return path relative to public/ so client can fetch directly
+          const rel = path.relative(path.join(__dirname, 'public'), p).split(path.sep).join('/');
+          out.push('/' + rel);
+        }
+      }
+    }
+  }
+  walk(texDir);
+  res.json({ textures: out });
+});
 
 const server = https.createServer(options, app);
 
@@ -104,7 +134,34 @@ setInterval(() => {
   });
 }, 30000);
 
-server.listen(PORT, () => {
-  console.log(`HTTPS + WebSocket server listening on port ${PORT}`);
-  console.log(`Open https://<your-hostname>:${PORT}/game.html on PC and https://<your-host-ip>:${PORT}/controller.html on phone`);
-});
+function tryListen(startPort, maxAttempts = 10) {
+  let attempt = 0;
+  const tryPort = (p) => {
+    const onError = (err) => {
+      if (err.code === 'EADDRINUSE') {
+        server.close();
+        attempt += 1;
+        if (attempt > maxAttempts) {
+          console.error(`All ports ${startPort}-${startPort + maxAttempts} in use. Exiting.`);
+          process.exit(1);
+        } else {
+          const next = startPort + attempt;
+          console.log(`Port ${p} in use, trying ${next}...`);
+          tryPort(next);
+        }
+      } else {
+        console.error('Server error:', err);
+        process.exit(1);
+      }
+    };
+
+    server.once('error', onError);
+    server.listen(p, () => {
+      console.log(`HTTPS + WebSocket server listening on port ${p}`);
+      console.log(`Open https://<your-hostname>:${p}/game.html on PC and https://<your-host-ip>:${p}/controller.html on phone`);
+    });
+  };
+  tryPort(startPort);
+}
+
+tryListen(PORT, 10);

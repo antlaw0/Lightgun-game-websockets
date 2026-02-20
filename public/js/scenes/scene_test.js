@@ -64,7 +64,35 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
-  
+{
+    id: "walkway",
+    type: "metalwalkway.glb",
+    prefab: "metalwalkway.glb",
+    position: {
+        x: 14.39999999999997,
+        y: 0,
+        z: 12
+    },
+    scale: {
+        x: 4,
+        y: 5,
+        z: 4
+    },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    coverType: "none",
+    size: {
+        x: 2,
+        y: 2,
+        z: 2
+    }
+},  
   {
 id:  "forklift",
 type:  "prefab",

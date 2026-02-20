@@ -39,6 +39,8 @@ console.log('materials detail:');
 (gltf.materials||[]).forEach((m,i)=>{
   console.log(` material[${i}]: name='${m.name||''}' pbrMetallicRoughness=${!!m.pbrMetallicRoughness} baseColorTexture=${m.pbrMetallicRoughness?.baseColorTexture?.index}`);
 });
+
+console.log(child.geometry.attributes.uv);
 // check for bufferViews count and binary chunk size
 console.log('bufferViews:', (gltf.bufferViews||[]).length);
 if (chunks.length>1) {

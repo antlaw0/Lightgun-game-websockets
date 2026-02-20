@@ -36,4 +36,4 @@ Do not make commits or pushes to github unless I explicitely tell you to in a ch
 - Dexterity determines weapon Accuracy
 - Endurance determines HP and defense, overall durability
 - Intelligence determines effectiveness of things requiring mental processing such as medical for how much HP med items heal, success in hacking/lockpicking, environmental awareness
-- Possible crafting system to craft new weapons, ammo, gear, etc- spoken dialogue for player/ player allies/ enemies using my own voice acting and AI generated voice acting- AI-generated music
+- Possible crafting system to craft new weapons, ammo, gear, etc- spoken dialogue for player/ player allies/ enemies using my own voice acting and AI generated voice acting- AI-generated music                  
