@@ -171,11 +171,6 @@ import { HUD } from './hud.js';
 export let player = null;
 
 
-// Example usage:
-setTimeout(() => player.takeDamage(30), 2000);
-setTimeout(() => player.useAmmo(1), 2500);
-setTimeout(() => player.reload(), 4000);
-
 // Basic console helper (screen-reader friendly)
 function logDebug(msg) {
   const ts = new Date().toLocaleTimeString();
