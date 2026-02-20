@@ -40,8 +40,8 @@ export class WeaponManager {
     },
 
     rocketLauncher: {
-        position: new THREE.Vector3(0, 0, -1.0),
-        scale: 1.5
+        position: new THREE.Vector3(0.2400, -0.9000, -1.4000),
+        scale: 1.9490
     }
 };
 
@@ -69,9 +69,9 @@ export class WeaponManager {
                 scale: new THREE.Vector3(0.1109, 0.1109, 0.1109)
             },
             rocketLauncher: {
-                position: new THREE.Vector3(0.5, -0.5, -0.8),
-                rotation: new THREE.Euler(0, 0, 0, 'XYZ'),
-                scale: new THREE.Vector3(1, 1, 1)
+                position: new THREE.Vector3(-0.3616, 0.2506, 0.7402),
+                rotation: new THREE.Euler(0.4223, -0.4716, 0.0929, 'XYZ'),
+                scale: new THREE.Vector3(1.0000, 1.0000, 1.0000)
             }
         };
 
@@ -753,11 +753,13 @@ _computeMuzzleWorldPosition(weaponEntry) {
             // Mode switch
             if (e.code === 'Numpad9') {
                 this.debugMode = 'position';
+                window.speak('Position Mode', { interrupt: true });
                 return;
             }
 
             if (e.code === 'Numpad3') {
                 this.debugMode = 'rotation';
+                window.speak('Rotation Mode', { interrupt: true });
                 return;
             }
 
@@ -1001,19 +1003,19 @@ scale: ${g.scale.x.toFixed(4)}${muzzleInfo}`
                 if (e.code === 'NumpadDecimal') weapon._muzzleDebugOffset.z += step;
             } else {
                 if (this.debugMode === 'position') {
-                    if (e.code === 'Numpad8') weapon.group.position.y += step;
-                    if (e.code === 'Numpad2') weapon.group.position.y -= step;
-                    if (e.code === 'Numpad4') weapon.group.position.x -= step;
-                    if (e.code === 'Numpad6') weapon.group.position.x += step;
-                    if (e.code === 'Numpad5') weapon.group.position.z -= step;
-                    if (e.code === 'NumpadDecimal') weapon.group.position.z += step;
+                    if (e.code === 'Numpad8') weapon.group.translateY(step);
+                    if (e.code === 'Numpad2') weapon.group.translateY(-step);
+                    if (e.code === 'Numpad4') weapon.group.translateX(-step);
+                    if (e.code === 'Numpad6') weapon.group.translateX(step);
+                    if (e.code === 'Numpad5') weapon.group.translateZ(-step);
+                    if (e.code === 'NumpadDecimal') weapon.group.translateZ(step);
                 } else {
-                    if (e.code === 'Numpad8') weapon.group.rotation.x -= step;
-                    if (e.code === 'Numpad2') weapon.group.rotation.x += step;
-                    if (e.code === 'Numpad4') weapon.group.rotation.y -= step;
-                    if (e.code === 'Numpad6') weapon.group.rotation.y += step;
-                    if (e.code === 'Numpad5') weapon.group.rotation.z -= step;
-                    if (e.code === 'NumpadDecimal') weapon.group.rotation.z += step;
+                    if (e.code === 'Numpad8') weapon.group.rotateX(-step);
+                    if (e.code === 'Numpad2') weapon.group.rotateX(step);
+                    if (e.code === 'Numpad4') weapon.group.rotateY(-step);
+                    if (e.code === 'Numpad6') weapon.group.rotateY(step);
+                    if (e.code === 'Numpad5') weapon.group.rotateZ(-step);
+                    if (e.code === 'NumpadDecimal') weapon.group.rotateZ(step);
                 }
             }
 
