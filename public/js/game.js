@@ -2446,6 +2446,7 @@ function handleFire() {
 
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
+   if (window.weaponManager && window.weaponManager.isSwitching) return;
    const w = player?.currentWeapon;
    if (w && w.isReloading) return;
    const soundPath = (w && w.reloadSound) ? w.reloadSound : 'sounds/reload.ogg';
@@ -2512,6 +2513,7 @@ function triggerFire() {
     logDebug('Editor mode: firing disabled');
     return false;
   }
+  if (window.weaponManager && window.weaponManager.isSwitching) return false;
   const w = player?.currentWeapon;
   if (!w) return false;
 

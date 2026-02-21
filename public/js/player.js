@@ -502,6 +502,7 @@ updateArm(deltaMs) {
   
   // Cycle weapons forward/backward
   cycleWeapon(direction = 1) {
+    if (window.weaponManager && window.weaponManager.isSwitching) return;
     if (!this.weapons || this.weapons.length === 0) return;
 
     this.currentWeaponIndex = (this.currentWeaponIndex + direction + this.weapons.length) % this.weapons.length;

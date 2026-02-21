@@ -79,6 +79,7 @@ export class WeaponManager {
         this.weapons = {};          // name -> weapon data
         this.weaponOrder = [];      // cycling order
         this.currentWeapon = null;
+        this._isSwitching = false;
 
         // Debug state
         this.debugEnabled = false;
@@ -88,6 +89,8 @@ export class WeaponManager {
 
         this._bindKeyboard();
     } // end constructor
+
+    get isSwitching() { return this._isSwitching; }
 
     /* ---------------- WEAPON REGISTRATION ---------------- */
 
@@ -664,14 +667,19 @@ _computeMuzzleWorldPosition(weaponEntry) {
 
     /* ---------------- EQUIP / CYCLE ---------------- */
 
-    equipWeapon(name) {
+    async equipWeapon(name) {
+        if (this._isSwitching) return;
         if (this.currentWeapon === name) return;
+
+        this._isSwitching = true;
 
         // Remove previous weapon
         if (this.currentWeapon) {
             const prev = this.weapons[this.currentWeapon];
-            if (prev && prev.group && prev.group.parent) {
-                prev.group.parent.remove(prev.group);
+            if (prev && prev.group && prev.group.visible) {
+                await this._transitionOut(prev);
+                if (prev.group.parent) prev.group.parent.remove(prev.group);
+                prev.group.visible = false;
             }
             // stop any playing actions on previous weapon
             try {
@@ -690,23 +698,109 @@ _computeMuzzleWorldPosition(weaponEntry) {
         const weapon = this.weapons[name];
 
         if (!weapon || weapon.noModel) {
+            this._isSwitching = false;
             return;
         }
 
         // Apply defined offsets when equipping so the model appears correctly
         // in first-person without additional manual tweaks.
-        try {
-            const o = weapon.offsets || { position: new THREE.Vector3(0, 0, 0), rotation: new THREE.Euler(0,0,0,'XYZ'), scale: new THREE.Vector3(1,1,1) };
-            weapon.group.position.copy(o.position); // apply position // end position apply
-            weapon.group.rotation.copy(o.rotation); // apply rotation // end rotation apply
-            weapon.group.scale.copy(o.scale); // apply scale // end scale apply
-        } catch (e) {}
+        this._applyDefaultOffsets(weapon);
 
         this.camera.add(weapon.group); // attach to camera // end attach
         weapon.group.visible = true; // show group // end show
         weapon.group.updateMatrixWorld(true); // ensure transforms are applied // end update
-        // keep weapon static on equip (no auto-play of idle) // comment
+        
+        // Transition In
+        await this._transitionIn(weapon);
+
+        this._isSwitching = false;
     } // end equipWeapon
+
+    async _transitionOut(weaponEntry) {
+        const action = weaponEntry.actions?.unequip || weaponEntry.actions?.holster;
+        if (action) {
+            return this._playOneShot(action, weaponEntry.mixer);
+        }
+        return this._animateProcedural(weaponEntry, 'out');
+    }
+
+    async _transitionIn(weaponEntry) {
+        const action = weaponEntry.actions?.equip || weaponEntry.actions?.draw;
+        if (action) {
+            return this._playOneShot(action, weaponEntry.mixer);
+        }
+        // Start from lowered position for procedural in
+        this._setProceduralPosition(weaponEntry, 1.0);
+        return this._animateProcedural(weaponEntry, 'in');
+    }
+
+    _playOneShot(action, mixer) {
+        return new Promise(resolve => {
+            if (!action || !mixer) { resolve(); return; }
+            mixer.stopAllAction();
+            action.reset();
+            action.loop = THREE.LoopOnce;
+            action.clampWhenFinished = true;
+            action.play();
+            const duration = action.getClip().duration;
+            let finished = false;
+            const onFinish = (e) => {
+                if (e.action === action) {
+                    finished = true;
+                    mixer.removeEventListener('finished', onFinish);
+                    resolve();
+                }
+            };
+            mixer.addEventListener('finished', onFinish);
+            setTimeout(() => {
+                if (!finished) {
+                    mixer.removeEventListener('finished', onFinish);
+                    resolve();
+                }
+            }, (duration * 1000) + 50);
+        });
+    }
+
+    _animateProcedural(weaponEntry, dir) {
+        return new Promise(resolve => {
+            const duration = 200;
+            const start = performance.now();
+            const animate = () => {
+                const now = performance.now();
+                let t = (now - start) / duration;
+                if (t > 1) t = 1;
+                const progress = (dir === 'out') ? t : (1 - t);
+                this._setProceduralPosition(weaponEntry, progress);
+                if (t < 1) requestAnimationFrame(animate);
+                else resolve();
+            };
+            animate();
+        });
+    }
+
+    _setProceduralPosition(weaponEntry, t) {
+        const et = t * t * (3 - 2 * t);
+        const def = weaponEntry.offsets || { position: new THREE.Vector3(), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) };
+        const restPos = def.position;
+        const restRot = def.rotation;
+        const targetPos = restPos.clone();
+        targetPos.y -= 0.4;
+        targetPos.x += 0.05;
+        const targetRot = restRot.clone();
+        targetRot.x += 0.5;
+        weaponEntry.group.position.lerpVectors(restPos, targetPos, et);
+        weaponEntry.group.rotation.x = THREE.MathUtils.lerp(restRot.x, targetRot.x, et);
+        weaponEntry.group.rotation.y = THREE.MathUtils.lerp(restRot.y, targetRot.y, et);
+        weaponEntry.group.rotation.z = THREE.MathUtils.lerp(restRot.z, targetRot.z, et);
+    }
+
+    _applyDefaultOffsets(w) {
+        if (w.offsets) {
+            w.group.position.copy(w.offsets.position);
+            w.group.rotation.copy(w.offsets.rotation);
+            w.group.scale.copy(w.offsets.scale);
+        }
+    }
 
     cycleWeapon(direction = 1) {
         if (!this.weaponOrder.length) return;
