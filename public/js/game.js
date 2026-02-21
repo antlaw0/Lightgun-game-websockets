@@ -166,6 +166,7 @@ import { ALL_SCENES } from "./sceneIndex.js";
 // js/game.js
 import { Player } from './player.js';
 import { HUD } from './hud.js';
+import { WEAPON_DEFS } from './weapons.js';
 
 // will be created after camera is initialized
 export let player = null;
@@ -411,15 +412,9 @@ let weaponManager = null;
 window.weaponManager = weaponManager;
 
 weaponManager
-  .loadWeapons({
-    pistol: 'assets/models/weapons/pistol.glb',
-    shotgun: 'assets/models/weapons/shotgun.glb',
-    assaultRifle: 'assets/models/weapons/assault_rifle.glb',
-    sniperRifle: 'assets/models/weapons/sniper.glb',
-    rocketLauncher: 'assets/models/weapons/rpg.glb'
-  })
+  .loadWeapons()
   .then(() => {
-    weaponManager.registerWeaponOrder(['pistol','shotgun','assaultRifle','sniperRifle','rocketLauncher']);
+    weaponManager.registerWeaponOrder(Object.keys(WEAPON_DEFS));
     weaponManager.equipWeapon('pistol'); // now it will appear
   });
 
@@ -3110,4 +3105,4 @@ function animate(nowMs) {
 // Start the first level immediately
 loadLevel(Level_Warehouse);
 
-requestAnimationFrame(animate);
+requestAnimationFrame(animate); 

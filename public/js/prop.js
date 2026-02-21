@@ -24,13 +24,15 @@ this.explosion = def.explosion ?? null;
     this.materialDef = def.material ?? {};
 
     // Preload sounds
-    this.hitSounds = (def.hitSounds ?? []).map(path => {
+    const hitList = Array.isArray(def.hitSounds) ? def.hitSounds : [];
+    this.hitSounds = hitList.map(path => {
       const audio = new Audio(path);
       audio.load();
       return audio;
     });
 
-    this.deathSounds = (def.deathSounds ?? []).map(path => {
+    const deathList = Array.isArray(def.deathSounds) ? def.deathSounds : [];
+    this.deathSounds = deathList.map(path => {
       const audio = new Audio(path);
       audio.load();
       return audio;

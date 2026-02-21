@@ -25,7 +25,7 @@ const sounds = {
     basePath + "ricMetal2.ogg",
 	basePath + "ricMetal3.ogg",
 	basePath + "ricMetal4.ogg",
-	basePath + "ricMetal4.ogg"
+	basePath + "ricMetal5.ogg"
     
     
     

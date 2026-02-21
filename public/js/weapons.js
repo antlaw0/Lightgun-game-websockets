@@ -38,6 +38,7 @@ function baseWeapon(def) {
     explosionDamage: def.explosionDamage || 0,
 explosionSounds:  def.explosionSounds,
     weaponIcon: def.weaponIcon,
+    weaponModel: def.weaponModel,
     clipSize: def.clipSize,
     totalAmmo: def.totalAmmo
   };
@@ -47,6 +48,7 @@ export const WEAPON_DEFS = {
 
   pistol: baseWeapon({
     name: "Pistol",
+    weaponModel: "pistol.glb",
     fireSound: "assets/sfx/weapons/pistol_fire.ogg",
     reloadSound: "assets/sfx/weapons/pistol_reload.ogg",
     reloadTime: 1200,
@@ -70,6 +72,7 @@ export const WEAPON_DEFS = {
   }),
   laser_pistol: baseWeapon({
     name: "Laser Pistol",
+    weaponModel: "pistol.glb",
     fireSound: "assets/sfx/weapons/laser_pistol.ogg",
     reloadSound: "assets/sfx/weapons/pistol_reload.ogg",
     reloadTime: 1200,
@@ -93,6 +96,7 @@ export const WEAPON_DEFS = {
   }),
   shotgun: baseWeapon({
     name: "Shotgun",
+    weaponModel: "shotgun.glb",
     fireSound: "assets/sfx/weapons/shotgun_fire.ogg",
     reloadSound: "assets/sfx/weapons/shotgun_reload.ogg",
     reloadTime: 2000,
@@ -118,6 +122,7 @@ export const WEAPON_DEFS = {
 
   assaultRifle: baseWeapon({
     name: "Assault Rifle",
+    weaponModel: "assault_rifle.glb",
     fireSound: "assets/sfx/weapons/assault_fire.ogg",
     reloadSound: "assets/sfx/weapons/assault_reload.ogg",
     reloadTime: 1800,
@@ -143,6 +148,7 @@ export const WEAPON_DEFS = {
 
   rocketLauncher: baseWeapon({
     name: "Rocket Launcher",
+    weaponModel: "rpg.glb",
     fireSound: "assets/sfx/weapons/rocket_fire.ogg",
     reloadSound: "assets/sfx/weapons/rocket_reload.ogg",
     reloadTime: 2500,
@@ -170,6 +176,7 @@ explosionSounds:  ["assets/sfx/explosions/explosion_1A.ogg", "assets/sfx/explosi
 
   sniperRifle: baseWeapon({
     name: "Sniper Rifle",
+    weaponModel: "sniper.glb",
     fireSound: "assets/sfx/weapons/sniper_fire.ogg",
     reloadSound: "assets/sfx/weapons/sniper_reload.ogg",
     reloadTime: 2200,

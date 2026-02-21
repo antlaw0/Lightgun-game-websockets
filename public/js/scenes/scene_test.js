@@ -1,3 +1,5 @@
+import sounds from "../listOfSounds.js";
+
 // js/scenes/scene_test_range.js
 
 export const scene_test = {
@@ -81,6 +83,7 @@ export const scene_test = {
     hp: 9999,
     maxHp: 9999,
     indestructible: true,
+	hitSounds:  sounds.ricMetal,
     rotation: {
         x: 0,
         y: 0,
@@ -101,7 +104,8 @@ position:  {  x:  3, y:  0, z:  12 },
 scale:  {  x:  2, y:  2, z:  2  },
 hp:  9999,
 maxHp: 9999,
-indestructible:  true	  
+indestructible:  true,
+hitSounds:  sounds.ricMetal
   },
   {
 	id:  "crateA",

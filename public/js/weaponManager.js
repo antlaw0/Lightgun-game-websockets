@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { WEAPON_DEFS } from './weapons.js';
 // Do not import normalize/ground utilities for weapon rigs; keep original bind/scale
 
 export class WeaponManager {
@@ -94,6 +95,14 @@ export class WeaponManager {
         this.weaponOrder = order.slice();
     } // end registerWeaponOrder
 async loadWeapons(map) {
+  if (!map) {
+    map = {};
+    for (const [id, def] of Object.entries(WEAPON_DEFS)) {
+      if (def.weaponModel) {
+        map[id] = `assets/models/weapons/${def.weaponModel}`;
+      }
+    }
+  }
   const promises = [];
   for (const name in map) {
     promises.push(this.loadWeapon(name, map[name]));
@@ -102,6 +111,24 @@ async loadWeapons(map) {
 }
 
     async loadWeapon(name, path) {
+        // Fallback: if offsets or muzzle presets are missing for this weapon,
+        // try to find another weapon that uses the same model and copy its config.
+        if (!this.defaultOffsets[name] || !this._muzzlePresets[name]) {
+            const myModel = WEAPON_DEFS[name]?.weaponModel;
+            if (myModel) {
+                for (const [otherName, otherDef] of Object.entries(WEAPON_DEFS)) {
+                    if (otherName === name) continue;
+                    if (otherDef.weaponModel === myModel) {
+                        if (!this.defaultOffsets[name] && this.defaultOffsets[otherName]) {
+                            this.defaultOffsets[name] = this.defaultOffsets[otherName];
+                        }
+                        if (!this._muzzlePresets[name] && this._muzzlePresets[otherName]) {
+                            this._muzzlePresets[name] = this._muzzlePresets[otherName];
+                        }
+                    }
+                }
+            }
+        }
         // Weapons with no model (e.g. sniper rifle)
         if (!path) {
             this.weapons[name] = { name, noModel: true };
