@@ -4,6 +4,7 @@ import * as SceneW1_2 from './scenes/Scene_W1_2.js';
 import * as SceneTest from './scenes/scene_test.js';
 import * as SceneTestCopy from './scenes/scene_test - Copy.js';
 import * as generatedScene from './scenes/generatedScene.js';
+import * as Scene_starting_Room from './scenes/Scene_starting_Room.js';
 
 const ALL_SCENES = [];
 
@@ -24,6 +25,7 @@ addFromModule(SceneW1_2);
 addFromModule(SceneTest);
 addFromModule(SceneTestCopy);
 addFromModule(generatedScene);
+addFromModule(Scene_starting_Room);
 
 
 export { ALL_SCENES };
