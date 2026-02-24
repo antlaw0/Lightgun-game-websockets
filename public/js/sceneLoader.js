@@ -204,6 +204,18 @@ _applyCameraSettings() {
         );
         break;
 
+      case "rectArea":
+        light = new THREE.RectAreaLight(
+          def.color ?? 0xffffff,
+          def.intensity ?? 1,
+          def.width ?? (def.size?.x ?? 10),
+          def.height ?? (def.size?.y ?? 10)
+        );
+        if (def.lookAt) {
+          light.lookAt(def.lookAt.x, def.lookAt.y, def.lookAt.z);
+        }
+        break;
+
       default:
         console.warn("Unknown light type:", def.type);
         return;

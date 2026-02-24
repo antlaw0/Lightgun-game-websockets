@@ -1,3 +1,5 @@
+import sounds from "../listOfSounds.js";
+
 // AUTO-GENERATED FILE
 // Generated from 2D Scene Mapper
 // DO NOT EDIT BY HAND
@@ -21,6 +23,22 @@ const outerWall = {
   emissive: 0x000000
 }; // closes outerWall
 
+const ceilingTexture = {
+  horizontalRepeat: 10,
+  verticalRepeat: 15,
+  map: "assets/textures/rock01/rock01Color.png",
+  normalMap: "assets/textures/rock01/rock01Normal.png",
+  roughnessMap: "assets/textures/rock01/rock01Roughness.png",
+  aoMap: "assets/textures/rock01/rock01AO.png",
+  roughness: 1.0,
+  metalness: 0.0,
+  color: 0xffffff,
+  transparent: false,
+  opacity: 1.0,
+  emissive: 0x000000
+}; // closes ceiling
+
+
 
 // =====================================================
 // SCENE DEFINITION
@@ -35,49 +53,131 @@ export const Scene_starting_Room = {
     near: 0.1,
     far: 200
   }, // closes camera
+lights: [
 
-  lights: [
-    {
-      type: "ambient",
-      color: 0x0000FF,
-      intensity: 0.3
-    }, // closes ambient
+  // =====================================================
+  // BASE DARKNESS (very low ambient)
+  // =====================================================
+  {
+    type: "ambient",
+    color: 0x1a1a1a,
+    intensity: 0.15
+  }, // closes ambient base
 
-    {
-      type: "hemisphere",
-      skyColor: 16777215,
-      groundColor: 4473924,
-      intensity: 0.6,
-      id: "light_hemisphere",
-      position: { x: 0, y: 15, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
-      size: { x: 1, y: 1, z: 1 },
-      color: 16777215
-    }, // closes hemisphere
 
-    {
-      type: "directional",
-      color: 0xffffff,
-      intensity: 0.2,
-      position: { x: 0, y: 10, z: 0 },
-      target: { x: 0, y: 1.4, z: -6 },
-      castShadow: true,
-      shadow: {
-        mapSize: { width: 2048, height: 2048 },
-        camera: {
-          left: -10,
-          right: 10,
-          top: 10,
-          bottom: -10,
-          near: 0.5,
-          far: 50
-        } // closes shadow.camera
-      } // closes shadow
-    } // closes directional
-  ], // closes lights
+  // =====================================================
+  // WAREHOUSE OVERHEAD STRIP LIGHTS (MAIN ROOM)
+  // =====================================================
+  {
+    type: "rectArea",
+    color: 0xe6e6e6,
+    intensity: 6,
+    position: { x: 8, y: 6.8, z: 8 },
+    size: { x: 6, y: 1, z: 1 }
+  }, // closes strip light 1
 
+  {
+    type: "rectArea",
+    color: 0xe6e6e6,
+    intensity: 6,
+    position: { x: 20, y: 6.8, z: 8 },
+    size: { x: 6, y: 1, z: 1 }
+  }, // closes strip light 2
+
+
+  // =====================================================
+  // SOFT FILL LIGHT (VERY FAINT GLOBAL TOP LIGHT)
+  // =====================================================
+  {
+    type: "hemisphere",
+    skyColor: 0x404040,
+    groundColor: 0x202020,
+    intensity: 0.25,
+    position: { x: 0, y: 15, z: 0 }
+  }, // closes hemisphere fill
+
+
+  // =====================================================
+  // SHADOW CASTER FOR DEPTH
+  // =====================================================
+  {
+    type: "directional",
+    color: 0xffffff,
+    intensity: 0.35,
+    position: { x: 10, y: 10, z: 5 },
+    target: { x: 15, y: 0, z: 8 },
+    castShadow: true,
+    shadow: {
+      mapSize: { width: 2048, height: 2048 },
+      camera: {
+        left: -20,
+        right: 20,
+        top: 20,
+        bottom: -20,
+        near: 1,
+        far: 50
+      } // closes shadow.camera
+    } // closes shadow
+  }, // closes directional shadow
+
+
+  // =====================================================
+  // INTRO ROOM LIGHT (slightly warmer and closer)
+  // =====================================================
+  {
+    type: "point",
+    color: 0xfff1c2,
+    intensity: 2,
+    distance: 10,
+    decay: 2,
+    position: { x: 14.5, y: 6.5, z: 21 }
+  } // closes intro point light
+
+], // closes lights
   environment: {
     staticObjects: [
+	{
+    id: "walkway",
+    type: "metalwalkway.glb",
+    prefab: "metalwalkway.glb",
+    position: {
+        x: 14.39999999999997,
+        y: 0,
+        z: 12
+    },
+    scale: {
+        x: 4,
+        y: 5,
+        z: 4
+    },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+	hitSounds:  sounds.ricMetal,
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    coverType: "none",
+    size: {
+        x: 2,
+        y: 2,
+        z: 2
+    }
+},  
+
+  {
+id:  "forklift",
+type:  "prefab",
+prefab:  "forklift.glb",
+position:  {  x:  3, y:  0, z:  12 },
+scale:  {  x:  2, y:  2, z:  2  },
+hp:  9999,
+maxHp: 9999,
+indestructible:  true,
+hitSounds:  sounds.ricMetal
+  },
 
       {
         id: "wall_1_object",
@@ -232,6 +332,7 @@ position: { x: 14, y: 3, z: 18 },
       z: 19
     },
     texture: "assets/textures/warehouse_ceiling.png",
+	material:  ceilingTexture,
     notes: "",
     hp: 9999,
     maxHp: 9999,
@@ -253,6 +354,7 @@ position: { x: 14, y: 3, z: 18 },
       z: 4
     },
     texture: "assets/textures/yellow.png",
+	material:  ceilingTexture,
     notes: "",
     hp: 9999,
     maxHp: 9999,
