@@ -38,6 +38,21 @@ const ceilingTexture = {
   emissive: 0x000000
 }; // closes ceiling
 
+const floorTexture = {
+  horizontalRepeat: 10,
+  verticalRepeat: 15,
+  map: "assets/textures/concrete01/concrete01Color.png",
+  normalMap: "assets/textures/concrete01/concrete01Normal.png",
+  roughnessMap: "assets/textures/concrete01/concrete01Roughness.png",
+  aoMap: "assets/textures/concrete01/concrete01AO.png",
+  roughness: 1.0,
+  metalness: 0.0,
+  color: 0xffffff,
+  transparent: false,
+  opacity: 1.0,
+  emissive: 0x000000
+}; // closes ceiling
+
 
 
 // =====================================================
@@ -61,7 +76,7 @@ lights: [
   {
     type: "ambient",
     color: 0x1a1a1a,
-    intensity: 0.15
+    intensity: 0.3
   }, // closes ambient base
 
 
@@ -134,39 +149,46 @@ lights: [
   } // closes intro point light
 
 ], // closes lights
+  
   environment: {
     staticObjects: [
 	{
     id: "walkway",
-    type: "metalwalkway.glb",
+    type: "prefab",
     prefab: "metalwalkway.glb",
     position: {
-        x: 14.39999999999997,
+        x: 15,
         y: 0,
-        z: 12
+        z: 3
     },
     scale: {
-        x: 4,
-        y: 5,
-        z: 4
+        x: 8,
+        y: 3,
+        z: 1
     },
     hp: 9999,
     maxHp: 9999,
     indestructible: true,
-	hitSounds:  sounds.ricMetal,
+    hitSounds: [
+        "assets/sfx/ricMetal1.ogg",
+        "assets/sfx/ricMetal2.ogg",
+        "assets/sfx/ricMetal3.ogg",
+        "assets/sfx/ricMetal4.ogg",
+        "assets/sfx/ricMetal5.ogg"
+    ],
     rotation: {
         x: 0,
         y: 0,
         z: 0
     },
     coverType: "none",
+    _convertedToCenter: true,
     size: {
-        x: 2,
-        y: 2,
-        z: 2
+        x: 8,
+        y: 10,
+        z: 8
     }
-},  
-
+},
   {
 id:  "forklift",
 type:  "prefab",
@@ -289,8 +311,8 @@ position: { x: 14, y: 3, z: 18 },
       y: 0.2,
       z: 17
     },
-    texture: "assets/textures/blue.png",
-    notes: "",
+    material:  floorTexture,
+	notes: "",
     hp: 9999,
     maxHp: 9999,
     indestructible: true

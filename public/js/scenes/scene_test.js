@@ -68,7 +68,7 @@ export const scene_test = {
     staticObjects: [
 {
     id: "walkway",
-    type: "metalwalkway.glb",
+    type: "prefab",
     prefab: "metalwalkway.glb",
     position: {
         x: 14.39999999999997,
