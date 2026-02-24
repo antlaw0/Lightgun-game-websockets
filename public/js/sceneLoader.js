@@ -204,7 +204,7 @@ _applyCameraSettings() {
         );
         break;
 
-      case "rectArea":
+        case "rectArea":
         light = new THREE.RectAreaLight(
           def.color ?? 0xffffff,
           def.intensity ?? 1,
@@ -265,6 +265,10 @@ _applyCameraSettings() {
     }
 
     this.scene.add(light);
+
+    if (def.id) {
+      light.userData.id = def.id;
+    }
 
     this.sceneLights.push(light);
   });

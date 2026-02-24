@@ -11,7 +11,6 @@ import { SSAOPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/js
 import { FXAAShader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/shaders/FXAAShader.js';
 import { ShaderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/ShaderPass.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/environments/RoomEnvironment.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
@@ -128,7 +127,7 @@ function toggleLightHelpers(enabled) {
             mesh: light,
             light: light,
             type: 'light',
-            lightType: light.isDirectionalLight ? 'directional' : (light.isSpotLight ? 'spot' : (light.isHemisphereLight ? 'hemisphere' : 'point')),
+            lightType: light.isDirectionalLight ? 'directional' : (light.isSpotLight ? 'spot' : (light.isHemisphereLight ? 'hemisphere' : (light.isRectAreaLight ? 'rectArea' : 'point'))),
             position: { x: light.position.x, y: light.position.y, z: light.position.z },
             _sceneDef: _lightToDef(light)
         };
@@ -1245,6 +1244,21 @@ function _lightToDef(light) {
     def.angle = light.angle;
     def.penumbra = light.penumbra;
     def.decay = light.decay;
+  } else if (light.isHemisphereLight) {
+    def.type = 'hemisphere';
+    def.skyColor = light.color ? light.color.getHex() : 0xffffff;
+    def.groundColor = light.groundColor ? light.groundColor.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+    def.position = _serializeVector3(light.position);
+  } else if (light.isRectAreaLight) {
+    def.type = 'rectArea';
+    def.color = light.color ? light.color.getHex() : 0xffffff;
+    def.intensity = light.intensity;
+    def.position = _serializeVector3(light.position);
+    def.size = { x: light.width, y: light.height };
+    // Reconstruct lookAt target from rotation (approximate)
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(light.quaternion);
+    def.lookAt = _serializeVector3(light.position.clone().add(forward));
   } else {
     // unknown light type: fallback to point-like
     def.type = 'point';
@@ -1364,6 +1378,10 @@ function exportSceneToJS() {
   // 1. Lights from editor (staticObjects with type 'light')
   (Array.isArray(sl.staticObjects) ? sl.staticObjects : []).forEach(o => {
       if (o.type === 'light') {
+          // Filter out temporary/debug lights
+          if (o.light && (o.light.userData.temporary || o.light.userData.debug)) return;
+          if (o.userData && (o.userData.temporary || o.userData.debug)) return;
+
           lights.push(_cleanLightObject(o));
           if (o.id) processedLightIds.add(o.id);
       }
@@ -1372,6 +1390,9 @@ function exportSceneToJS() {
   // 2. Existing lights from sceneDef that weren't edited/wrapped (if any)
   if (Array.isArray(sl.sceneDef?.lights)) {
       sl.sceneDef.lights.forEach(ld => {
+          // Filter out temporary/debug lights from defs
+          if (ld.userData && (ld.userData.temporary || ld.userData.debug)) return;
+
           if (!processedLightIds.has(ld.id)) {
               lights.push(ld);
           }
@@ -1443,13 +1464,10 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.6;
 renderer.setClearColor(0x000000, 1);
 scene.background = new THREE.Color(0x000000);
 
-// --- Environment Map for PBR ---
-const pmremGenerator = new THREE.PMREMGenerator(renderer);
-scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
 // --- Post-processing ---
 const composer = new EffectComposer(renderer);

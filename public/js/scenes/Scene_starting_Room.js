@@ -15,7 +15,7 @@ const outerWall = {
   normalMap: "assets/textures/bricks01/bricks01Normal.png",
   roughnessMap: "assets/textures/bricks01/bricks01Roughness.png",
   aoMap: "assets/textures/bricks01/bricks01AO.png",
-  roughness: 1.0,
+  roughness: 0.75,
   metalness: 0.0,
   color: 0xffffff,
   transparent: false,
@@ -30,7 +30,7 @@ const ceilingTexture = {
   normalMap: "assets/textures/rock01/rock01Normal.png",
   roughnessMap: "assets/textures/rock01/rock01Roughness.png",
   aoMap: "assets/textures/rock01/rock01AO.png",
-  roughness: 1.0,
+  roughness: 0.75,
   metalness: 0.0,
   color: 0xffffff,
   transparent: false,
@@ -45,7 +45,7 @@ const floorTexture = {
   normalMap: "assets/textures/concrete01/concrete01Normal.png",
   roughnessMap: "assets/textures/concrete01/concrete01Roughness.png",
   aoMap: "assets/textures/concrete01/concrete01AO.png",
-  roughness: 1.0,
+  roughness: 0.75,
   metalness: 0.0,
   color: 0xffffff,
   transparent: false,
@@ -74,9 +74,10 @@ lights: [
   // BASE DARKNESS (very low ambient)
   // =====================================================
   {
-    type: "ambient",
-    color: 0x1a1a1a,
-    intensity: 0.3
+    id:  "ambient",
+	type: "ambient",
+    color: 0xffffff,
+    intensity: 0.4
   }, // closes ambient base
 
 
@@ -84,39 +85,68 @@ lights: [
   // WAREHOUSE OVERHEAD STRIP LIGHTS (MAIN ROOM)
   // =====================================================
   {
-    type: "rectArea",
+    id:  "rectArea1",
+	type: "rectArea",
     color: 0xe6e6e6,
-    intensity: 6,
+    intensity: 20,
     position: { x: 8, y: 6.8, z: 8 },
     size: { x: 6, y: 1, z: 1 }
   }, // closes strip light 1
 
   {
-    type: "rectArea",
+    id:  "rectArea2",
+	type: "rectArea",
     color: 0xe6e6e6,
-    intensity: 6,
+    intensity: 20,
     position: { x: 20, y: 6.8, z: 8 },
     size: { x: 6, y: 1, z: 1 }
   }, // closes strip light 2
 
+{
+    id:  "rectArea3",
+	type: "rectArea",
+    color: 0xe6e6e6,
+    intensity: 20,
+    position: { x: 8, y: 6.8, z: 17 },
+    size: { x: 6, y: 1, z: 1 }
+  }, // closes strip light 1
+
+  {
+    id:  "rectArea4",
+	type: "rectArea",
+    color: 0xe6e6e6,
+    intensity: 20,
+    position: { x: 20, y: 6.8, z: 17 },
+    size: { x: 6, y: 1, z: 1 }
+  }, // closes strip light 2
 
   // =====================================================
   // SOFT FILL LIGHT (VERY FAINT GLOBAL TOP LIGHT)
   // =====================================================
   {
-    type: "hemisphere",
-    skyColor: 0x404040,
-    groundColor: 0x202020,
-    intensity: 0.25,
+    id:  "hemisphere",
+	type: "hemisphere",
+    skyColor: 0x606060,
+groundColor: 0x303030,
+intensity: 1.2,
     position: { x: 0, y: 15, z: 0 }
   }, // closes hemisphere fill
 
-
+{
+  id: "fillDirectional",
+  type: "directional",
+  color: 0xffffff,
+  intensity: 0.4,
+  position: { x: 0, y: 15, z: 0 },
+  target: { x: 10, y: 0, z: 10 },
+  castShadow: false
+}, // closes fillDirectional
   // =====================================================
   // SHADOW CASTER FOR DEPTH
   // =====================================================
   {
-    type: "directional",
+    id:  "mainRoomDirectional",
+	type: "directional",
     color: 0xffffff,
     intensity: 0.35,
     position: { x: 10, y: 10, z: 5 },
@@ -140,7 +170,8 @@ lights: [
   // INTRO ROOM LIGHT (slightly warmer and closer)
   // =====================================================
   {
-    type: "point",
+    id:  "introRoomPoint",
+	type: "point",
     color: 0xfff1c2,
     intensity: 2,
     distance: 10,
@@ -152,6 +183,28 @@ lights: [
   
   environment: {
     staticObjects: [
+	      {
+        id: "crate_01",
+        type: "crate",
+        position: {
+          x: 11.883029736852674,
+          y: 0.732152794253579,
+          z: 9.927079158278612
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 1,
+          y: 1,
+          z: 1
+        },
+        hp: 10
+      },
+
+	
 	{
     id: "walkway",
     type: "prefab",
