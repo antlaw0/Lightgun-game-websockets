@@ -349,6 +349,16 @@ position: { x: 14, y: 3, z: 18 },
         size: { x: 1, y: 3, z: 0.2 },
         texture: "assets/textures/door_wood.png"
       }, // closes introDoor
+	  {
+        id: "exitDoor_object",
+        type: "door",
+        def: "wall",
+        position: { x: 28, y: 0, z: 4 },
+        size: { x: 1.2, y: 3, z: 0.2 },
+        texture: "assets/textures/door_wood.png",
+		rotationY:  90
+      }, // closes exitDoor
+  
   {
     def:  "tile",
 	id: "floor_1_tile",

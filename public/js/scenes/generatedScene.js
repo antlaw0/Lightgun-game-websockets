@@ -1,329 +1,230 @@
-// AUTO-GENERATED FILE
-// Generated from 2D Scene Mapper
-// DO NOT EDIT BY HAND
+import sounds from "../listOfSounds.js";
+
+const mainWall = {
+  horizontalRepeat: 25,
+  verticalRepeat: 16,
+  map: "assets/textures/bricks01/bricks01Color.png",
+  normalMap: "assets/textures/bricks01/bricks01Normal.png",
+  roughnessMap: "assets/textures/bricks01/bricks01Roughness.png",
+  aoMap: "assets/textures/bricks01/bricks01AO.png",
+  roughness: 0.75,
+  metalness: 0.0,
+  color: 0xffffff,
+  transparent: false,
+  opacity: 1.0,
+  emissive: 0x000000
+}; // closes outerWall
 
 export const Scene__Exported = {
-  name: "map1",
-  
-  
+  name: "L-shaped_hallway1",
+
   camera: {
-    position: { x: 16, y: 1.7, z: 31 },
-    lookAt: { x: 16, y: 1.7, z: 35 },
+    position: { x: 15, y: 10, z: 50 },
+    lookAt: { x: 15, y: 3.5, z: 15 },
     fov: 60,
     near: 0.1,
     far: 200
   },
 
-  lights: [
-    {
-      type: "ambient",
-      color: 0xFFFFFF,
-      intensity: 0.8
-    },
-    {
-      id: "light_point_1_object",
-      type: "point",
-      color: 16777215,
-      intensity: 1.5,
-      position: { x: 16, y: 6.5, z: 23 },
-      distance: 50,
-      decay: 2,
-      castShadow: true,
-      shadow: {
-        mapSize: { width: 1024, height: 1024 },
-        camera: { near: 0.5, far: 50 },
-        bias: -0.0001
-      }
-    },
-	  {
-    type: "hemisphere",
-    skyColor: 0xFFFFFF,
-    groundColor: 0x555555,
-    intensity: 0.5
-  },
-    {
-      id: "light_point_2_object",
-      type: "point",
-      color: 16777215,
-      intensity: 1.5,
-      position: { x: 10, y: 6.5, z: 16 },
-      distance: 50,
-      decay: 2,
-      castShadow: true,
-      shadow: {
-        mapSize: { width: 1024, height: 1024 },
-        camera: { near: 0.5, far: 50 },
-        bias: -0.0001
-      }
-    }
-  ],
+  lights: [],
 
   environment: {
     staticObjects: [
-  
   {
-    def:  "tile",
-	id: "floor_1_tile",
-    type: "tile",
-    layer: "floor",
+    def:  "wall",
+	id: "left_wall_1_object",
+    type: "wall",
     position: {
-      x: 0,
+      x: 9,
+      y: 0,
+      z: 5
+    },
+    size: {
+      x: 1,
+      y: 3,
+      z: 14
+    },
+    texture: "default",
+	material:  mainWall
+  },
+  {
+    id: "right_wall_1_object",
+    type: "object",
+    position: {
+      x: 15,
       y: 0,
       z: 0
     },
     size: {
-      x: 30,
-      y: 0.5,
-      z: 50
-    },
-    texture: "assets/textures/warehouse_floor.png",
-    notes: "",
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true
-  },
-  
-  {
-    def:  "wall",
-	id: "wall_left_vertical_wall",
-    type: "wall",
-    position: {
-      x: 13,
-      y: 0,
+      x: 1,
+      y: 1,
       z: 19
     },
-    size: {
-      x: 1,
-      y: 3,
-      z: 10
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
+    texture: "default"
   },
   {
-    def:  "wall",
-	id: "wall_righte_vertical_wall",
-    type: "wall",
-    position: {
-      x: 19,
-      y: 0,
-      z: 14
-    },
-    size: {
-      x: 1,
-      y: 3,
-      z: 15
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    def:  "wall",
-	id: "wall_left_2_horizontal_wall",
-    type: "wall",
-    position: {
-      x: 4,
-      y: 0,
-      z: 19
-    },
-    size: {
-      x: 9,
-      y: 3,
-      z: 1
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    def:  "wall",
-	id: "wall_right_2_horizontal_wall",
-    type: "wall",
-    position: {
-      x: 3,
-      y: 0,
-      z: 13
-    },
-    size: {
-      x: 17,
-      y: 3,
-      z: 1
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    def:  "wall",
-	id: "wall_end_piecee_vertical_wall",
-    type: "wall",
-    position: {
-      x: 3,
-      y: 0,
-      z: 18
-    },
-    size: {
-      x: 1,
-      y: 3,
-      z: 2
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    def:  "wall",
-	id: "wall_piece_end_2e_vertical_wall",
-    type: "wall",
-    position: {
-      x: 3,
-      y: 0,
-      z: 14
-    },
-    size: {
-      x: 1,
-      y: 3,
-      z: 3
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    id: "exit_door_object",
+    id: "intro_left_wall_object",
     type: "object",
     position: {
-      x: 3,
+      x: 9,
       y: 0,
-      z: 17
+      z: 19
     },
     size: {
-      x: 1,
+      x: 3,
       y: 1,
       z: 1
     },
     texture: "default"
   },
   {
-    def:  "wall",
-	id: "wall_beginning_piece_1e_horizontal_wall",
-    type: "wall",
+    id: "intro_right_wall_object",
+    type: "object",
     position: {
       x: 13,
       y: 0,
-      z: 29
+      z: 19
     },
     size: {
       x: 3,
-      y: 3,
+      y: 1,
       z: 1
     },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
+    texture: "default"
   },
   {
-    def:  "wall",
-	id: "wall_beginning_right_horizontal_wall",
-    type: "wall",
-    position: {
-      x: 17,
-      y: 0,
-      z: 29
-    },
-    size: {
-      x: 3,
-      y: 3,
-      z: 1
-    },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    coverType: "full"
-  },
-  {
-    id: "starting_door_object",
+    id: "secondLegLowerWall_object",
     type: "object",
     position: {
-      x: 16,
-      y: 0,
-      z: 29
-    },
-    size: {
       x: 1,
-      y: 5,
+      y: 0,
+      z: 5
+    },
+    size: {
+      x: 8,
+      y: 1,
       z: 1
     },
-    texture: "assets/textures/metal_door.png"
+    texture: "default"
   },
   {
-    id: "cameraStart_object",
+    id: "topWall_object",
     type: "object",
     position: {
-      x: 16,
+      x: 1,
       y: 0,
-      z: 30
+      z: 0
+    },
+    size: {
+      x: 14,
+      y: 1,
+      z: 1
+    },
+    texture: "default"
+  },
+  {
+    id: "endWall_object",
+    type: "object",
+    position: {
+      x: 1,
+      y: 0,
+      z: 1
     },
     size: {
       x: 1,
       y: 1,
-      z: 1
+      z: 4
     },
     texture: "default"
   },
   {
     def:  "tile",
-	id: "floor_test_tile",
+	id: "topFloor_tile",
     type: "tile",
     layer: "floor",
     position: {
-      x: 4,
+      x: 2,
       y: 0,
-      z: 24
+      z: 1
     },
     size: {
-      x: 2,
-      y: 1,
-      z: 2
+      x: 13,
+      y: 0.2,
+      z: 4
     },
-    texture: "/assets/textures/yellow.png",
+    texture: "assets/textures/blue.png",
     notes: "",
     hp: 9999,
     maxHp: 9999,
     indestructible: true
   },
   {
-    id: "ceiling_1_tile",
+    def:  "tile",
+	id: "lowerFloor_tile",
+    type: "tile",
+    layer: "floor",
+    position: {
+      x: 10,
+      y: 0,
+      z: 5
+    },
+    size: {
+      x: 5,
+      y: 0.2,
+      z: 15
+    },
+    texture: "assets/textures/blue.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
+  },
+    {
+    def:  "tile",
+	id: "topCeiling_tile",
     type: "tile",
     layer: "ceiling",
     position: {
-      x: 5,
-      y: 6,
-      z: 26
-    },
-    size: {
-      x: 1,
-      y: 1,
+      x: 2,
+      y: 3,
       z: 1
     },
-    texture: "/assets/textures/yellow.png",
+    size: {
+      x: 13,
+      y: 0.2,
+      z: 4
+    },
+    texture: "assets/textures/blue.png",
+    notes: "",
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true
+  },
+    {
+    def:  "tile",
+	id: "lowerCeiling_tile",
+    type: "tile",
+    layer: "ceiling",
+    position: {
+      x: 10,
+      y: 3,
+      z: 5
+    },
+    size: {
+      x: 5,
+      y: 0.2,
+      z: 15
+    },
+    texture: "assets/textures/blue.png",
     notes: "",
     hp: 9999,
     maxHp: 9999,
     indestructible: true
   }
+
+
 ]
   },
-
 
   enemies: [],
   objective: null,

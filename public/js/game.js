@@ -3,7 +3,8 @@
 // <script type="module" src="js/game.js"></script>
 import { SceneManager } from './sceneManager.js';
 import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
-
+import { AudioManager } from "./audio/AudioManager.js";
+import { AUDIO_MANIFEST } from "./audio/audioManifest.js";
 import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -374,6 +375,9 @@ camera.position.set(0, 1.7, 5);
 camera.lookAt(0, 1.7, 0);
 // expose camera globally for modules that expect it
 window.camera = camera;
+
+const audioManager = new AudioManager(camera, scene);
+await audioManager.loadFromManifest(AUDIO_MANIFEST);
 // If player already has arm loaded, attach it now
 try { if (player && typeof player._attachArmToCamera === 'function') player._attachArmToCamera(); } catch(_) {}
 // Ensure camera is part of the scene so camera-attached children are rendered
