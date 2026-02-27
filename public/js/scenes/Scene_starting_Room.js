@@ -1,9 +1,5 @@
 import sounds from "../listOfSounds.js";
 
-// AUTO-GENERATED FILE
-// Generated from 2D Scene Mapper
-// DO NOT EDIT BY HAND
-
 
 // =====================================================
 // OUTER WALL MATERIAL (module scope)
@@ -353,7 +349,7 @@ position: { x: 14, y: 3, z: 18 },
         id: "exitDoor_object",
         type: "door",
         def: "wall",
-        position: { x: 28, y: 0, z: 4 },
+        position: { x: 27, y: 0, z: 4 },
         size: { x: 1.2, y: 3, z: 0.2 },
         texture: "assets/textures/door_wood.png",
 		rotationY:  90
