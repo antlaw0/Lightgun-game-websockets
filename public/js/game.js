@@ -3016,11 +3016,32 @@ document.addEventListener('keyup', (e) => {
 // ------------------ Reticle smoothing & render loop ------------------
 const LERP = 0.9;
 let lastMs = performance.now();
+
+let frameSpikeCount = 0;
+const MAX_FRAME_SPIKES = 5;       // consecutive slow frames to trigger stop
+const FRAME_THRESHOLD = 100;      // ms per frame = 10 FPS
+const MAX_SCENE_CHILDREN = 800;   // scene object limit for failsafe
+
 function animate(nowMs) {
-  requestAnimationFrame(animate);
+    // --- Failsafe: frame time monitoring ---
   const deltaMs = nowMs - lastMs;
   lastMs = nowMs;
 
+  if (deltaMs > FRAME_THRESHOLD) frameSpikeCount++;
+  else frameSpikeCount = 0;
+
+  if (frameSpikeCount >= MAX_FRAME_SPIKES) {
+    console.warn("🚨 GPU/CPU overload detected! Stopping animate loop to prevent crash.");
+    return; // exit animate loop
+  }
+
+  // --- Failsafe: scene object limit ---
+  if (scene.children.length > MAX_SCENE_CHILDREN) {
+    console.warn(`🚨 Scene has too many objects (${scene.children.length}). Stopping animate loop.`);
+    return;
+  }
+
+  requestAnimationFrame(animate); // call next frame
   // --- FPS Mode Movement ---
   if (isFPSMode) {
     const moveSpeed = fpsState.speed * (deltaMs / 1000);

@@ -1,32 +1,61 @@
 import sounds from "../listOfSounds.js";
+import { materials } from "../listOfMaterials.js";
 
-const mainWall = {
-  horizontalRepeat: 25,
-  verticalRepeat: 16,
-  map: "assets/textures/bricks01/bricks01Color.png",
-  normalMap: "assets/textures/bricks01/bricks01Normal.png",
-  roughnessMap: "assets/textures/bricks01/bricks01Roughness.png",
-  aoMap: "assets/textures/bricks01/bricks01AO.png",
-  roughness: 0.75,
-  metalness: 0.0,
-  color: 0xffffff,
-  transparent: false,
-  opacity: 1.0,
-  emissive: 0x000000
-}; // closes outerWall
 
 export const Scene__Exported = {
-  name: "L-shaped_hallway1",
+  name: "Generated Scene",
 
   camera: {
-    position: { x: 15, y: 10, z: 50 },
-    lookAt: { x: 15, y: 3.5, z: 15 },
+    position: { x: 12, y: 1.7, z: 22 },
+    lookAt: { x: 12, y: 1.7, z: 15 },
     fov: 60,
     near: 0.1,
     far: 200
   },
 
-  lights: [],
+  lights: [
+  {
+    id: "ambient_fill",
+    type: "ambient",
+    color: 0xffffff,
+    intensity: 0.35
+  }, // closes ambient_fill
+
+  {
+    id: "hallway_key_light_top",
+    type: "point",
+    color: 0xe6f2ff,        // slightly cool fluorescent tone
+    intensity: 1.4,
+    distance: 40,
+    decay: 2,
+    position: { x: 8, y: 2.8, z: 2 },
+    castShadow: true
+  }, // closes hallway_key_light_top
+
+  {
+    id: "hallway_key_light_lower",
+    type: "point",
+    color: 0xe6f2ff,
+    intensity: 1.4,
+    distance: 50,
+    decay: 2,
+    position: { x: 12, y: 2.8, z: 12 },
+    castShadow: true
+  }, // closes hallway_key_light_lower
+
+  {
+    id: "corner_accent",
+    type: "spot",
+    color: 0xffffff,
+    intensity: 1.2,
+    distance: 30,
+    angle: 0.6,
+    penumbra: 0.4,
+    position: { x: 9, y: 2.9, z: 5 },
+    target: { x: 6, y: 0, z: 5 },
+    castShadow: true
+  } // closes corner_accent
+],
 
   environment: {
     staticObjects: [
@@ -44,12 +73,13 @@ export const Scene__Exported = {
       y: 3,
       z: 14
     },
-    texture: "default",
-	material:  mainWall
+    
+	material:  materials.bricks01
+  
   },
   {
     id: "right_wall_1_object",
-    type: "object",
+    type: "wall",
     position: {
       x: 15,
       y: 0,
@@ -57,14 +87,16 @@ export const Scene__Exported = {
     },
     size: {
       x: 1,
-      y: 1,
+      y: 3,
       z: 19
     },
-    texture: "default"
-  },
+	material:  materials.bricks01
+	},
+    
   {
-    id: "intro_left_wall_object",
-    type: "object",
+    def:  "wall",
+	id: "intro_left_wall_object",
+    type: "wall",
     position: {
       x: 9,
       y: 0,
@@ -72,14 +104,16 @@ export const Scene__Exported = {
     },
     size: {
       x: 3,
-      y: 1,
+      y: 3,
       z: 1
     },
-    texture: "default"
-  },
+	material:  materials.bricks01
+	},
+    
   {
-    id: "intro_right_wall_object",
-    type: "object",
+    def:  "wall",
+	id: "intro_right_wall_object",
+    type: "wall",
     position: {
       x: 13,
       y: 0,
@@ -87,14 +121,16 @@ export const Scene__Exported = {
     },
     size: {
       x: 3,
-      y: 1,
+      y: 3,
       z: 1
     },
-    texture: "default"
-  },
+	material:  materials.bricks01
+	},
+    
   {
-    id: "secondLegLowerWall_object",
-    type: "object",
+    def:  "wall",
+	id: "secondLegLowerWall_object",
+    type: "wall",
     position: {
       x: 1,
       y: 0,
@@ -102,14 +138,16 @@ export const Scene__Exported = {
     },
     size: {
       x: 8,
-      y: 1,
+      y: 3,
       z: 1
     },
-    texture: "default"
-  },
+	material:  materials.bricks01
+	},
+    
   {
-    id: "topWall_object",
-    type: "object",
+    def:  "wall",
+	id: "topWall_object",
+    type: "wall",
     position: {
       x: 1,
       y: 0,
@@ -117,13 +155,15 @@ export const Scene__Exported = {
     },
     size: {
       x: 14,
-      y: 1,
+      y: 3,
       z: 1
     },
-    texture: "default"
-  },
+	material:  materials.bricks01
+	},
+    
   {
-    id: "endWall_object",
+    def:  "wall",
+	id: "endWall_object",
     type: "object",
     position: {
       x: 1,
@@ -132,10 +172,10 @@ export const Scene__Exported = {
     },
     size: {
       x: 1,
-      y: 1,
+      y: 3,
       z: 4
     },
-    texture: "default"
+    material:  materials.bricks01
   },
   {
     def:  "tile",
@@ -152,7 +192,7 @@ export const Scene__Exported = {
       y: 0.2,
       z: 4
     },
-    texture: "assets/textures/blue.png",
+    material:  materials.concrete01,
     notes: "",
     hp: 9999,
     maxHp: 9999,
@@ -173,7 +213,7 @@ export const Scene__Exported = {
       y: 0.2,
       z: 15
     },
-    texture: "assets/textures/blue.png",
+    material:  materials.concrete01,
     notes: "",
     hp: 9999,
     maxHp: 9999,
@@ -194,7 +234,7 @@ export const Scene__Exported = {
       y: 0.2,
       z: 4
     },
-    texture: "assets/textures/blue.png",
+    material:  materials.concrete01,
     notes: "",
     hp: 9999,
     maxHp: 9999,
@@ -215,7 +255,7 @@ export const Scene__Exported = {
       y: 0.2,
       z: 15
     },
-    texture: "assets/textures/blue.png",
+    material:  materials.concrete01,
     notes: "",
     hp: 9999,
     maxHp: 9999,
