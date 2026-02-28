@@ -2,7 +2,7 @@
 
 export const AUDIO_MANIFEST = {
 
-  pistolShot: {
+  pistolFire: {
     category: "sfx",
     type: "2D",
     poolSize: 5,
@@ -11,8 +11,36 @@ export const AUDIO_MANIFEST = {
       //"/assets/sfx/pistol2.ogg"
     ]
   },
-
-  sniperShot: {
+shotgunFire: {
+    category: "sfx",
+    type: "2D",
+    poolSize: 5,
+    files: [
+      "/assets/sfx/weapons/shotgun_fire.ogg"
+      //"/assets/sfx/pistol2.ogg"
+    ]
+  },
+  
+  assaultFire: {
+    category: "sfx",
+    type: "2D",
+    poolSize: 10,
+    files: [
+      "/assets/sfx/weapons/assault_fire.ogg"
+      //"/assets/sfx/pistol2.ogg"
+    ]
+  },
+  
+  rocketFire: {
+    category: "sfx",
+    type: "2D",
+    poolSize: 5,
+    files: [
+      "/assets/sfx/weapons/rocket_fire.ogg"
+      //"/assets/sfx/pistol2.ogg"
+    ]
+  },
+  sniperFire: {
     category: "sfx",
     type: "2D",
     poolSize: 3,

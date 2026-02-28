@@ -2367,105 +2367,6 @@ function spawnProjectile(origin, direction, damage = 1) {
 
 let lastFireMs = 0;
 
-function handleFire() {
-  const w = player?.currentWeapon;
-  if (!w || !isFiring) return;
-
-    const now = performance.now();
-
-    // Initialize lastShotTime if missing
-    if (typeof w.lastShotTime !== "number") w.lastShotTime = 0;
-
-    const elapsed = now - w.lastShotTime;
-
-    // Enforce rate of fire
-    if (elapsed < (w.rateOfFire || 100)) return;
-
-    // --- Semi-auto logic ---
-    if (w.fireMode === "semi-auto") {
-        if (!w._semiAutoReady) return; // already fired this trigger
-        w._semiAutoReady = false;      // block until next trigger
-    }
-
-    // --- Ammo check ---
-    if (!(player && player.useAmmo && player.useAmmo(1))) {
-        if (w.isReloading) return;
-
-        if (w.fireMode === 'auto') {
-            if (w._dryFirePlayed) return;
-            w._dryFirePlayed = true;
-        }
-
-        logDebug("No ammo!");
-        try { new Audio('sounds/click.ogg').play().catch(() => {}); } catch(e) {}
-        return;
-    }
-
-    w.lastShotTime = now;
-
-    // --- Compute shooting direction ---
-    const retNDC = new THREE.Vector2(
-      (ret.x / cw) * 2 - 1,
-      -(ret.y / ch) * 2 + 1
-    );
-    raycaster.setFromCamera(retNDC, camera);
-
-    // 1. Find target point in world space (what we are aiming at)
-    const intersectables = window.sceneLoader ? window.sceneLoader.getIntersectableMeshes() : [];
-    const hits = raycaster.intersectObjects(intersectables, true);
-    const targetPoint = (hits.length > 0) ? hits[0].point : raycaster.ray.at(100, new THREE.Vector3());
-
-    // 2. Determine shoot origin (muzzle)
-    let shootOrigin = window.weaponManager ? window.weaponManager.getMuzzlePosition(w.id) : null;
-    if (!shootOrigin) {
-        // Fallback to camera relative if no weapon model/muzzle found
-        const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
-        shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
-    }
-
-    // 3. Determine direction from muzzle to target
-    const forwardDir = new THREE.Vector3().subVectors(targetPoint, shootOrigin).normalize();
-
-    // --- Generate spread directions ---
-    // Factor player recoil into weapon accuracy: recoilPx reduces effective accuracy.
-    const recoilInfluence = Math.min(0.9, (player.recoilPx || 0) / (Math.min(window.innerWidth, window.innerHeight) * 0.5));
-    const effectiveAcc = clampAccuracy((w.accuracy ?? 1.0) - recoilInfluence);
-    const dirs = generateSpreadDirections(forwardDir, w.projectilesPerShot || 1, w.projectileSpread || 0, effectiveAcc);
-
-    for (const dir of dirs) {
-        spawnProjectileUnified(shootOrigin, dir, {
-            damage: w.damage || 1,
-            color: w.color ?? 0xffff00,
-            speed: w.projectileSpeed ?? PROJECTILE_SPEED,
-            size: w.projectileSize ?? 0.02,
-            lifetime: w.projectileLifetime ?? PROJECTILE_LIFETIME,
-        projectileType: w.projectileType ?? "bullet",
-            explosive: w.explosive ?? false,
-            trail: true,
-            isEnemy: false
-        });
-    }
-
-    // --- Play weapon-specific sound ---
-    try {
-      let _skipLocal = false;
-      if (window.weaponManager && typeof window.weaponManager.triggerFire === 'function') {
-        try { window.weaponManager.triggerFire({ soundDelayMs: 0, muzzleFlash: true }); } catch(e) { console.warn('weaponManager.triggerFire failed', e); }
-        const wmEntry = window.weaponManager.weapons && window.weaponManager.weapons[w.id];
-        if (wmEntry && wmEntry.audio && wmEntry.audio.buffer) _skipLocal = true;
-      }
-      if (!_skipLocal && w.fireSound) {
-        const snd = new Audio(w.fireSound);
-        snd.currentTime = 0;
-        snd.play().catch(() => {});
-      }
-    } catch (e) { console.warn('play fire sound failed', e); }
-
-    // Debug: log the shot
-    // console.log(`Fired ${w.name} at ${now}`);
-}
-
-
 // ------------------ Fire / Reload functions ------------------
 function triggerReload() {
    if (window.weaponManager && window.weaponManager.isSwitching) return;
@@ -2495,41 +2396,6 @@ function updateAutoFire(nowMs) {
     }
 }
 
-// In your game loop or input handler
-let firingInterval = null;
-
-function startFiring(player) {
-  const weapon = player.currentWeapon;
-  if (!weapon) return;
-
-  // Only start if auto-fire
-  if (weapon.fireMode === "auto" && !firingInterval) {
-    firingInterval = setInterval(() => {
-      const now = performance.now();
-      if (now - weapon.lastShotTime >= weapon.rateOfFire) {
-        if (player.useAmmo(1)) {
-          weapon.lastShotTime = now;
-          // trigger firing effect, e.g., spawn bullets, play sound
-        } else {
-          stopFiring();
-        }
-      }
-    }, 10); // check every 10ms
-  } else if (weapon.fireMode === "semi-auto") {
-    // For semi-auto, just fire once
-    if (player.useAmmo(1)) {
-      weapon.lastShotTime = performance.now();
-      // trigger firing effect
-    }
-  }
-}
-
-function stopFiring() {
-  clearInterval(firingInterval);
-  firingInterval = null;
-}
-
-
 function triggerFire() {
   if (window.engine && window.engine.isEditorMode) {
     logDebug('Editor mode: firing disabled');
@@ -2539,9 +2405,19 @@ function triggerFire() {
   const w = player?.currentWeapon;
   if (!w) return false;
 
+  // Enforce Rate of Fire
+  const now = performance.now();
+  const rof = w.rateOfFire || 100;
+  if (w.lastShotTime && (now - w.lastShotTime < rof)) {
+      return false;
+  }
+
   if (!(player && player.useAmmo && player.useAmmo(1))) {
         if (w.isReloading) return false;
-        if (w.fireMode === 'auto') w._dryFirePlayed = true;
+        if (w.fireMode === 'auto') {
+            if (w._dryFirePlayed) return false;
+            w._dryFirePlayed = true;
+        }
 
         logDebug("No ammo! Reload first.");
         try {
@@ -2552,24 +2428,26 @@ function triggerFire() {
         return false;
     }
 
-    lastPlayerFireMs = performance.now();
+    w.lastShotTime = now;
+    lastPlayerFireMs = now;
     
     // Try to trigger weapon manager animation/sound/muzzle flash if available.
-    let _skipLocalFireSound = false;
     try {
       if (window.weaponManager && typeof window.weaponManager.triggerFire === 'function') {
         window.weaponManager.triggerFire({ soundDelayMs: 0, muzzleFlash: true });
-        const wmEntry = window.weaponManager.weapons && window.weaponManager.weapons[w.id];
-        if (wmEntry && wmEntry.audio && wmEntry.audio.buffer) _skipLocalFireSound = true;
       }
     } catch (e) { console.warn('weaponManager.triggerFire failed', e); }
 
-    if (!_skipLocalFireSound) {
-      try {
-        const fireSound = new Audio(w.fireSound);
-        fireSound.currentTime = 0;
-        fireSound.play().catch(()=>{});
-      } catch (e) {}
+    if (w.fireSound) {
+      if (w.fireSound.includes('/') || w.fireSound.includes('.')) {
+        const s = new Audio(w.fireSound);
+        s.currentTime = 0;
+        s.play().catch(() => {});
+      } else {
+        try {
+          audioManager.play2D(w.fireSound);
+        } catch (e) { console.warn('audioManager.play2D failed', e); }
+      }
     }
         
 	
