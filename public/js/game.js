@@ -2996,6 +2996,9 @@ function animate(nowMs) {
   // Update Scene (enemies, etc)
   if (window.sceneLoader) window.sceneLoader.update(deltaMs, nowMs);
 
+  // Update Scene Manager (Transitions)
+  if (window.sceneManager) window.sceneManager.update(deltaMs);
+
   // Update projectiles
   updateProjectiles(deltaMs);
   updateEnemyProjectiles(deltaMs);

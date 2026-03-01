@@ -55,6 +55,16 @@ window.sceneLoader = this;
     this.roomCenterOffset = new THREE.Vector3(0, 0, 0);
 
     this.sceneLights = [];
+    
+    // --- Pending Scene Data (for preloading) ---
+    this.pendingSceneDef = null;
+    this.pendingProps = [];
+    this.pendingPropsById = {};
+    this.pendingEnemies = [];
+    this.pendingEnemiesById = {};
+    this.pendingSceneLights = [];
+    this.pendingStaticObjects = [];
+
     // audio helpers
     this._audioLoader = new THREE.AudioLoader();
     this._audioBufferCache = {};
@@ -63,46 +73,62 @@ window.sceneLoader = this;
   // -------------------------
   // Registration helpers
   // -------------------------
-  addProp(propInstance) {
+  addProp(propInstance, isPending = false) {
     if (!propInstance || !propInstance.mesh) return;
-    // push into array and map
-    this.props.push(propInstance);
-    if (propInstance.id) this.propsById[propInstance.id] = propInstance;
+    
+    if (isPending) {
+        this.pendingProps.push(propInstance);
+        if (propInstance.id) this.pendingPropsById[propInstance.id] = propInstance;
+        this.scene.add(propInstance.mesh);
+        // Ensure hidden initially
+        propInstance.mesh.visible = false;
+        propInstance.mesh.traverse(obj => { if (obj.isMesh) obj.visible = false; });
+    } else {
+        // push into array and map
+        this.props.push(propInstance);
+        if (propInstance.id) this.propsById[propInstance.id] = propInstance;
 
-    // scene + mesh tracking
-    this.scene.add(propInstance.mesh);
-    propInstance.mesh.traverse(obj => {
-  if (obj.isMesh) {
-    this.propMeshes.push(obj);
+        // scene + mesh tracking
+        this.scene.add(propInstance.mesh);
+        propInstance.mesh.traverse(obj => {
+          if (obj.isMesh) {
+            this.propMeshes.push(obj);
+          }
+        });
+    }
   }
-});
 
-	
-  }
-
-  addEnemy(enemyInstance) {
+  addEnemy(enemyInstance, isPending = false) {
     if (!enemyInstance || !enemyInstance.mesh) return;
-    this.enemies.push(enemyInstance);
-    if (enemyInstance.id) this.enemiesById[enemyInstance.id] = enemyInstance;
+    
+    if (isPending) {
+        this.pendingEnemies.push(enemyInstance);
+        if (enemyInstance.id) this.pendingEnemiesById[enemyInstance.id] = enemyInstance;
+        this.scene.add(enemyInstance.mesh);
+        // Ensure hidden and inactive
+        enemyInstance.setActive(false);
+        enemyInstance.mesh.visible = false;
+    } else {
+        this.enemies.push(enemyInstance);
+        if (enemyInstance.id) this.enemiesById[enemyInstance.id] = enemyInstance;
 
-    this.scene.add(enemyInstance.mesh);
-    enemyInstance.mesh.traverse(obj => {
-      if (!obj.isMesh) return;
-      try {
-        // Shadow setup
-        obj.castShadow = true;
-        obj.receiveShadow = true;
-        // Only register mesh parts for hit-tests if the enemy is active.
-        if (enemyInstance._isActive) {
-          if (!this.enemyMeshes.includes(obj)) this.enemyMeshes.push(obj);
-        }
-        // Tag mesh with enemy id for lookup later (always present even if inactive)
-        obj.userData = Object.assign({}, obj.userData || {}, { enemyId: enemyInstance.id });
-        obj.frustumCulled = false;
-      } catch (e) {}
-    });
-
-	
+        this.scene.add(enemyInstance.mesh);
+        enemyInstance.mesh.traverse(obj => {
+          if (!obj.isMesh) return;
+          try {
+            // Shadow setup
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            // Only register mesh parts for hit-tests if the enemy is active.
+            if (enemyInstance._isActive) {
+              if (!this.enemyMeshes.includes(obj)) this.enemyMeshes.push(obj);
+            }
+            // Tag mesh with enemy id for lookup later (always present even if inactive)
+            obj.userData = Object.assign({}, obj.userData || {}, { enemyId: enemyInstance.id });
+            obj.frustumCulled = false;
+          } catch (e) {}
+        });
+    }
   }
 
   addExplosion(explosionInstance) {
@@ -150,12 +176,16 @@ _applyCameraSettings() {
   // -----------------------------
   // Lights (unchanged)
   // -----------------------------
-  _createLights() {
-  // Clear previous lights
-  this.sceneLights.forEach(l => this.scene.remove(l));
-  this.sceneLights = [];
+  _createLights(sceneDef, isPending = false) {
+      const targetArray = isPending ? this.pendingSceneLights : this.sceneLights;
+      
+      // If not pending, clear existing lights first
+      if (!isPending) {
+          this.sceneLights.forEach(l => this.scene.remove(l));
+          this.sceneLights = [];
+      }
 
-  const defs = this.sceneDef?.lights;
+  const defs = sceneDef?.lights;
   if (!Array.isArray(defs)) return;
 
   defs.forEach(def => {
@@ -265,12 +295,13 @@ _applyCameraSettings() {
     }
 
     this.scene.add(light);
+    if (isPending) light.visible = false;
 
     if (def.id) {
       light.userData.id = def.id;
     }
 
-    this.sceneLights.push(light);
+    targetArray.push(light);
   });
 
 }
@@ -281,12 +312,109 @@ _applyCameraSettings() {
   // -----------------------------
   loadScene(sceneDef) {
     this.unloadScene();
-    this.sceneDef = sceneDef;
+    this._loadSceneData(sceneDef, false);
+    this._applyCameraSettings(sceneDef);
+    this._notifyLoaded();
+  }
 
-    console.log(`SceneLoader loading scene: ${sceneDef.name}`);
+  preloadScene(sceneDef) {
+      console.log(`SceneLoader preloading scene: ${sceneDef.name}`);
+      // Clear any previous pending data
+      this._clearPending();
+      this.pendingSceneDef = sceneDef;
+      this._loadSceneData(sceneDef, true);
+  }
+
+  hasPendingScene() {
+      return !!this.pendingSceneDef;
+  }
+
+  commitPendingScene() {
+      if (!this.pendingSceneDef) return;
+      
+      console.log(`SceneLoader committing pending scene: ${this.pendingSceneDef.name}`);
+      
+      // 1. Unload current scene (removes current props/enemies/lights from scene)
+      this.unloadScene();
+      
+      // 2. Promote pending data to current
+      this.sceneDef = this.pendingSceneDef;
+      this.props = this.pendingProps;
+      this.propsById = this.pendingPropsById;
+      this.enemies = this.pendingEnemies;
+      this.enemiesById = this.pendingEnemiesById;
+      this.sceneLights = this.pendingSceneLights;
+      this.staticObjects = this.pendingStaticObjects; 
+      
+      // 3. Make everything visible and active
+      this.props.forEach(p => {
+          if (p.mesh) {
+              p.mesh.visible = true;
+              p.mesh.traverse(o => { if (o.isMesh) { o.visible = true; this.propMeshes.push(o); } });
+          }
+      });
+      
+      this.enemies.forEach(e => {
+          e.setActive(true); 
+      });
+      
+      this.sceneLights.forEach(l => {
+          l.visible = true;
+      });
+      
+      // 4. Apply camera settings
+      this._applyCameraSettings(this.sceneDef);
+      
+      // 5. Clear pending
+      this.pendingSceneDef = null;
+      this.pendingProps = [];
+      this.pendingPropsById = {};
+      this.pendingEnemies = [];
+      this.pendingEnemiesById = {};
+      this.pendingSceneLights = [];
+      this.pendingStaticObjects = [];
+      
+      this._notifyLoaded();
+  }
+
+  _clearPending() {
+      // Cleanup any pending objects if we preload again before committing
+      this.pendingProps.forEach(p => {
+          if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
+          try { p.dispose?.(); } catch(e){}
+      });
+      this.pendingEnemies.forEach(e => {
+          if (e.mesh && e.mesh.parent) e.mesh.parent.remove(e.mesh);
+          try { e.dispose?.(); } catch(e){}
+      });
+      this.pendingSceneLights.forEach(l => {
+          if (l.parent) l.parent.remove(l);
+      });
+      
+      this.pendingProps = [];
+      this.pendingPropsById = {};
+      this.pendingEnemies = [];
+      this.pendingEnemiesById = {};
+      this.pendingSceneLights = [];
+      this.pendingStaticObjects = [];
+      this.pendingSceneDef = null;
+  }
+
+  _loadSceneData(sceneDef, isPending) {
+    if (!isPending) {
+        this.sceneDef = sceneDef;
+        console.log(`SceneLoader loading scene: ${sceneDef.name}`);
+    }
 
     // Props (including full-cover walls)
     const staticObjects = sceneDef.environment?.staticObjects ?? [];
+    
+    // Track static objects for pending if needed, though mostly used for props list
+    if (isPending) {
+        // We don't have a separate pendingStaticObjects list logic in addProp, 
+        // but we can store the raw defs if needed. 
+        // For now, addProp handles the instances.
+    }
 
     // Helper: convert edge-based (min-corner) position -> center-based position
     function _ensureCenterPosition(def) {
@@ -399,7 +527,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
     // Add prop to SceneLoader (tracks props + adds mesh to scene)
     // preserve original scene definition on the runtime instance
     try { propInstance._sceneDef = pdef; } catch(e){}
-    this.addProp(propInstance);
+    this.addProp(propInstance, isPending);
 
     console.log(`Prefab prop loaded: ${pdef.id}`, propInstance.mesh.position);
 
@@ -487,7 +615,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
       // attach raw definition so the editor can preserve arbitrary keys
       try { propWrapper._sceneDef = pdef; } catch(e){}
-      this.addProp(propWrapper);
+      this.addProp(propWrapper, isPending);
     });
 
     continue;
@@ -554,7 +682,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
     };
 
     try { doorWrapper._sceneDef = pdef; } catch(e){}
-    this.addProp(doorWrapper);
+    this.addProp(doorWrapper, isPending);
 
     // Link to transition objects for animation (SceneManager)
     const transitions = this.sceneDef.transitionObjects;
@@ -587,7 +715,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
   });
 
   try { p._sceneDef = pdef; } catch(e){}
-  this.addProp(p);
+  this.addProp(p, isPending);
 }
 
 // Enemies
@@ -627,17 +755,14 @@ if (pdef.type === "prefab" && pdef.prefab) {
     this._checkObjectiveAfterHit();
   };
       // register via helper
-      this.addEnemy(e);
+      this.addEnemy(e, isPending);
     });
 
         // Use absolute world positions - no room centering or bounds calculation needed
         // Scene author defines exact positions. If they want walls/floor, add them as staticObjects.
 
         // Lights created after props/enemies loaded
-        this._createLights();
-
-    // After room + lights are ready
-    this._applyCameraSettings();
+        this._createLights(sceneDef, isPending);
 
     // Enemy firing callback
     const fireCallback = (origin, target, speed = 28) => {
@@ -649,14 +774,15 @@ if (pdef.type === "prefab" && pdef.prefab) {
     };
 
     // assign callbacks to enemies we created
-    enemyDefs.forEach((edef) => {
-      const e = this.enemiesById[edef.id];
+    // Note: if pending, we assign callback but enemy is inactive so it won't fire yet.
+    const targetEnemies = isPending ? this.pendingEnemies : this.enemies;
+    targetEnemies.forEach((e) => {
       if (e) e.fireCallback = fireCallback;
     });
 
-    this.objective = sceneDef.objective ?? null;
-
-    this._notifyLoaded();
+    if (!isPending) {
+        this.objective = sceneDef.objective ?? null;
+    }
   }
 
   // Legacy room methods removed - scenes now use absolute world positions

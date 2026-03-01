@@ -1,5 +1,5 @@
 import sounds from "../listOfSounds.js";
-
+import { l_shaped_hallway } from "./l_shaped_hallway.js";
 
 // =====================================================
 // OUTER WALL MATERIAL (module scope)
@@ -56,7 +56,23 @@ const floorTexture = {
 // =====================================================
 export const Scene_starting_Room = {
   name: "startingRoom",
+cameraRails: {
+    intro: [],
 
+    exit: [
+      {
+        type: "moveTo",
+        position: { x: 26.75, y: 1.7, z:  4.2},
+        duration: 4000
+        
+      },
+	    
+			{ type: 'rotate', rotation:  -90, duration:  1000},
+	  {  type:  'pause', duration:  1000, triggerNextScene:  true}
+    ]
+  },
+
+  
   camera: {
     position: { x: 15.3, y: 1.7, z: 21.68 },
     lookAt: { x: 17.3, y: 3.5, z: 20 },
@@ -257,7 +273,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 3, y: 0, z: 0 },
         size: { x: 1, y: 7, z: 19 },
-        texture: "default"
+        
       }, // closes wall_1
 
       {
@@ -267,7 +283,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 4, y: 0, z: 0 },
         size: { x: 23, y: 7, z: 1 },
-        texture: "default"
+        
       }, // closes wall_2
 
       {
@@ -277,7 +293,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 27, y: 0, z: 0 },
         size: { x: 1, y: 7, z: 19 },
-        texture: "default"
+        
       }, // closes wall_3
 
       {
@@ -287,7 +303,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 4, y: 0, z: 18 },
         size: { x: 10, y: 7, z: 1 },
-        texture: "default"
+        
       }, // closes wall_4
 
       {
@@ -297,7 +313,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 15, y: 0, z: 18 },
         size: { x: 12, y: 7, z: 1 },
-        texture: "default"
+        
       }, // closes wall_5
 
       {
@@ -307,7 +323,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 12, y: 0, z: 19 },
         size: { x: 1, y: 7, z: 4 },
-        texture: "default"
+        
       }, // closes introWall1
 
       {
@@ -317,7 +333,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 16, y: 0, z: 19 },
         size: { x: 1, y: 7, z: 4 },
-        texture: "default"
+        
       }, // closes introWall2
 
       {
@@ -327,7 +343,7 @@ hitSounds:  sounds.ricMetal
         material: outerWall,
         position: { x: 12, y: 0, z: 23 },
         size: { x: 5, y: 7, z: 1 },
-        texture: "default"
+        
       }, // closes introWall3
 	  {
 		def:  "wall",
@@ -349,10 +365,12 @@ position: { x: 14, y: 3, z: 18 },
         id: "exitDoor_object",
         type: "door",
         def: "wall",
-        position: { x: 27, y: 0, z: 4 },
+        position: { x: 27.5, y: 0, z: 4 },
         size: { x: 1.2, y: 3, z: 0.2 },
         texture: "assets/textures/door_wood.png",
 		rotationY:  90
+		        
+		
       }, // closes exitDoor
   
   {
@@ -444,8 +462,72 @@ position: { x: 14, y: 3, z: 18 },
     ] // closes staticObjects
   }, // closes environment
 
-  enemies: [],
-  objective: null,
-  nextScene: null
-
-}; // closes Scene_starting_Room
+  enemies: [
+  {
+      id: "grunt_1",
+      type: "Grunt",
+      hp: 40,
+      // Use a GLB humanoid base mesh instead of FBX
+      modelUrl: "assets/models/exo_red.glb",
+      // allow automatic auto-scaling based on the GLTF bounding box
+      modelScale: null,
+      // provide common pistol animations as GLB clips
+      animationUrls: {
+        walk: "assets/animations/walk_pistol.glb",
+        shoot: "assets/animations/stand_pistol.glb"
+      },
+      position: { x: -3, y: 0.9, z: -6 },
+      behavior: {
+        pattern: "path",
+        params: {
+          loop: true,
+          steps: [
+            { type: "move", axis: "x", distance: 6, durationMs: 3000 },
+            { type: "pause", durationMs: 800 },
+            { type: "move", axis: "x", distance: -6, durationMs: 3000 },
+            { type: "pause", durationMs: 800 }
+          ]
+        }
+      },
+      firePauseMs: 800,
+      weapon: "pistol",
+      sprite: "assets/sprites/grunt.png",
+      voice: {
+        pain: [
+          "assets/sfx/grunt/pain1.ogg",
+          "assets/sfx/grunt/pain2.ogg"
+        ],
+        death: [
+          "assets/sfx/grunt/death1.ogg",
+          "assets/sfx/grunt/death2.ogg"
+        ],
+        taunt: [
+          "assets/sfx/grunt/taunt1.ogg",
+          "assets/sfx/grunt/taunt2.ogg"
+        ],
+        engage: [
+          "assets/sfx/grunt/engage1.ogg"
+        ]
+      },
+      hitSounds: [
+        "assets/sfx/grunt/hit1.ogg",
+        "assets/sfx/grunt/hit2.ogg"
+      ],
+      deathSounds: [
+        "assets/sfx/grunt/death1.ogg",
+        "assets/sfx/grunt/death2.ogg"
+      ]
+      ,
+      // apparel temporarily disabled (using colorization instead)
+      // apparel: ["pants","tshirt"]
+    }
+    
+  
+  ],
+  objective: {
+    type: "eliminateAllEnemies",
+    description: "Eliminate all enemies to complete this scene."
+  },
+    exitDoorId: "exitDoor_object",
+  nextScene: l_shaped_hallway
+}; //closes scene_starting_room

@@ -2,7 +2,7 @@ import sounds from "../listOfSounds.js";
 import { materials } from "../listOfMaterials.js";
 
 
-export const Scene__Exported = {
+export const l_shaped_hallway = {
   name: "L-shaped_hallway1",
 
   camera: {
@@ -59,6 +59,16 @@ export const Scene__Exported = {
 
   environment: {
     staticObjects: [
+  
+  {
+        id: "introDoor_object",
+        type: "door",
+        def: "wall",
+        position: { x: 12, y: 0, z: 20 },
+        size: { x: 1.2, y: 2.2, z: 0.2 },
+        texture: "assets/textures/door_wood.png"
+      }, // closes introDoor
+	  
   {
     def:  "wall",
 	id: "left_wall_1_object",
