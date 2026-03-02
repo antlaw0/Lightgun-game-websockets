@@ -624,86 +624,102 @@ if (pdef.type === "prefab" && pdef.prefab) {
   // =============================
   // DOOR PROP
   // =============================
-  if (pdef.type === "door") {
-    const width  = pdef.size?.x ?? 1.2;
-    const height = pdef.size?.y ?? 2.2;
-    const depth  = pdef.size?.z ?? 0.15;
+if (pdef.type === "door") {
 
-    const geo = new THREE.BoxGeometry(width, height, depth);
-    
-    // Shift geometry so origin is at the hinge side
-    const od = (typeof pdef.openDirection === 'number') ? pdef.openDirection : 1;
-    geo.translate( - (width / 2) * od, 0, 0 );
-    
-    const matParams = {
-      color: 0xffff00,
-      roughness: 0.6,
-      metalness: 0.1
-    };
-    if (pdef.texture) {
-      matParams.map = new THREE.TextureLoader().load(pdef.texture);
-      matParams.map.colorSpace = THREE.SRGBColorSpace;
-      matParams.color = 0xffffff;
-    }
-    const mat = new THREE.MeshStandardMaterial(matParams);
+  const width  = pdef.size?.x ?? 1.2;
+  const height = pdef.size?.y ?? 2.2;
+  const depth  = pdef.size?.z ?? 0.15;
 
-    const door = new THREE.Mesh(geo, mat);
+  const openDir = (typeof pdef.openDirection === "number") ? pdef.openDirection : 1;
 
-    // Calculate hinge position based on center position and rotation
-    const rotY = (pdef.rotationY !== undefined) ? THREE.MathUtils.degToRad(pdef.rotationY) : 0;
-    
-    // Offset from center to hinge in world space
-    const offsetVec = new THREE.Vector3( (width/2) * od, 0, 0 ).applyAxisAngle(new THREE.Vector3(0,1,0), rotY);
+  // Create hinge group (THIS is the pivot)
+  const hinge = new THREE.Group();
 
-    door.position.set(
-      (pdef.position.x ?? 0) + offsetVec.x,
-      (pdef.position.y ?? 0) + height / 2,
-      (pdef.position.z ?? 0) + offsetVec.z
-    );
+  // Place hinge at actual hinge world position
+  hinge.position.set(
+    pdef.position.x ?? 0,
+    (pdef.position.y ?? 0),
+    pdef.position.z ?? 0
+  );
 
-    if (pdef.rotationY !== undefined) {
-      door.rotation.y = THREE.MathUtils.degToRad(pdef.rotationY);
-    }
+  // Apply base rotation of doorway
+  const baseRotY = (pdef.rotationY !== undefined)
+    ? THREE.MathUtils.degToRad(pdef.rotationY)
+    : 0;
 
-    door.castShadow = true;
-    door.receiveShadow = true;
-    door.userData = {
-      propId: pdef.id,
-      type: "door",
-      solid: true
-    };
+  hinge.rotation.y = baseRotY;
 
-    this.scene.add(door);
+  this.scene.add(hinge);
 
-    // Create wrapper for the door
-    const doorWrapper = {
-      id: pdef.id,
-      mesh: door,
-      size: { x: width, y: height, z: depth },
-      hp: 9999,
-      maxHp: 9999,
-      indestructible: true,
-      hitSounds: [],
-      deathSounds: [],
-      takeDamage(amount) { return false; },
-      dispose() {
-        try { if (this.mesh) { this.mesh.geometry?.dispose(); if (this.mesh.material?.map) this.mesh.material.map.dispose(); this.mesh.material?.dispose(); } } catch(e){}
-      }
-    };
+  // Create door mesh centered
+  const geo = new THREE.BoxGeometry(width, height, depth);
 
-    try { doorWrapper._sceneDef = pdef; } catch(e){}
-    this.addProp(doorWrapper, isPending);
+  const matParams = {
+    color: 0xffff00,
+    roughness: 0.6,
+    metalness: 0.1
+  };
 
-    // Link to transition objects for animation (SceneManager)
-    const transitions = this.sceneDef.transitionObjects;
-    if (Array.isArray(transitions)) {
-      const t = transitions.find(t => t.id === pdef.id);
-      if (t) t.object3D = door;
-    }
-
-    continue;
+  if (pdef.texture) {
+    matParams.map = new THREE.TextureLoader().load(pdef.texture);
+    matParams.map.colorSpace = THREE.SRGBColorSpace;
+    matParams.color = 0xffffff;
   }
 
+  const mat = new THREE.MeshStandardMaterial(matParams);
+
+  const doorMesh = new THREE.Mesh(geo, mat);
+
+  // Shift mesh so hinge is at edge
+  doorMesh.position.x = (width / 2) * openDir;
+  doorMesh.position.y = height / 2;
+
+  doorMesh.castShadow = true;
+  doorMesh.receiveShadow = true;
+
+  hinge.add(doorMesh);
+
+  hinge.userData = {
+    propId: pdef.id,
+    type: "door",
+    solid: true
+  };
+
+  // Wrapper now references hinge, not mesh
+  const doorWrapper = {
+    id: pdef.id,
+    mesh: hinge,
+    size: { x: width, y: height, z: depth },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+    takeDamage() { return false; },
+    dispose() {
+      try {
+        hinge.traverse(o => {
+          if (o.isMesh) {
+            o.geometry?.dispose();
+            o.material?.dispose();
+          }
+        });
+      } catch {}
+    }
+  };
+
+  try { doorWrapper._sceneDef = pdef; } catch(e){}
+
+  this.addProp(doorWrapper, isPending);
+
+  // IMPORTANT: link transition system to hinge
+  const transitions = this.sceneDef.transitionObjects;
+  if (Array.isArray(transitions)) {
+    const t = transitions.find(t => t.id === pdef.id);
+    if (t) t.object3D = hinge;
+  }
+
+  continue;
+}
+  
   // =============================
   // DEFAULT PROP (PropClass)
   // =============================

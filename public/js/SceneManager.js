@@ -69,7 +69,7 @@ toggleDoor(doorPropOrMesh) {
     // Correct swing: center-pivot adjustment
     // od: -1 left, 1 right
     // io: 1 outward, -1 inward
-    const swingSign = od * io;  // center-pivot: multiply directly
+    const swingSign = -od * io;  // center-pivot: multiply directly
     const rotDelta = (isOpen ? -1 : 1) * swingSign * Math.PI / 2;
 
     const targetRotation = mesh.rotation.y + rotDelta;
@@ -158,37 +158,62 @@ async performDoorCutTransition(nextSceneDef) {
     const hingePos = mesh.getWorldPosition(new THREE.Vector3());
     const centerPos = hingePos.clone().add(right.clone().multiplyScalar( - (width / 2) * od ));
 
-    // Door forward vector
-    const doorForward = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(0, baseRotation, 0));
+    // Door forward vector (local +Z rotated)
+const doorForward = new THREE.Vector3(0, 0, 1)
+    .applyEuler(new THREE.Euler(0, baseRotation, 0))
+    .normalize();
 
-    // Camera in front of door along local -Z (using centerPos)
-    const camStart = centerPos.clone()
-        .sub(doorForward.clone().multiplyScalar(1.5));
-    camStart.y = 1.7;
+// Determine which side of the door we are currently on
+const currentCamPos = this.camera.position.clone();
+const toCamera = currentCamPos.clone().sub(centerPos).normalize();
 
-    // Offset sideways by pivot
+// Dot product tells us if we are in front or behind
+const dot = doorForward.dot(toCamera);
 
-    // Camera target in front of door (using centerPos)
+// If dot > 0, camera is in front of doorForward
+// If dot < 0, camera is behind doorForward
+// We want camStart to be on the SAME side we came from
+
+//const outsideSign = (dot > 0) ? 1 : -1;
+
+// Camera starts outside
+//const camStart = centerPos.clone()
+    //.add(doorForward.clone().multiplyScalar(outsideSign * 2.5));
+
+//camStart.y = 1.7;
+  // Camera starts outside the door
+const outsideSign = 1; // 1 = outside, -1 = inside
+const camStart = centerPos.clone()
+    .add(doorForward.clone().multiplyScalar(outsideSign * 2.5));
+camStart.y = 1.7;  
+	// Camera target: move through the door into the room
     const camTarget = centerPos.clone()
-        .sub(doorForward.clone().multiplyScalar(0.6));
-    camTarget.y = camStart.y;
+    .add(doorForward.clone().multiplyScalar(-outsideSign * 2.0));
 
-    // Control point above for arc
+camTarget.y = camStart.y;
+    
+	// Look target: straight down the hallway
+    const lookTarget = centerPos.clone()
+        .add(doorForward.clone().multiplyScalar(10.0));
+    lookTarget.y = camStart.y;
+
+    // Control point for arc (keep low to avoid clipping door header)
     const camControl = camStart.clone().lerp(camTarget, 0.5);
-    camControl.y += 1.2;
+    camControl.y += 0.1;
 
     // Correct door rotation based on pivot + in/out
     const io = (typeof def.openInOut === 'number') ? def.openInOut : 1;
-    const swingSign = od * io;
+    const swingSign = -od * io;
     const targetRot = baseRotation + Math.PI / 2 * swingSign;
 
-    // Initialize camera
-    this.camera.position.copy(camStart);
-    const lookTarget = centerPos.clone();
-    lookTarget.y = camStart.y;
-    this.camera.lookAt(lookTarget);
+    // Initialize camera cleanly
+this.camera.rotation.x = 0; // reset vertical tilt
+this.camera.rotation.y = 0; // reset yaw
+this.camera.rotation.z = 0; // reset roll
 
-    this.transitionState = {
+this.camera.position.copy(camStart);
+this.camera.lookAt(lookTarget);
+	this.transitionState = {
         active: true,
         door: mesh,
         startRotation: baseRotation,
@@ -198,6 +223,7 @@ async performDoorCutTransition(nextSceneDef) {
         cameraStart: camStart,
         cameraTarget: camTarget,
         cameraControlPoints: camControl,
+        lookTarget: lookTarget,
         onComplete: async () => {
             mesh.userData.isOpen = true;
             const introRails = nextSceneDef.cameraRails?.intro;
@@ -252,7 +278,11 @@ async performDoorCutTransition(nextSceneDef) {
                 oneMinusT*oneMinusT*p0.z + 2*oneMinusT*t*p1.z + t*t*p2.z
             );
             this.camera.position.copy(pos);
-            this.camera.lookAt(ts.door.getWorldPosition(new THREE.Vector3()));
+            if (ts.lookTarget) {
+                this.camera.lookAt(ts.lookTarget);
+            } else {
+                this.camera.lookAt(ts.door.getWorldPosition(new THREE.Vector3()));
+            }
         }
 
         if (t >= 1) {
