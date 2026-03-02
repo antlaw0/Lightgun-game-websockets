@@ -6,8 +6,13 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
  * @param {Array} steps - Array of step objects
  * @param {Function} onTriggerNextScene - optional callback if a step has triggerNextScene: true
  */
-export async function runCameraRails(camera, steps, onTriggerNextScene) {
+export async function runCameraRails(camera, steps, onTriggerNextScene, cancelToken) {
   for (const step of steps) {
+    if (cancelToken && cancelToken.cancelled) {
+      // caller requested cancellation; stop processing further steps
+      break;
+    }
+
     if (!step || typeof step !== 'object') {
       console.error('Invalid camera step:', step);
       continue;
@@ -19,7 +24,7 @@ export async function runCameraRails(camera, steps, onTriggerNextScene) {
         break;
 
       case 'lookAt':
-        await lookAt(camera, step.target, step.duration);
+          await lookAt(camera, step.target || step.position, step.duration);
         break;
 
       case 'rotate':
@@ -42,6 +47,9 @@ export async function runCameraRails(camera, steps, onTriggerNextScene) {
     // Trigger scene transition if flag is set
     if (step.triggerNextScene && typeof onTriggerNextScene === 'function') {
       await onTriggerNextScene();
+      // if the callback started a transition it may want to stop the rest of
+      // the rails; callback can set cancelToken.cancelled on the object it was
+      // given by the caller.
     }
   }
 }
@@ -125,6 +133,12 @@ function scheduleFootstepsDuringMove(startVec, endVec, durationMs) {
 }
 
 function lookAt(camera, target, duration) {
+
+  if (!target || typeof target.x !== "number") {
+    console.error("Invalid lookAt target:", target);
+    return Promise.resolve(); // fail gracefully
+  }
+
   return new Promise(resolve => {
     const startQuat = camera.quaternion.clone();
 
@@ -137,7 +151,6 @@ function lookAt(camera, target, duration) {
     }, resolve);
   });
 }
-
 function rotate(camera, rotation, duration) {
   return new Promise(resolve => {
     const startQuat = camera.quaternion.clone();

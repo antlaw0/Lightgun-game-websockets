@@ -344,7 +344,7 @@ _applyCameraSettings() {
       this.enemies = this.pendingEnemies;
       this.enemiesById = this.pendingEnemiesById;
       this.sceneLights = this.pendingSceneLights;
-      this.staticObjects = this.pendingStaticObjects; 
+          this.staticObjects = this.pendingStaticObjects; 
       
       // 3. Make everything visible and active
       this.props.forEach(p => {
@@ -630,6 +630,11 @@ if (pdef.type === "prefab" && pdef.prefab) {
     const depth  = pdef.size?.z ?? 0.15;
 
     const geo = new THREE.BoxGeometry(width, height, depth);
+    
+    // Shift geometry so origin is at the hinge side
+    const od = (typeof pdef.openDirection === 'number') ? pdef.openDirection : 1;
+    geo.translate( - (width / 2) * od, 0, 0 );
+    
     const matParams = {
       color: 0xffff00,
       roughness: 0.6,
@@ -644,11 +649,16 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     const door = new THREE.Mesh(geo, mat);
 
-    // pdef.position is converted above to center-x/center-z and base-y
+    // Calculate hinge position based on center position and rotation
+    const rotY = (pdef.rotationY !== undefined) ? THREE.MathUtils.degToRad(pdef.rotationY) : 0;
+    
+    // Offset from center to hinge in world space
+    const offsetVec = new THREE.Vector3( (width/2) * od, 0, 0 ).applyAxisAngle(new THREE.Vector3(0,1,0), rotY);
+
     door.position.set(
-      pdef.position.x ?? 0,
+      (pdef.position.x ?? 0) + offsetVec.x,
       (pdef.position.y ?? 0) + height / 2,
-      pdef.position.z ?? 0
+      (pdef.position.z ?? 0) + offsetVec.z
     );
 
     if (pdef.rotationY !== undefined) {

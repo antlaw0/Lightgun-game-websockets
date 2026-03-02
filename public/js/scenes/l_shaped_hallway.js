@@ -13,6 +13,8 @@ export const l_shaped_hallway = {
     far: 200
   },
 
+  introDoorId: "introDoor_object",
+
   lights: [
   {
     id: "ambient_fill",
@@ -25,7 +27,7 @@ export const l_shaped_hallway = {
     id: "hallway_key_light_top",
     type: "point",
     color: 0xe6f2ff,        // slightly cool fluorescent tone
-    intensity: 1.4,
+    intensity: 0.7,
     distance: 40,
     decay: 2,
     position: { x: 8, y: 2.8, z: 2 },
@@ -64,8 +66,11 @@ export const l_shaped_hallway = {
         id: "introDoor_object",
         type: "door",
         def: "wall",
-        position: { x: 12, y: 0, z: 20 },
-        size: { x: 1.2, y: 2.2, z: 0.2 },
+                position: { x: 12, y: 0, z: 20 }, // center X along corridor width
+        size: { x: 2, y: 2.2, z: 0.2 },
+        rotationY: 180,
+        openDirection:  1,
+		openInOut:  1,
         texture: "assets/textures/door_wood.png"
       }, // closes introDoor
 	  
@@ -107,16 +112,8 @@ export const l_shaped_hallway = {
     def:  "wall",
 	id: "intro_left_wall_object",
     type: "wall",
-    position: {
-      x: 9,
-      y: 0,
-      z: 19
-    },
-    size: {
-      x: 3,
-      y: 3,
-      z: 1
-    },
+        position: { x: 9, y: 0, z: 20 }, // flush with door's left side
+        size: { x: 2.7, y: 3, z: 1 },   // wide enough to reach corridor edge
 	material:  materials.bricks01
 	},
     
@@ -124,16 +121,8 @@ export const l_shaped_hallway = {
     def:  "wall",
 	id: "intro_right_wall_object",
     type: "wall",
-    position: {
-      x: 13,
-      y: 0,
-      z: 19
-    },
-    size: {
-      x: 3,
-      y: 3,
-      z: 1
-    },
+            position: { x: 14.3, y: 0, z: 20 }, // flush with door's right side
+        size: { x: 2.7, y: 3, z: 1 },
 	material:  materials.bricks01
 	},
     

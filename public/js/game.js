@@ -1982,25 +1982,15 @@ function applyEditedJSON() {
 }
 
 // Hook up modal buttons and keyboard
-document.addEventListener('DOMContentLoaded', () => {
-  const cancel = document.getElementById('jsonEditCancel');
-  const submit = document.getElementById('jsonEditSubmit');
-  const modal = document.getElementById('jsonEditModal');
-  const ta = document.getElementById('jsonEditInput');
-  if (cancel) cancel.addEventListener('click', () => closeEditModal());
-  if (submit) submit.addEventListener('click', () => applyEditedJSON());
-  // ESC closes
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeEditModal();
-    // open editor with T when in editor mode and selection exists
-    if (e.key.toLowerCase() === 't' && window.engine?.isEditorMode) {
-      // prevent typing into textarea from re-opening modal
-      if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) return;
-      e.preventDefault();
-      openEditSelectedJSON();
-    }
-  });
-  // Note: Enter should create a newline in the textarea. Apply only via the Apply button.
+const cancel = document.getElementById('jsonEditCancel');
+const submit = document.getElementById('jsonEditSubmit');
+if (cancel) cancel.addEventListener('click', () => closeEditModal());
+if (submit) submit.addEventListener('click', () => applyEditedJSON());
+// ESC closes
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && window._editorModalOpen) {
+    closeEditModal();
+  }
 });
 
 // ------------------ Scene / Level management ------------------

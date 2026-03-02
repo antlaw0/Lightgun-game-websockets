@@ -56,19 +56,34 @@ const floorTexture = {
 // =====================================================
 export const Scene_starting_Room = {
   name: "startingRoom",
-cameraRails: {
+
+  // duration (ms) used by the automated door transition; controls how long
+  // the door takes to open and how quickly the camera moves through it.
+  transitionDuration: 3000,
+  // hinge direction: +1 means hinge on left and door swings to the right
+  // when facing it (outward). -1 would reverse the rotation.
+  doorOpenDirection: -1,
+
+  cameraRails: {
     intro: [],
 
     exit: [
+	  
+	  // move close to the door; the automated system will handle
+      // the final alignment, opening, and walk‑through.
       {
         type: "moveTo",
-        position: { x: 26.75, y: 1.7, z:  4.2},
+        position: { x: 26.3, y: 1.7, z: 4.31 },
         duration: 4000
         
       },
-	    
-			{ type: 'rotate', rotation:  -90, duration:  1000},
-	  {  type:  'pause', duration:  1000, triggerNextScene:  true}
+	  	{
+	type:  "lookAt",
+position:  {  x:  28, y:  1.8, z:  4.31 },
+duration:  1000,
+	triggerNextScene: true
+	}
+
     ]
   },
 
@@ -365,10 +380,12 @@ position: { x: 14, y: 3, z: 18 },
         id: "exitDoor_object",
         type: "door",
         def: "wall",
-        position: { x: 27.5, y: 0, z: 4 },
+        position: { x: 26.2, y: 0, z: 4 },
         size: { x: 1.2, y: 3, z: 0.2 },
         texture: "assets/textures/door_wood.png",
-		rotationY:  90
+		rotationY:  90,
+		openDirection:  -1,
+		openInOut:  1
 		        
 		
       }, // closes exitDoor
