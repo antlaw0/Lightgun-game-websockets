@@ -6,7 +6,7 @@ export const l_shaped_hallway = {
   name: "L-shaped_hallway1",
 
   camera: {
-    position: { x: 12, y: 1.7, z: 22 },
+    position: { x: 12, y: 1.7, z: 26 },
     lookAt: { x: 12, y: 1.7, z: 15 },
     fov: 60,
     near: 0.1,

@@ -73,7 +73,7 @@ export const Scene_starting_Room = {
       // the final alignment, opening, and walk‑through.
       {
         type: "moveTo",
-        position: { x: 26.3, y: 1.7, z: 4.31 },
+        position: { x: 26.17, y: 1.7, z: 4.31 },
         duration: 4000
         
       },
