@@ -13,6 +13,205 @@ import { ENEMY_DEFS } from "./listOfEnemies.js";
 import { PROP_DEFS } from "./listOfprops.js";
 import { Projectile } from "./projectile.js";
 
+/**
+ * Door class - handles door opening/closing with animation
+ * Properties:
+ *   - openDirection: 1 (right hinge) or -1 (left hinge)
+ *   - openInOut: 1 (opens away from camera) or -1 (opens toward camera)
+ *   - openDuration: milliseconds to open 90 degrees
+ *   - openSound: path to sound file in public/assets/sfx/props/
+ */
+export class Door {
+  constructor(def) {
+    this.id = def.id || 'door_' + Math.random();
+    this.mesh = def.mesh; // THREE.Group with hinge at origin
+    this.hinge = this.mesh; // same as mesh - the rotating group
+    this.position = def.position || { x: 0, y: 0, z: 0 };
+    this.size = def.size || { x: 1, y: 2, z: 0.15 };
+    this.hp = 9999;
+    this.maxHp = 9999;
+    this.indestructible = true;
+    
+    // Door-specific properties
+    this.openDirection = def.openDirection || 1; // 1=right, -1=left
+    this.openInOut = def.openInOut || 1; // 1=outward, -1=inward
+    this.openDuration = def.openDuration || 800; // milliseconds
+    this.openSound = def.openSound || null;
+    
+    // Door state
+    this.isOpen = false;
+    this.isAnimating = false;
+    this.currentRotation = 0; // in radians, 0 to PI/2
+    this.openedRotation = 0; // stores the final rotation when door is open
+    this.doorMesh = def.doorMesh; // the loaded GLB geometry
+    
+    // Audio
+    if (this.openSound) {
+      try {
+        this.audioElement = new Audio(this.openSound);
+        this.audioElement.volume = 0.7;
+      } catch (e) {
+        console.warn('Failed to preload door sound:', this.openSound, e);
+        this.audioElement = null;
+      }
+    }
+  }
+  
+  /**
+   * Open the door with animation
+   * @param {Function} onComplete - callback when animation finishes
+   */
+  openDoor(onComplete) {
+    if (this.isAnimating || this.isOpen) {
+      if (onComplete) onComplete();
+      return;
+    }
+    
+    this.isAnimating = true;
+    const startTime = Date.now();
+    const targetRotation = Math.PI / 2; // 90 degrees
+    
+    // Calculate final rotation based on door properties
+    this.openedRotation = targetRotation * this.openInOut * this.openDirection;
+    
+    console.log(`[Door ${this.id}] Opening: targetRotation=${targetRotation}, openInOut=${this.openInOut}, openDirection=${this.openDirection}, will rotate to ${this.openedRotation}`);
+    
+    // Play door sound
+    if (this.audioElement) {
+      try {
+        this.audioElement.currentTime = 0;
+        this.audioElement.play().catch(e => console.warn('Door sound play failed:', e));
+      } catch (e) {
+        console.warn('Door sound play error:', e);
+      }
+    }
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / this.openDuration, 1);
+      
+      // Calculate rotation based on door properties
+      const rotationAmount = targetRotation * progress * this.openInOut * this.openDirection;
+      
+      // Apply rotation around Y axis (hinge)
+      this.hinge.rotation.y = rotationAmount;
+      this.currentRotation = rotationAmount;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        this.isAnimating = false;
+        this.isOpen = true;
+        // Use the pre-calculated final rotation
+        this.currentRotation = this.openedRotation;
+        this.hinge.rotation.y = this.openedRotation;
+        console.log(`[Door ${this.id}] Opened. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
+        if (onComplete) onComplete();
+      }
+    };
+    
+    animate();
+  }
+  
+  /**
+   * Close the door with animation
+   * @param {Function} onComplete - callback when animation finishes
+   */
+  closeDoor(onComplete) {
+    if (this.isAnimating || !this.isOpen) {
+      if (onComplete) onComplete();
+      return;
+    }
+    
+    this.isAnimating = true;
+    const startTime = Date.now();
+    
+    // Store the starting rotation and explicitly set it to ensure no jump
+    const startRotation = this.openedRotation || (Math.PI / 2 * this.openInOut * this.openDirection);
+    const targetRotation = 0;
+    
+    // Ensure hinge is at the correct starting position before animation begins
+    this.hinge.rotation.y = startRotation;
+    
+    console.log(`[Door ${this.id}] Closing from rotation ${startRotation} to ${targetRotation}. Set hinge.rotation.y=${this.hinge.rotation.y}`);
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / this.openDuration, 1);
+      
+      const newRotation = startRotation + (targetRotation - startRotation) * progress;
+      this.hinge.rotation.y = newRotation;
+      this.currentRotation = newRotation;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        this.isAnimating = false;
+        this.isOpen = false;
+        this.currentRotation = 0;
+        this.openedRotation = 0;
+        this.hinge.rotation.y = 0;
+        console.log(`[Door ${this.id}] Closed. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
+        if (onComplete) onComplete();
+      }
+    };
+    
+    animate();
+  }
+  
+  /**
+   * Instantly toggle door state
+   */
+  toggleDoor() {
+    if (this.isOpen) {
+      this.closeDoor();
+    } else {
+      this.openDoor();
+    }
+  }
+  
+  /**
+   * Get the center position of the door in world space
+   */
+  getDoorCenterPosition() {
+    const worldPos = new THREE.Vector3();
+    if (this.hinge) {
+      this.hinge.getWorldPosition(worldPos);
+    }
+    return worldPos;
+  }
+  
+  /**
+   * Check if player is within proximity (in units)
+   */
+  isPlayerNear(playerPos, proximityDistance = 3) {
+    const doorCenter = this.getDoorCenterPosition();
+    const distance = playerPos.distanceTo(doorCenter);
+    return distance <= proximityDistance;
+  }
+  
+  // Compatibility with prop system
+  takeDamage(amount) {
+    return false; // doors are indestructible
+  }
+  
+  dispose() {
+    try {
+      if (this.hinge) {
+        this.hinge.traverse(o => {
+          if (o.isMesh) {
+            o.geometry?.dispose();
+            o.material?.dispose();
+          }
+        });
+      }
+    } catch (e) {}
+  }
+}
+
+// Make Door class globally accessible
+window.Door = Door;
+
 export class SceneLoader {
   constructor(scene, camera, player) {
     this.scene = scene;
@@ -511,7 +710,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
             }
         }
     }
-
+    
     // Traverse the mesh for shadow / hit detection
     propInstance.mesh.traverse(obj => {
         if (obj.isMesh) {
@@ -535,8 +734,94 @@ if (pdef.type === "prefab" && pdef.prefab) {
 }
 
   // =============================
-  // GLB PROP
+  // DOOR PROP (GLB-based with animation)
   // =============================
+  if (pdef.id.includes('door') || pdef.type === 'door') {
+    const hinge = new THREE.Group();
+    hinge.position.set(
+        pdef.position.x ?? 0,
+        pdef.position.y ?? 0,
+        pdef.position.z ?? 0
+    );
+    if (pdef.rotation) {
+        hinge.rotation.set(
+            pdef.rotation.x ?? 0,
+            pdef.rotation.y ?? 0,
+            pdef.rotation.z ?? 0
+        );
+    }
+    hinge.userData.isDoor = true;
+
+    // Create Door instance with properties
+    const door = new Door({
+        id: pdef.id,
+        mesh: hinge,
+        position: pdef.position,
+        size: pdef.size,
+        openDirection: pdef.openDirection ?? 1,
+        openInOut: pdef.openInOut ?? 1,
+        openDuration: pdef.openDuration ?? 800,
+        openSound: pdef.openSound
+    });
+
+    const loader = new GLTFLoader();
+    loader.load('assets/models/props/door1.glb', (gltf) => {
+        const doorMesh = gltf.scene;
+        
+        // Apply custom model rotation if specified in scene def (for correcting GLB orientation)
+        if (pdef.modelRotation) {
+            doorMesh.rotation.set(
+                pdef.modelRotation.x ?? 0,
+                pdef.modelRotation.y ?? 0,
+                pdef.modelRotation.z ?? 0
+            );
+        }
+        
+        // Apply scale if specified
+        if (pdef.scale) {
+            if (typeof pdef.scale === 'number') {
+                doorMesh.scale.set(pdef.scale, pdef.scale, pdef.scale);
+            } else {
+                doorMesh.scale.set(
+                    pdef.scale.x ?? 1,
+                    pdef.scale.y ?? 1,
+                    pdef.scale.z ?? 1
+                );
+            }
+        }
+        
+        // Position the door model relative to hinge (pivot point)
+        if (pdef.modelPivotOffset) {
+            doorMesh.position.set(
+                pdef.modelPivotOffset.x ?? 0,
+                pdef.modelPivotOffset.y ?? 0,
+                pdef.modelPivotOffset.z ?? 0
+            );
+        } else {
+            // Default: offset by half width along X-axis
+            const doorWidth = pdef.size?.x ?? 1;
+            doorMesh.position.x = doorWidth / 2;
+        }
+        
+        // Also apply rotation to all child meshes if needed
+        doorMesh.traverse((child) => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        hinge.add(doorMesh);
+        door.doorMesh = doorMesh;
+        
+        console.log('Door loaded:', pdef.id, 'Rotation:', doorMesh.rotation, 'Position:', doorMesh.position);
+    });
+
+    try { door._sceneDef = pdef; } catch(e){}
+
+    this.addProp(door, isPending);
+    continue;
+}
   if (pdef.type === "glb" && pdef.file) {
     const loader = new GLTFLoader();
 
@@ -620,105 +905,6 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     continue;
   }
-
-  // =============================
-  // DOOR PROP
-  // =============================
-if (pdef.type === "door") {
-
-  const width  = pdef.size?.x ?? 1.2;
-  const height = pdef.size?.y ?? 2.2;
-  const depth  = pdef.size?.z ?? 0.15;
-
-  const openDir = (typeof pdef.openDirection === "number") ? pdef.openDirection : 1;
-
-  // Create hinge group (THIS is the pivot)
-  const hinge = new THREE.Group();
-
-  // Place hinge at actual hinge world position
-  hinge.position.set(
-    pdef.position.x ?? 0,
-    (pdef.position.y ?? 0),
-    pdef.position.z ?? 0
-  );
-
-  // Apply base rotation of doorway
-  const baseRotY = (pdef.rotationY !== undefined)
-    ? THREE.MathUtils.degToRad(pdef.rotationY)
-    : 0;
-
-  hinge.rotation.y = baseRotY;
-
-  this.scene.add(hinge);
-
-  // Create door mesh centered
-  const geo = new THREE.BoxGeometry(width, height, depth);
-
-  const matParams = {
-    color: 0xffff00,
-    roughness: 0.6,
-    metalness: 0.1
-  };
-
-  if (pdef.texture) {
-    matParams.map = new THREE.TextureLoader().load(pdef.texture);
-    matParams.map.colorSpace = THREE.SRGBColorSpace;
-    matParams.color = 0xffffff;
-  }
-
-  const mat = new THREE.MeshStandardMaterial(matParams);
-
-  const doorMesh = new THREE.Mesh(geo, mat);
-
-  // Shift mesh so hinge is at edge
-  doorMesh.position.x = (width / 2) * openDir;
-  doorMesh.position.y = height / 2;
-
-  doorMesh.castShadow = true;
-  doorMesh.receiveShadow = true;
-
-  hinge.add(doorMesh);
-
-  hinge.userData = {
-    propId: pdef.id,
-    type: "door",
-    solid: true
-  };
-
-  // Wrapper now references hinge, not mesh
-  const doorWrapper = {
-    id: pdef.id,
-    mesh: hinge,
-    size: { x: width, y: height, z: depth },
-    hp: 9999,
-    maxHp: 9999,
-    indestructible: true,
-    takeDamage() { return false; },
-    dispose() {
-      try {
-        hinge.traverse(o => {
-          if (o.isMesh) {
-            o.geometry?.dispose();
-            o.material?.dispose();
-          }
-        });
-      } catch {}
-    }
-  };
-
-  try { doorWrapper._sceneDef = pdef; } catch(e){}
-
-  this.addProp(doorWrapper, isPending);
-
-  // IMPORTANT: link transition system to hinge
-  const transitions = this.sceneDef.transitionObjects;
-  if (Array.isArray(transitions)) {
-    const t = transitions.find(t => t.id === pdef.id);
-    if (t) t.object3D = hinge;
-  }
-
-  continue;
-}
   
   // =============================
   // DEFAULT PROP (PropClass)

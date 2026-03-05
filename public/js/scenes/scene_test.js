@@ -136,7 +136,21 @@ scale:  {  x:  1, y:  1, z:  1 }
     maxHp: 9999,
     indestructible: true,
 	texture:  "assets/textures/door_wood.png",
-    openSound: "assets/sfx/door1.ogg"
+    modelRotation: {
+        x: 0,
+        y: Math.PI / 2,
+        z: 0
+    },
+    modelPivotOffset: {
+        x: 0,
+        y: 0,
+        z: 0.6
+    },
+    scale: 1,
+    openDirection: 1,
+    openInOut: 1,
+    openDuration: 800,
+    openSound: "assets/sfx/props/door1.ogg"
 },
   
   {

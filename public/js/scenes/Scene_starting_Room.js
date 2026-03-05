@@ -370,11 +370,12 @@ position: { x: 14, y: 3, z: 18 },
 	  },
       {
         id: "introDoor_object",
-        type: "door",
+        type: "prefab",
+		prefab:  "door1.glb",
         def: "wall",
         position: { x: 14, y: 0, z: 18 },
         size: { x: 1, y: 3, z: 0.2 },
-        texture: "assets/textures/door_wood.png"
+        
       }, // closes introDoor
 	  {
         id: "exitDoor_object",

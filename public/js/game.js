@@ -612,6 +612,16 @@ window.addEventListener("keydown", (e) => {
     logDebug(`Enemy AI toggled: ${ENEMY_AI_ENABLED ? "ON" : "OFF"}`);
   }
 });
+
+// Door interaction (F key)
+window.addEventListener("keydown", (e) => {
+  if (window._editorModalOpen) return;
+  if (e.code === "KeyF") {
+    e.preventDefault();
+    tryInteractDoor();
+  }
+});
+
 // Toggle Editor Mode (F2)
 window.addEventListener('keydown', (e) => {
   if (window._editorModalOpen) return;
@@ -1596,6 +1606,89 @@ function _applyHighlight(obj) {
     obj._editorHighlight = helper;
   } catch (e) { console.warn('applyHighlight failed', e); }
 }
+
+/**
+ * Try to interact with a nearby door (F key)
+ * Finds the closest door within proximity and opens it
+ */
+function tryInteractDoor() {
+  if (!window.sceneLoader || !window.sceneLoader.props) return;
+  if (!window.player || !window.player.camera) return;
+
+  // Get player position from camera
+  const playerPos = window.player.camera.position.clone();
+  
+  // Find all doors
+  const doors = window.sceneLoader.props.filter(prop => {
+    return prop && (prop.openDoor || (prop.mesh && prop.mesh.userData && prop.mesh.userData.isDoor));
+  });
+
+  if (doors.length === 0) {
+    console.log('No doors available');
+    return;
+  }
+
+  // Find closest door within proximity (3 units)
+  const PROXIMITY_DISTANCE = 3;
+  let closestDoor = null;
+  let closestDistance = PROXIMITY_DISTANCE;
+
+  doors.forEach(door => {
+    if (door.mesh && door.position) {
+      const doorPos = new THREE.Vector3(door.position.x, door.position.y, door.position.z);
+      const distance = playerPos.distanceTo(doorPos);
+      
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestDoor = door;
+      }
+    }
+  });
+
+  // Open/close the closest door
+  if (closestDoor) {
+    console.log('Interacting with door:', closestDoor.id);
+    if (typeof closestDoor.openDoor === 'function') {
+      if (closestDoor.isOpen) {
+        closestDoor.closeDoor();
+      } else {
+        closestDoor.openDoor();
+      }
+    } else {
+      console.warn('Door does not have openDoor method');
+    }
+  } else {
+    console.log('No doors within proximity');
+  }
+}
+
+/**
+ * Externally open a door by ID (for camera rails sequences)
+ * Usage: window.openDoorById('door_01')
+ */
+window.openDoorById = function(doorId, callback) {
+  if (!window.sceneLoader || !window.sceneLoader.propsById) return;
+  const door = window.sceneLoader.propsById[doorId];
+  if (door && typeof door.openDoor === 'function') {
+    door.openDoor(callback);
+  } else {
+    console.warn('Door not found or missing openDoor method:', doorId);
+  }
+};
+
+/**
+ * Externally close a door by ID
+ * Usage: window.closeDoorById('door_01')
+ */
+window.closeDoorById = function(doorId, callback) {
+  if (!window.sceneLoader || !window.sceneLoader.propsById) return;
+  const door = window.sceneLoader.propsById[doorId];
+  if (door && typeof door.closeDoor === 'function') {
+    door.closeDoor(callback);
+  } else {
+    console.warn('Door not found or missing closeDoor method:', doorId);
+  }
+};
 
 function selectObjectFromCenter() {
   if (!window.engine?.isEditorMode) return null;
