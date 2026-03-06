@@ -677,7 +677,7 @@ _applyCameraSettings() {
 
       // Convert edge-based authored maps into center-based positions/sizes
       // (map export uses min-corner grid coordinates; Three.js expects centered geometry positions)
-      const isDoorDef = !!(pdef && (pdef.type === 'door' || String(pdef.id || '').toLowerCase().includes('door')));
+      const isDoorDef = !!(pdef && pdef.type === 'door');
       if (pdef && pdef.position && pdef.size && !isDoorDef) {
         _ensureCenterPosition(pdef);
       }
@@ -777,7 +777,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
   // =============================
   // DOOR PROP (GLB-based with animation)
   // =============================
-  if (pdef.id.includes('door') || pdef.type === 'door') {
+  if (pdef.type === 'door') {
     const rx = pdef.rotation?.x ?? pdef.rotationX ?? 0;
     const ry = pdef.rotation?.y ?? pdef.rotationY ?? 0;
     const rz = pdef.rotation?.z ?? pdef.rotationZ ?? 0;
@@ -810,8 +810,14 @@ if (pdef.type === "prefab" && pdef.prefab) {
         openSound: pdef.openSound
     });
 
+    const doorModelPath = pdef.model;
+    if (!doorModelPath) {
+      console.warn(`Door '${pdef.id}' is missing required 'model' path; skipping load.`);
+      continue;
+    }
+
     const loader = new GLTFLoader();
-    loader.load('assets/models/props/door1.glb', (gltf) => {
+    loader.load(doorModelPath, (gltf) => {
         const doorMesh = gltf.scene;
         
         // Apply custom model rotation if specified in scene def (for correcting GLB orientation)
@@ -868,8 +874,10 @@ if (pdef.type === "prefab" && pdef.prefab) {
         hinge.add(doorMesh);
         door.doorMesh = doorMesh;
         
-        console.log('Door loaded:', pdef.id, 'Rotation:', doorMesh.rotation, 'Position:', doorMesh.position);
-    });
+        console.log('Door loaded:', pdef.id, 'model:', doorModelPath, 'Rotation:', doorMesh.rotation, 'Position:', doorMesh.position);
+      }, undefined, (err) => {
+        console.warn(`Failed to load door model for '${pdef.id}' from '${doorModelPath}':`, err);
+      });
 
     try { door._sceneDef = pdef; } catch(e){}
 

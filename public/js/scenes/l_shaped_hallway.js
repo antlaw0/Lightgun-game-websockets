@@ -65,6 +65,7 @@ export const l_shaped_hallway = {
   {
         id: "introDoor_object",
         type: "door",
+      model: "assets/models/props/door1.glb",
         def: "wall",
                 position: { x: 12, y: 0, z: 20 }, // center X along corridor width
         size: { x: 2, y: 2.2, z: 0.2 },

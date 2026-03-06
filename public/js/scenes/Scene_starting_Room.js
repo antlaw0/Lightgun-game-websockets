@@ -317,7 +317,7 @@ hitSounds:  sounds.ricMetal
         def: "wall",
         material: outerWall,
         position: { x: 4, y: 0, z: 18 },
-        size: { x: 10, y: 7, z: 1 },
+        size: { x: 10, y: 2.2, z: 1 },
         
       }, // closes wall_4
 
@@ -327,7 +327,7 @@ hitSounds:  sounds.ricMetal
         def: "wall",
         material: outerWall,
         position: { x: 15, y: 0, z: 18 },
-        size: { x: 12, y: 7, z: 1 },
+        size: { x: 12, y: 2.2, z: 1 },
         
       }, // closes wall_5
 
@@ -364,14 +364,15 @@ hitSounds:  sounds.ricMetal
 		def:  "wall",
 		id:  "wall_above_intro_door",
 type:  "wall",
-position: { x: 14, y: 3, z: 18 },
-        size: { x: 1, y: 4, z: 1 },
+position: { x: 4, y: 2.2, z: 18 },
+        size: { x: 23, y: 4.8, z: 1 },
         		material:  outerWall
 	  },
 	  
 	  	  {
     id: "introDoor_object",
     type: "door",
+	model: "assets/models/props/door1.glb",
     position: { x: 14, y: 0, z: 18 },
         rotation: {
         x: 0,
@@ -410,6 +411,7 @@ position: { x: 14, y: 3, z: 18 },
 	  {
     id: "exitDoor_object",
     type: "door",
+    model: "assets/models/props/door1.glb",
     position: {
         x: 28,
         y: 0,

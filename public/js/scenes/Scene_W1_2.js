@@ -147,6 +147,7 @@ export const Scene_W1_2 = {
       ].map((d) => ({
         id: d.id,
         type: "door",
+        model: "assets/models/props/door1.glb",
         position: {
           x: d.x,
           y: d.height / 2,

@@ -112,7 +112,8 @@ material: {
         type: "door",
         object3D: null,
         position: { x: 8.5, y: 0, z: -8.5 },
-		rotationY:  90, //starting angle
+        model: "assets/models/props/door1.glb",
+        rotationY:  90, //starting angle
         targetRotation: { y: -90 },
         duration: 2
       },

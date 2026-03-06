@@ -117,6 +117,7 @@ scale:  {  x:  1, y:  1, z:  1 }
   {
     id: "door_01",
     type: "door",
+    model: "assets/models/props/door1.glb",
     position: {
         x: 1,
         y: 0,
