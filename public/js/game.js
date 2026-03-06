@@ -1628,18 +1628,26 @@ function tryInteractDoor() {
     return;
   }
 
-  // Find closest door within proximity (3 units)
-  const PROXIMITY_DISTANCE = 3;
+  // Find closest door within proximity.
+  // Use horizontal distance first so doors on floor level stay interactable.
+  const PROXIMITY_DISTANCE = 6.0;
+  const HORIZONTAL_PROXIMITY = 5.5;
   let closestDoor = null;
   let closestDistance = PROXIMITY_DISTANCE;
 
   doors.forEach(door => {
-    if (door.mesh && door.position) {
-      const doorPos = new THREE.Vector3(door.position.x, door.position.y, door.position.z);
+    if (door.mesh) {
+      const doorPos = (typeof door.getDoorCenterPosition === 'function')
+        ? door.getDoorCenterPosition()
+        : new THREE.Vector3().setFromMatrixPosition(door.mesh.matrixWorld);
+      const dx = playerPos.x - doorPos.x;
+      const dz = playerPos.z - doorPos.z;
+      const horizontalDistance = Math.hypot(dx, dz);
       const distance = playerPos.distanceTo(doorPos);
+      const effectiveDistance = Math.min(distance, horizontalDistance);
       
-      if (distance < closestDistance) {
-        closestDistance = distance;
+      if (effectiveDistance < closestDistance && (distance <= PROXIMITY_DISTANCE || horizontalDistance <= HORIZONTAL_PROXIMITY)) {
+        closestDistance = effectiveDistance;
         closestDoor = door;
       }
     }
@@ -1708,7 +1716,7 @@ function selectObjectFromCenter() {
   // find nearest meaningful wrapper
   for (const it of intersects) {
     let obj = it.object;
-    while (obj && obj.userData && !obj.userData.propId && !obj.userData.enemyId && !obj.userData.type) {
+    while (obj && obj.userData && !obj.userData.propId && !obj.userData.enemyId && !obj.userData.type && !obj.userData.isDoor) {
       obj = obj.parent;
     }
     if (!obj) continue;
@@ -1716,6 +1724,9 @@ function selectObjectFromCenter() {
     let wrapper = null;
     if (obj.userData && obj.userData.propId) {
       wrapper = window.sceneLoader.propsById?.[obj.userData.propId] || window.sceneLoader.staticObjects.find(o => o.id === obj.userData.propId) || null;
+    } else if (obj.userData && obj.userData.isDoor) {
+      // Legacy doors may only expose isDoor on the hinge/group.
+      wrapper = window.sceneLoader.props.find(p => p && p.mesh && (p.mesh === obj || p.mesh === obj.parent)) || null;
     } else if (obj.userData && obj.userData.type) {
       // room or other
       wrapper = window.sceneLoader.staticObjects.find(o => o.mesh === obj || o.id === obj.userData.id) || null;
@@ -3066,7 +3077,7 @@ function animate(nowMs) {
           if (hip) {
             try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
           } else {
-            console.log('[DEBUG] hip bone not found on first enemy');
+            //console.log('[DEBUG] hip bone not found on first enemy');
           }
         }
       }

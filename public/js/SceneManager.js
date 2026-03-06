@@ -13,7 +13,7 @@ export class SceneManager {
 
         window.addEventListener('keydown', (ev) => {
             if (ev.key.toLowerCase() === 'f') {
-                const door = this.findNearestDoor(3.0);
+                const door = this.findNearestDoor(4.5);
                 if (door) this.toggleDoor(door);
             }
         });
@@ -24,7 +24,7 @@ export class SceneManager {
         });
     }
 
-    findNearestDoor(maxDist = 3.0) {
+    findNearestDoor(maxDist = 6.0) {
         let best = null;
         let bestDist = Infinity;
         const cameraPos = this.camera.position;
@@ -33,9 +33,16 @@ export class SceneManager {
             if (!p || !p.mesh) return;
             if (!p.mesh.userData.isDoor) return;
 
-            const d = p.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(cameraPos);
-            if (d < bestDist && d <= maxDist) {
-                bestDist = d;
+            const doorPos = (typeof p.getDoorCenterPosition === 'function')
+                ? p.getDoorCenterPosition()
+                : p.mesh.getWorldPosition(new THREE.Vector3());
+            const dx = cameraPos.x - doorPos.x;
+            const dz = cameraPos.z - doorPos.z;
+            const horizontalDistance = Math.hypot(dx, dz);
+            const d = doorPos.distanceTo(cameraPos);
+            const effectiveDistance = Math.min(d, horizontalDistance);
+            if (effectiveDistance < bestDist && (d <= maxDist || horizontalDistance <= 5.5)) {
+                bestDist = effectiveDistance;
                 best = p;
             }
         });
@@ -46,6 +53,18 @@ export class SceneManager {
     toggleDoor(doorProp) {
         const hinge = doorProp.mesh;
         if (!hinge) return;
+
+        // Prefer the canonical Door API when available.
+        // This keeps behavior consistent with game.js interaction and avoids
+        // conflicting concurrent animations on the same hinge.
+        if (typeof doorProp.openDoor === 'function' && typeof doorProp.closeDoor === 'function') {
+            if (doorProp.isOpen) {
+                doorProp.closeDoor();
+            } else {
+                doorProp.openDoor();
+            }
+            return;
+        }
 
         const isOpen = hinge.userData.isOpen || false;
         
@@ -118,6 +137,8 @@ export class SceneManager {
             if (alpha >= 1) {
                 a.mesh.userData.isOpen = !a.mesh.userData.isOpen;
                 this.manualDoorAnimations.splice(i,1);
+            } else {
+                a.mesh.userData.isOpen = a.mesh.rotation.y !== a.startRotation;
             }
         }
     }

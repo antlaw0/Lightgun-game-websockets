@@ -44,6 +44,12 @@ export class Door {
     this.currentRotation = 0; // in radians, 0 to PI/2
     this.openedRotation = 0; // stores the final rotation when door is open
     this.doorMesh = def.doorMesh; // the loaded GLB geometry
+    this.openAngle = Math.PI / 2; // Always swing doors by 90 degrees
+    // Keep a stable closed yaw so animation works for any scene rotation.
+    this.closedRotationY = this.hinge?.rotation?.y ?? 0;
+    // Keep closed/open poses as quaternions so rotation is robust for any orientation.
+    this.closedQuaternion = this.hinge?.quaternion?.clone() ?? new THREE.Quaternion();
+    this.openQuaternion = this.closedQuaternion.clone();
     
     // Audio
     if (this.openSound) {
@@ -69,10 +75,17 @@ export class Door {
     
     this.isAnimating = true;
     const startTime = Date.now();
-    const targetRotation = Math.PI / 2; // 90 degrees
+    const directionSign = (this.openInOut * this.openDirection) >= 0 ? 1 : -1;
+    const targetRotation = this.openAngle; // 90 degrees
+    const signedTarget = targetRotation * directionSign;
+
+    this.closedRotationY = this.hinge?.rotation?.y ?? this.closedRotationY;
+    this.closedQuaternion.copy(this.hinge?.quaternion ?? this.closedQuaternion);
+    const deltaQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), signedTarget);
+    this.openQuaternion.copy(this.closedQuaternion).multiply(deltaQuat);
     
     // Calculate final rotation based on door properties
-    this.openedRotation = targetRotation * this.openInOut * this.openDirection;
+    this.openedRotation = this.closedRotationY + signedTarget;
     
     console.log(`[Door ${this.id}] Opening: targetRotation=${targetRotation}, openInOut=${this.openInOut}, openDirection=${this.openDirection}, will rotate to ${this.openedRotation}`);
     
@@ -90,12 +103,9 @@ export class Door {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / this.openDuration, 1);
       
-      // Calculate rotation based on door properties
-      const rotationAmount = targetRotation * progress * this.openInOut * this.openDirection;
-      
-      // Apply rotation around Y axis (hinge)
-      this.hinge.rotation.y = rotationAmount;
-      this.currentRotation = rotationAmount;
+      // Slerp local hinge orientation so doors open consistently regardless of scene orientation.
+      this.hinge.quaternion.slerpQuaternions(this.closedQuaternion, this.openQuaternion, progress);
+      this.currentRotation = signedTarget * progress;
       
       if (progress < 1) {
         requestAnimationFrame(animate);
@@ -103,8 +113,8 @@ export class Door {
         this.isAnimating = false;
         this.isOpen = true;
         // Use the pre-calculated final rotation
-        this.currentRotation = this.openedRotation;
-        this.hinge.rotation.y = this.openedRotation;
+        this.currentRotation = signedTarget;
+        this.hinge.quaternion.copy(this.openQuaternion);
         console.log(`[Door ${this.id}] Opened. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
         if (onComplete) onComplete();
       }
@@ -125,23 +135,22 @@ export class Door {
     
     this.isAnimating = true;
     const startTime = Date.now();
+    const directionSign = (this.openInOut * this.openDirection) >= 0 ? 1 : -1;
+    const signedTarget = this.openAngle * directionSign;
     
     // Store the starting rotation and explicitly set it to ensure no jump
-    const startRotation = this.openedRotation || (Math.PI / 2 * this.openInOut * this.openDirection);
-    const targetRotation = 0;
+    const closedY = this.closedRotationY;
+    const startQuaternion = this.hinge.quaternion.clone();
+    this.openQuaternion.copy(startQuaternion);
     
-    // Ensure hinge is at the correct starting position before animation begins
-    this.hinge.rotation.y = startRotation;
-    
-    console.log(`[Door ${this.id}] Closing from rotation ${startRotation} to ${targetRotation}. Set hinge.rotation.y=${this.hinge.rotation.y}`);
+    console.log(`[Door ${this.id}] Closing from rotation ${this.hinge.rotation.y} to ${closedY}.`);
     
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / this.openDuration, 1);
       
-      const newRotation = startRotation + (targetRotation - startRotation) * progress;
-      this.hinge.rotation.y = newRotation;
-      this.currentRotation = newRotation;
+      this.hinge.quaternion.slerpQuaternions(startQuaternion, this.closedQuaternion, progress);
+      this.currentRotation = signedTarget * (1 - progress);
       
       if (progress < 1) {
         requestAnimationFrame(animate);
@@ -149,8 +158,8 @@ export class Door {
         this.isAnimating = false;
         this.isOpen = false;
         this.currentRotation = 0;
-        this.openedRotation = 0;
-        this.hinge.rotation.y = 0;
+        this.openedRotation = closedY;
+        this.hinge.quaternion.copy(this.closedQuaternion);
         console.log(`[Door ${this.id}] Closed. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
         if (onComplete) onComplete();
       }
@@ -175,6 +184,15 @@ export class Door {
    */
   getDoorCenterPosition() {
     const worldPos = new THREE.Vector3();
+    if (this.doorMesh) {
+      try {
+        const bounds = new THREE.Box3().setFromObject(this.doorMesh);
+        if (!bounds.isEmpty()) {
+          bounds.getCenter(worldPos);
+          return worldPos;
+        }
+      } catch (e) {}
+    }
     if (this.hinge) {
       this.hinge.getWorldPosition(worldPos);
     }
@@ -274,6 +292,16 @@ window.sceneLoader = this;
   // -------------------------
   addProp(propInstance, isPending = false) {
     if (!propInstance || !propInstance.mesh) return;
+
+    // Ensure editor/raycast lookup can always resolve a wrapper from any hit mesh.
+    const propId = propInstance.id || propInstance.mesh?.userData?.propId;
+    const propType = propInstance.type || propInstance.mesh?.userData?.type || (propInstance.mesh?.userData?.isDoor ? 'door' : undefined);
+    try {
+      propInstance.mesh.userData = Object.assign({}, propInstance.mesh.userData || {}, {
+        ...(propId ? { propId } : {}),
+        ...(propType ? { type: propType } : {})
+      });
+    } catch (e) {}
     
     if (isPending) {
         this.pendingProps.push(propInstance);
@@ -291,7 +319,14 @@ window.sceneLoader = this;
         this.scene.add(propInstance.mesh);
         propInstance.mesh.traverse(obj => {
           if (obj.isMesh) {
-            this.propMeshes.push(obj);
+            // Keep mesh identity tags in sync for editor selection and scene export.
+            try {
+              obj.userData = Object.assign({}, obj.userData || {}, {
+                ...(propId ? { propId } : {}),
+                ...(propType ? { type: propType } : {})
+              });
+            } catch (e) {}
+            if (!this.propMeshes.includes(obj)) this.propMeshes.push(obj);
           }
         });
     }
@@ -632,12 +667,18 @@ _applyCameraSettings() {
       def._convertedToCenter = true;
     }
 
+    const _toRadiansIfNeeded = (value) => {
+      const n = Number(value ?? 0);
+      return Math.abs(n) > (Math.PI * 2 + 0.0001) ? THREE.MathUtils.degToRad(n) : n;
+    };
+
     for (let idx = 0; idx < staticObjects.length; idx++) {
       let pdef = staticObjects[idx];
 
       // Convert edge-based authored maps into center-based positions/sizes
       // (map export uses min-corner grid coordinates; Three.js expects centered geometry positions)
-      if (pdef && pdef.position && pdef.size) {
+      const isDoorDef = !!(pdef && (pdef.type === 'door' || String(pdef.id || '').toLowerCase().includes('door')));
+      if (pdef && pdef.position && pdef.size && !isDoorDef) {
         _ensureCenterPosition(pdef);
       }
   
@@ -737,20 +778,25 @@ if (pdef.type === "prefab" && pdef.prefab) {
   // DOOR PROP (GLB-based with animation)
   // =============================
   if (pdef.id.includes('door') || pdef.type === 'door') {
+    const rx = pdef.rotation?.x ?? pdef.rotationX ?? 0;
+    const ry = pdef.rotation?.y ?? pdef.rotationY ?? 0;
+    const rz = pdef.rotation?.z ?? pdef.rotationZ ?? 0;
     const hinge = new THREE.Group();
     hinge.position.set(
         pdef.position.x ?? 0,
         pdef.position.y ?? 0,
         pdef.position.z ?? 0
     );
-    if (pdef.rotation) {
-        hinge.rotation.set(
-            pdef.rotation.x ?? 0,
-            pdef.rotation.y ?? 0,
-            pdef.rotation.z ?? 0
-        );
-    }
-    hinge.userData.isDoor = true;
+    hinge.rotation.set(
+      _toRadiansIfNeeded(rx),
+      _toRadiansIfNeeded(ry),
+      _toRadiansIfNeeded(rz)
+    );
+    hinge.userData = Object.assign({}, hinge.userData || {}, {
+      isDoor: true,
+      propId: pdef.id,
+      type: 'door'
+    });
 
     // Create Door instance with properties
     const door = new Door({
@@ -808,6 +854,14 @@ if (pdef.type === "prefab" && pdef.prefab) {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
+            child.userData = Object.assign({}, child.userData || {}, {
+              isDoor: true,
+              propId: pdef.id,
+              type: 'door'
+            });
+            // Door GLB children are loaded async; register when this door is active in current scene.
+            const isActiveDoor = !!(door.id && this.propsById && this.propsById[door.id] === door);
+            if (isActiveDoor && !this.propMeshes.includes(child)) this.propMeshes.push(child);
             }
         });
         

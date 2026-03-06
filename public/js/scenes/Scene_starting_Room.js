@@ -368,28 +368,84 @@ position: { x: 14, y: 3, z: 18 },
         size: { x: 1, y: 4, z: 1 },
         		material:  outerWall
 	  },
-      {
-        id: "introDoor_object",
-        type: "prefab",
-		prefab:  "door1.glb",
-        def: "wall",
-        position: { x: 14, y: 0, z: 18 },
-        size: { x: 1, y: 3, z: 0.2 },
-        
-      }, // closes introDoor
+	  
+	  	  {
+    id: "introDoor_object",
+    type: "door",
+    position: { x: 14, y: 0, z: 18 },
+        rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 1.2,
+        y: 2.2,
+        z: 0.15
+    },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+	texture:  "assets/textures/door_wood.png",
+    modelRotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    modelPivotOffset: {
+        x: 0,
+        y: 0,
+        z: 0.6
+    },
+    scale: 1,
+    openDirection: 1,
+    openInOut: 1,
+    openDuration: 800,
+    openSound: "assets/sfx/props/door1.ogg"
+},
+  
+  
+
+
 	  {
-        id: "exitDoor_object",
-        type: "door",
-        def: "wall",
-        position: { x: 26.2, y: 0, z: 4 },
-        size: { x: 1.2, y: 3, z: 0.2 },
-        texture: "assets/textures/door_wood.png",
-		rotationY:  90,
-		openDirection:  -1,
-		openInOut:  1
-		        
-		
-      }, // closes exitDoor
+    id: "exitDoor_object",
+    type: "door",
+    position: {
+        x: 28,
+        y: 0,
+        z: 9
+    },
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 1.2,
+        y: 2.2,
+        z: 0.15
+    },
+    hp: 9999,
+    maxHp: 9999,
+    indestructible: true,
+	texture:  "assets/textures/door_wood.png",
+    modelRotation: {
+        x: 0,
+        y: Math.PI/2,
+        z: 0
+    },
+    modelPivotOffset: {
+        x: 0,
+        y: 0,
+        z: 0.6
+    },
+    scale: 1,
+    openDirection: 1,
+    openInOut: 1,
+    openDuration: 800,
+    openSound: "assets/sfx/props/door1.ogg"
+},
+  
   
   {
     def:  "tile",
