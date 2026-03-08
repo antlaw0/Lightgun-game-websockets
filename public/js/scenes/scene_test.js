@@ -240,10 +240,9 @@ scale:  {  x:  1, y:  1, z:  1 }
 		material: {
   horizontalRepeat:  1,
   verticalRepeat:  2,
-  map: "assets/textures/metal01/metal01Color.png",                  // base color / albedo
-  normalMap: "assets/textures/metal01/metal01Normal.png",  // normal map for bumps
-  roughnessMap: "assets/textures/metal01/metal01Roughness.png", // roughness map
-  //aoMap: "assets/textures/metal01/metal01AO.png",          // ambient occlusion
+  baseColorMap: "assets/textures/metal01/basecolor.png",
+  normalMap: "assets/textures/metal01/normal.png",
+  ormMap: "assets/textures/metal01/orm.png",
   roughness: 0.0,       // base roughness, multiplied by roughnessMap
   metalness: 1.0,       
   color: 0xffffff,      // optional tint

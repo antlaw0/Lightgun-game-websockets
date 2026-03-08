@@ -1,5 +1,10 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 
+function ensureGeometryUv2(geometry) {
+  if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
+  geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
+}
+
 export class Prop {
   constructor(def) {
     this.id = def.id;
@@ -189,23 +194,53 @@ console.log("indestructible?", this.indestructible);
       return tex;
     };
 
+    const loadColorTex = (path) => {
+      const tex = loadTex(path);
+      if (tex) tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    };
+
+    const loadDataTex = (path) => {
+      const tex = loadTex(path);
+      if (tex) tex.colorSpace = THREE.NoColorSpace;
+      return tex;
+    };
+
     // Legacy texture support
     if (this.texture) {
-      matParams.map = loadTex(this.texture);
+      matParams.map = loadColorTex(this.texture);
     }
 
-    // PBR maps
-    if (this.materialDef.map) matParams.map = loadTex(this.materialDef.map);
-    if (this.materialDef.normalMap) matParams.normalMap = loadTex(this.materialDef.normalMap);
-    if (this.materialDef.roughnessMap) matParams.roughnessMap = loadTex(this.materialDef.roughnessMap);
-    if (this.materialDef.metalnessMap) matParams.metalnessMap = loadTex(this.materialDef.metalnessMap);
-    if (this.materialDef.aoMap) matParams.aoMap = loadTex(this.materialDef.aoMap);
-    if (this.materialDef.emissiveMap) matParams.emissiveMap = loadTex(this.materialDef.emissiveMap);
-    if (this.materialDef.displacementMap) matParams.displacementMap = loadTex(this.materialDef.displacementMap);
-    if (this.materialDef.alphaMap) matParams.alphaMap = loadTex(this.materialDef.alphaMap);
+    // Preferred packed workflow: basecolor + normal + orm
+    const baseColorPath = this.materialDef.baseColorMap ?? this.materialDef.basecolor ?? this.materialDef.map;
+    const normalPath = this.materialDef.normalMap ?? this.materialDef.normal;
+    const ormPath = this.materialDef.ormMap ?? this.materialDef.orm;
+
+    if (baseColorPath) matParams.map = loadColorTex(baseColorPath);
+    if (normalPath) matParams.normalMap = loadDataTex(normalPath);
+    if (ormPath) {
+      const ormTex = loadDataTex(ormPath);
+      matParams.aoMap = ormTex;
+      matParams.roughnessMap = ormTex;
+      matParams.metalnessMap = ormTex;
+    }
+
+    // Legacy PBR map support
+    if (!ormPath && this.materialDef.roughnessMap) matParams.roughnessMap = loadDataTex(this.materialDef.roughnessMap);
+    if (!ormPath && this.materialDef.metalnessMap) matParams.metalnessMap = loadDataTex(this.materialDef.metalnessMap);
+    if (!ormPath && this.materialDef.aoMap) matParams.aoMap = loadDataTex(this.materialDef.aoMap);
+    if (this.materialDef.emissiveMap) matParams.emissiveMap = loadColorTex(this.materialDef.emissiveMap);
+    if (this.materialDef.displacementMap) matParams.displacementMap = loadDataTex(this.materialDef.displacementMap);
+    if (this.materialDef.alphaMap) matParams.alphaMap = loadDataTex(this.materialDef.alphaMap);
 
     const mat = new THREE.MeshStandardMaterial(matParams);
     const mesh = new THREE.Mesh(geo, mat);
+
+    if (mat.aoMap) {
+      // AO in MeshStandardMaterial samples uv2, so synthesize it from uv when absent.
+      ensureGeometryUv2(geo);
+      mat.aoMapIntensity = this.materialDef.aoMapIntensity ?? 1.0;
+    }
 
     mesh.position.set(
       this.position.x,

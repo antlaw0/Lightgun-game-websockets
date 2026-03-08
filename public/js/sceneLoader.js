@@ -13,6 +13,18 @@ import { ENEMY_DEFS } from "./listOfEnemies.js";
 import { PROP_DEFS } from "./listOfprops.js";
 import { Projectile } from "./projectile.js";
 
+function ensureUv2ForAo(mesh) {
+  const geometry = mesh?.geometry;
+  if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
+  geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
+}
+
+function meshHasAoMap(material) {
+  if (!material) return false;
+  if (Array.isArray(material)) return material.some(m => !!m?.aoMap);
+  return !!material.aoMap;
+}
+
 /**
  * Door class - handles door opening/closing with animation
  * Properties:
@@ -300,6 +312,14 @@ window.sceneLoader = this;
       propInstance.mesh.userData = Object.assign({}, propInstance.mesh.userData || {}, {
         ...(propId ? { propId } : {}),
         ...(propType ? { type: propType } : {})
+      });
+    } catch (e) {}
+
+    // AO maps sample uv2 in Three.js. Ensure uv2 exists for all meshes under this prop.
+    try {
+      propInstance.mesh.traverse(obj => {
+        if (!obj?.isMesh) return;
+        if (meshHasAoMap(obj.material)) ensureUv2ForAo(obj);
       });
     } catch (e) {}
     

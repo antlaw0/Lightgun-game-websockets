@@ -18,7 +18,13 @@ const DEBUG_MATERIALS = false;
 
 const textureLoader = new THREE.TextureLoader();
 
-function loadTexture(path, repeatX = 1, repeatY = 1) {
+function ensureUv2OnMesh(mesh) {
+  const geometry = mesh?.geometry;
+  if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
+  geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
+}
+
+function loadTexture(path, repeatX = 1, repeatY = 1, colorSpace = null) {
   if (!path) return null;
 
   const tex = textureLoader.load(
@@ -28,7 +34,7 @@ function loadTexture(path, repeatX = 1, repeatY = 1) {
     () => console.error("Texture failed")
   );
 
-  tex.colorSpace = THREE.SRGBColorSpace;
+  if (colorSpace) tex.colorSpace = colorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
 
@@ -51,20 +57,49 @@ function createMaterial(
   roughness = 0.5,
   metalness = 0.0,
   repeatX = 1,
-  repeatY = 1
+  repeatY = 1,
+  materialDef = {}
 ) {
   if (DEBUG_MATERIALS) {
     return new THREE.MeshBasicMaterial({ color: 0xff00ff });
   }
 
-  return new THREE.MeshStandardMaterial({
-    map: texturePath ? loadTexture(texturePath, repeatX, repeatY) : null,
+  const baseColorPath = materialDef.baseColorMap ?? materialDef.basecolor ?? materialDef.map ?? texturePath;
+  const normalPath = materialDef.normalMap ?? materialDef.normal;
+  const ormPath = materialDef.ormMap ?? materialDef.orm;
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: baseColorPath ? loadTexture(baseColorPath, repeatX, repeatY, THREE.SRGBColorSpace) : null,
+    normalMap: normalPath ? loadTexture(normalPath, repeatX, repeatY, THREE.NoColorSpace) : null,
+    roughnessMap: ormPath ? loadTexture(ormPath, repeatX, repeatY, THREE.NoColorSpace) : null,
+    metalnessMap: null,
+    aoMap: null,
     color: color ?? 0xffffff,
     roughness,
     metalness,
     transparent: false,
     depthWrite: true
   });
+
+  if (ormPath) {
+    mat.metalnessMap = mat.roughnessMap;
+    mat.aoMap = mat.roughnessMap;
+    mat.aoMapIntensity = materialDef.aoMapIntensity ?? 1.0;
+  }
+
+  // Back-compat for legacy split maps when orm is not used.
+  if (!ormPath && materialDef.roughnessMap) {
+    mat.roughnessMap = loadTexture(materialDef.roughnessMap, repeatX, repeatY, THREE.NoColorSpace);
+  }
+  if (!ormPath && materialDef.metalnessMap) {
+    mat.metalnessMap = loadTexture(materialDef.metalnessMap, repeatX, repeatY, THREE.NoColorSpace);
+  }
+  if (!ormPath && materialDef.aoMap) {
+    mat.aoMap = loadTexture(materialDef.aoMap, repeatX, repeatY, THREE.NoColorSpace);
+    mat.aoMapIntensity = materialDef.aoMapIntensity ?? 1.0;
+  }
+
+  return mat;
 }
 
 /*
@@ -113,15 +148,29 @@ export function buildMetalBarrel(data = {}) {
   const matData = data.material ?? {};
   const repeatX = matData.horizontalRepeat ?? 1;
   const repeatY = matData.verticalRepeat ?? 1;
-
-  const loadTex = (path) => loadTexture(path, repeatX, repeatY);
+  const ormPath = matData.ormMap ?? matData.orm;
 
   const material = new THREE.MeshStandardMaterial({
-    map: matData.map ? loadTex(matData.map) : null,
-    normalMap: matData.normalMap ? loadTex(matData.normalMap) : null,
+    map: (matData.baseColorMap ?? matData.basecolor ?? matData.map) ? loadTexture((matData.baseColorMap ?? matData.basecolor ?? matData.map), repeatX, repeatY, THREE.SRGBColorSpace) : null,
+    normalMap: (matData.normalMap ?? matData.normal) ? loadTexture((matData.normalMap ?? matData.normal), repeatX, repeatY, THREE.NoColorSpace) : null,
+    roughnessMap: ormPath ? loadTexture(ormPath, repeatX, repeatY, THREE.NoColorSpace) : (matData.roughnessMap ? loadTexture(matData.roughnessMap, repeatX, repeatY, THREE.NoColorSpace) : null),
+    metalnessMap: null,
+    aoMap: null,
     roughness: matData.roughness ?? 0.6,
     metalness: matData.metalness ?? 0.8
   });
+
+  if (ormPath) {
+    material.metalnessMap = material.roughnessMap;
+    material.aoMap = material.roughnessMap;
+    material.aoMapIntensity = matData.aoMapIntensity ?? 1.0;
+  } else {
+    if (matData.metalnessMap) material.metalnessMap = loadTexture(matData.metalnessMap, repeatX, repeatY, THREE.NoColorSpace);
+    if (matData.aoMap) {
+      material.aoMap = loadTexture(matData.aoMap, repeatX, repeatY, THREE.NoColorSpace);
+      material.aoMapIntensity = matData.aoMapIntensity ?? 1.0;
+    }
+  }
 
   //
   // Create Prop (AUTHORITATIVE OBJECT)
@@ -153,6 +202,8 @@ export function buildMetalBarrel(data = {}) {
   // Replace the default box mesh with barrel mesh
   //
   const barrelMesh = new THREE.Mesh(geometry, material);
+
+  if (material.aoMap) ensureUv2OnMesh(barrelMesh);
 
   barrelMesh.position.set(
     prop.position.x,
@@ -191,10 +242,12 @@ function buildCrate(data) {
     matData.roughness ?? 0.75,
     matData.metalness ?? 0.0,
     matData.horizontalRepeat ?? 1,
-    matData.verticalRepeat ?? 1
+    matData.verticalRepeat ?? 1,
+    matData
   );
 
   const mesh = new THREE.Mesh(geometry, material);
+  if (material.aoMap) ensureUv2OnMesh(mesh);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
