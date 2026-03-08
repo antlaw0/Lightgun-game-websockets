@@ -15,6 +15,8 @@ import { PROP_DEFS } from "./listOfprops.js";
 import { Projectile } from "./projectile.js";
 
 const DEFAULT_HDRI_FILE = 'assets/textures/HDRI/IndoorEnvironmentHDRI005_1K_HDR.exr';
+const SHADOW_MAP_MAX_SIZE = 1024;
+const HDRI_CACHE_MAX_ENTRIES = 3;
 
 function ensureUv2ForAo(mesh) {
   const geometry = mesh?.geometry;
@@ -229,15 +231,17 @@ export class Door {
   }
   
   dispose() {
+    // Door meshes are cloned from SceneLoader's shared GLTF cache.
+    // Never dispose shared geometry/material/texture resources per instance.
     try {
-      if (this.hinge) {
-        this.hinge.traverse(o => {
-          if (o.isMesh) {
-            o.geometry?.dispose();
-            o.material?.dispose();
-          }
-        });
+      if (this.audioElement) {
+        this.audioElement.pause();
+        this.audioElement.src = '';
+        this.audioElement = null;
       }
+    } catch (e) {}
+    try {
+      if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
     } catch (e) {}
   }
 }
@@ -456,6 +460,9 @@ window.sceneLoader = this;
   _getPmremTextureForHdri(hdriPath) {
     const cached = this._hdriCache.get(hdriPath);
     if (cached?.pmremTexture) {
+      // Refresh LRU order on cache hit.
+      this._hdriCache.delete(hdriPath);
+      this._hdriCache.set(hdriPath, cached);
       return Promise.resolve(cached.pmremTexture);
     }
     if (cached?.promise) {
@@ -478,6 +485,7 @@ window.sceneLoader = this;
           promise: null
         };
         this._hdriCache.set(hdriPath, entry);
+        this._trimHdriCache(hdriPath);
         return entry.pmremTexture;
       })
       .catch((err) => {
@@ -487,6 +495,61 @@ window.sceneLoader = this;
 
     this._hdriCache.set(hdriPath, { promise, pmremTexture: null, renderTarget: null });
     return promise;
+  }
+
+  _disposeHdriCacheEntry(path, entry) {
+    if (!entry) return;
+    try {
+      // Never dispose the active scene environment/background texture.
+      if (path && this._activeHdriPath && path === this._activeHdriPath) return;
+      if (this.scene?.environment && entry.pmremTexture && this.scene.environment === entry.pmremTexture) return;
+      if (this.scene?.background && entry.pmremTexture && this.scene.background === entry.pmremTexture) return;
+
+      if (entry.renderTarget?.dispose) {
+        entry.renderTarget.dispose();
+      } else if (entry.pmremTexture?.dispose) {
+        entry.pmremTexture.dispose();
+      }
+    } catch (e) {
+      console.warn('SceneLoader: failed disposing HDRI cache entry', path, e);
+    }
+  }
+
+  _trimHdriCache(preferredPath = null) {
+    if (this._hdriCache.size <= HDRI_CACHE_MAX_ENTRIES) return;
+
+    const keys = Array.from(this._hdriCache.keys());
+    for (const key of keys) {
+      if (this._hdriCache.size <= HDRI_CACHE_MAX_ENTRIES) break;
+      if (key === preferredPath) continue;
+      if (key === this._activeHdriPath) continue;
+
+      const entry = this._hdriCache.get(key);
+      // Keep in-flight entries until load settles.
+      if (entry?.promise && !entry?.pmremTexture) continue;
+
+      this._disposeHdriCacheEntry(key, entry);
+      this._hdriCache.delete(key);
+    }
+  }
+
+  _disposeAllHdriCacheEntries() {
+    for (const [path, entry] of this._hdriCache.entries()) {
+      this._disposeHdriCacheEntry(path, entry);
+    }
+    this._hdriCache.clear();
+  }
+
+  releaseModelCache() {
+    // Model cache stores shared GLTF source scenes; clear references only.
+    this.modelCache.clear();
+  }
+
+  disposeCaches() {
+    this._disposeAllHdriCacheEntries();
+    this.releaseModelCache();
+    try { this._pmremGenerator?.dispose?.(); } catch (e) {}
+    this._pmremGenerator = null;
   }
 
   // -------------------------
@@ -719,12 +782,16 @@ _applyCameraSettings() {
       light.castShadow = true;
 
       const s = def.shadow ?? {};
-      if (s.mapSize) {
-        light.shadow.mapSize.set(
-          s.mapSize.width ?? 1024,
-          s.mapSize.height ?? 1024
-        );
+      const requestedShadowWidth = s.mapSize?.width ?? 1024;
+      const requestedShadowHeight = s.mapSize?.height ?? 1024;
+      const shadowWidth = Math.max(128, Math.min(SHADOW_MAP_MAX_SIZE, requestedShadowWidth));
+      const shadowHeight = Math.max(128, Math.min(SHADOW_MAP_MAX_SIZE, requestedShadowHeight));
+      light.shadow.mapSize.set(shadowWidth, shadowHeight);
+
+      if (requestedShadowWidth > SHADOW_MAP_MAX_SIZE || requestedShadowHeight > SHADOW_MAP_MAX_SIZE) {
+        console.warn(`SceneLoader: clamped shadow map for '${def.id || def.type || 'light'}' to ${shadowWidth}x${shadowHeight} (requested ${requestedShadowWidth}x${requestedShadowHeight}).`);
       }
+
       if (typeof s.bias === "number") {
         light.shadow.bias = s.bias;
       }
@@ -1744,6 +1811,18 @@ this.staticObjects = [];
       if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
     }
     this.explosions.length = 0;
+  }
+
+  destroy() {
+    try { this.clearScene(); } catch (e) {}
+    this._activeHdriRequestId++;
+    try { this.scene.environment = null; } catch (e) {}
+    if (this._isHdriBackgroundActive) {
+      try { this.scene.background = null; } catch (e) {}
+      this._isHdriBackgroundActive = false;
+    }
+    this._activeHdriPath = null;
+    this.disposeCaches();
   }
 }
 

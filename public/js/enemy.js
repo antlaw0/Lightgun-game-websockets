@@ -13,6 +13,40 @@ export function setEnemyAIEnabled(enabled) {
 }
 
 export const ENEMY_INSTANCES = [];
+
+function disposeTexture(tex) {
+  try { tex?.dispose?.(); } catch (e) {}
+}
+
+function disposeMaterial(material) {
+  if (!material) return;
+  const mats = Array.isArray(material) ? material : [material];
+  for (const mat of mats) {
+    if (!mat) continue;
+    disposeTexture(mat.map);
+    disposeTexture(mat.alphaMap);
+    disposeTexture(mat.aoMap);
+    disposeTexture(mat.bumpMap);
+    disposeTexture(mat.displacementMap);
+    disposeTexture(mat.emissiveMap);
+    disposeTexture(mat.envMap);
+    disposeTexture(mat.lightMap);
+    disposeTexture(mat.metalnessMap);
+    disposeTexture(mat.normalMap);
+    disposeTexture(mat.roughnessMap);
+    disposeTexture(mat.specularMap);
+    try { mat.dispose?.(); } catch (e) {}
+  }
+}
+
+function disposeObject3D(root) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (!obj?.isMesh) return;
+    try { obj.geometry?.dispose?.(); } catch (e) {}
+    disposeMaterial(obj.material);
+  });
+}
 //import { ENEMY_DEFS } from "./scenes.js";
 //
 // Weapon class
@@ -2757,12 +2791,23 @@ if (this._isFullyPoppedTarget &&
   }
 
   dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+
     if (this.mesh && this.sceneGroup) {
       this.sceneGroup.remove(this.mesh);
-      this.mesh.geometry.dispose();
-      if (this.mesh.material.map) this.mesh.material.map.dispose();
-      this.mesh.material.dispose();
     }
+    disposeObject3D(this.mesh);
+
+    try {
+      if (this.mixer) {
+        this.mixer.stopAllAction();
+        this.mixer.uncacheRoot(this.mesh);
+      }
+    } catch (e) {}
+
+    const idx = ENEMY_INSTANCES.indexOf(this);
+    if (idx >= 0) ENEMY_INSTANCES.splice(idx, 1);
   }
 
   // apply additive bone rotations/poses to approximate a crouch

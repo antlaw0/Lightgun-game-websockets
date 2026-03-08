@@ -5,6 +5,40 @@ function ensureGeometryUv2(geometry) {
   geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
 }
 
+function disposeTexture(tex) {
+  try { tex?.dispose?.(); } catch (e) {}
+}
+
+function disposeMaterial(material) {
+  if (!material) return;
+  const mats = Array.isArray(material) ? material : [material];
+  for (const mat of mats) {
+    if (!mat) continue;
+    disposeTexture(mat.map);
+    disposeTexture(mat.alphaMap);
+    disposeTexture(mat.aoMap);
+    disposeTexture(mat.bumpMap);
+    disposeTexture(mat.displacementMap);
+    disposeTexture(mat.emissiveMap);
+    disposeTexture(mat.envMap);
+    disposeTexture(mat.lightMap);
+    disposeTexture(mat.metalnessMap);
+    disposeTexture(mat.normalMap);
+    disposeTexture(mat.roughnessMap);
+    disposeTexture(mat.specularMap);
+    try { mat.dispose?.(); } catch (e) {}
+  }
+}
+
+function disposeObject3D(root) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (!obj?.isMesh) return;
+    try { obj.geometry?.dispose?.(); } catch (e) {}
+    disposeMaterial(obj.material);
+  });
+}
+
 export class Prop {
   constructor(def) {
     this.id = def.id;
@@ -46,6 +80,7 @@ this.explosion = def.explosion ?? null;
     this.deathAction = def.deathAction ?? "disappear";
 
     this.mesh = this._createMesh();
+    this._disposed = false;
   }
 
   //
@@ -275,13 +310,21 @@ console.log("indestructible?", this.indestructible);
     });
   }
 
-  if (this.mesh && this.mesh.parent) {
-    this.mesh.parent.remove(this.mesh);
-  }
+  this.dispose();
 
   if (window.sceneLoader) {
     const index = window.sceneLoader.props.indexOf(this);
     if (index !== -1) window.sceneLoader.props.splice(index, 1);
   }
+}
+
+dispose() {
+  if (this._disposed) return;
+  this._disposed = true;
+
+  if (this.mesh && this.mesh.parent) {
+    this.mesh.parent.remove(this.mesh);
+  }
+  disposeObject3D(this.mesh);
 }
 }

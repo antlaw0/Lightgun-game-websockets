@@ -11,17 +11,20 @@ export class SceneManager {
 
         this.manualDoorAnimations = [];
 
-        window.addEventListener('keydown', (ev) => {
+        this._onKeyDown = (ev) => {
             if (ev.key.toLowerCase() === 'f') {
                 const door = this.findNearestDoor(4.5);
                 if (door) this.toggleDoor(door);
             }
-        });
+        };
 
-        window.addEventListener("sceneComplete", (e) => {
+        this._onSceneComplete = (e) => {
             const scene = e.detail.scene;
             this.onSceneCompleted(scene);
-        });
+        };
+
+        window.addEventListener('keydown', this._onKeyDown);
+        window.addEventListener("sceneComplete", this._onSceneComplete);
     }
 
     findNearestDoor(maxDist = 6.0) {
@@ -141,5 +144,11 @@ export class SceneManager {
                 a.mesh.userData.isOpen = a.mesh.rotation.y !== a.startRotation;
             }
         }
+    }
+
+    destroy() {
+        try { window.removeEventListener('keydown', this._onKeyDown); } catch (e) {}
+        try { window.removeEventListener('sceneComplete', this._onSceneComplete); } catch (e) {}
+        this.manualDoorAnimations = [];
     }
 }

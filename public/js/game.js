@@ -1556,7 +1556,6 @@ window.addEventListener('keydown', (e) => {
 
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setSize(cw, ch);
 renderer.physicallyCorrectLights = true;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -1585,39 +1584,91 @@ const fxaaPass = new ShaderPass(FXAAShader);
 fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
 composer.addPass(fxaaPass);
 
-const editorPostFxState = {
-  initialized: false,
-  bloomEnabled: true,
-  ssaoEnabled: true
+const RENDER_QUALITY_PRESETS = {
+  low: {
+    pixelRatioCap: 0.9,
+    bloomEnabled: false,
+    ssaoEnabled: false,
+    fxaaEnabled: true,
+    ssaoKernelRadius: 8,
+    ssaoScale: 0.5
+  },
+  medium: {
+    pixelRatioCap: 1.1,
+    bloomEnabled: true,
+    ssaoEnabled: false,
+    fxaaEnabled: true,
+    ssaoKernelRadius: 10,
+    ssaoScale: 0.6
+  },
+  high: {
+    pixelRatioCap: 1.25,
+    bloomEnabled: true,
+    ssaoEnabled: true,
+    fxaaEnabled: true,
+    ssaoKernelRadius: 12,
+    ssaoScale: 0.75
+  }
+};
+
+const renderQualityState = {
+  current: 'medium',
+  previousBeforeEditor: 'medium',
+  ssaoScale: 1
+};
+
+function _getSafePixelRatio(cap) {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.min(dpr, cap);
+}
+
+function applyRenderQualityProfile(profileName) {
+  const preset = RENDER_QUALITY_PRESETS[profileName] || RENDER_QUALITY_PRESETS.medium;
+  renderQualityState.current = RENDER_QUALITY_PRESETS[profileName] ? profileName : 'medium';
+  renderQualityState.ssaoScale = preset.ssaoScale;
+
+  const pixelRatio = _getSafePixelRatio(preset.pixelRatioCap);
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(cw, ch, false);
+  composer.setSize(cw, ch);
+
+  bloomPass.enabled = !!preset.bloomEnabled;
+  ssaoPass.enabled = !!preset.ssaoEnabled;
+  fxaaPass.enabled = !!preset.fxaaEnabled;
+  ssaoPass.kernelRadius = preset.ssaoKernelRadius;
+
+  const ssaoWidth = Math.max(1, Math.floor(cw * renderQualityState.ssaoScale));
+  const ssaoHeight = Math.max(1, Math.floor(ch * renderQualityState.ssaoScale));
+  ssaoPass.setSize(ssaoWidth, ssaoHeight);
+
+  const pr = renderer.getPixelRatio ? renderer.getPixelRatio() : pixelRatio;
+  fxaaPass.material.uniforms['resolution'].value.set(1 / (cw * pr), 1 / (ch * pr));
+}
+
+window.setRenderQuality = function(quality = 'medium') {
+  applyRenderQualityProfile(quality);
 };
 
 applyEditorRenderPerformanceMode = (isEditorMode) => {
   try {
-    if (!editorPostFxState.initialized) {
-      editorPostFxState.initialized = true;
-      editorPostFxState.bloomEnabled = bloomPass.enabled;
-      editorPostFxState.ssaoEnabled = ssaoPass.enabled;
-    }
     if (isEditorMode) {
-      // Editor view favors responsiveness over cinematic post FX.
-      bloomPass.enabled = false;
-      ssaoPass.enabled = false;
+      renderQualityState.previousBeforeEditor = renderQualityState.current;
+      applyRenderQualityProfile('low');
     } else {
-      bloomPass.enabled = editorPostFxState.bloomEnabled;
-      ssaoPass.enabled = editorPostFxState.ssaoEnabled;
+      applyRenderQualityProfile(renderQualityState.previousBeforeEditor || 'medium');
     }
   } catch (err) {
     console.warn('applyEditorRenderPerformanceMode failed', err);
   }
 };
 
+// Start at medium quality for stable FPS/VRAM on a wide range of GPUs.
+applyRenderQualityProfile('medium');
+
 function resize() {
     cw = canvas.width = window.innerWidth;
     ch = canvas.height = window.innerHeight;
-    renderer.setSize(cw, ch);
-    composer.setSize(cw, ch);
-    fxaaPass.material.uniforms['resolution'].value.set(1 / cw, 1 / ch);
-    ssaoPass.setSize(cw, ch);
+    applyRenderQualityProfile(renderQualityState.current);
 }
 window.addEventListener('resize', resize);
 
@@ -2410,12 +2461,18 @@ document.addEventListener('keydown', (e) => {
 
   // Load using SceneManager for on-rails intro/exit
 // ------------------ Scene / Level management ------------------
+if (window.sceneLoader && typeof window.sceneLoader.destroy === 'function') {
+  try { window.sceneLoader.destroy(); } catch (e) {}
+}
 window.sceneLoader = new SceneLoader(scene, camera, player, renderer);
 // Expose spawn helper and enemy list for console testing
 
 
 let currentLevel = Level_Warehouse;
 let currentSceneIndex = 0;
+if (window.sceneManager && typeof window.sceneManager.destroy === 'function') {
+  try { window.sceneManager.destroy(); } catch (e) {}
+}
 window.sceneManager = new SceneManager(camera, sceneLoader);
 
 // Debug helper: load a scene by its name from the browser console.
@@ -3104,6 +3161,36 @@ function spawnProjectileUnified(origin, direction, options = {}) {
     return bullet;
 }
 
+function disposeMaterialResources(material) {
+  if (!material) return;
+  const mats = Array.isArray(material) ? material : [material];
+  for (const mat of mats) {
+    if (!mat) continue;
+    try { mat.map?.dispose?.(); } catch (e) {}
+    try { mat.alphaMap?.dispose?.(); } catch (e) {}
+    try { mat.aoMap?.dispose?.(); } catch (e) {}
+    try { mat.bumpMap?.dispose?.(); } catch (e) {}
+    try { mat.displacementMap?.dispose?.(); } catch (e) {}
+    try { mat.emissiveMap?.dispose?.(); } catch (e) {}
+    try { mat.envMap?.dispose?.(); } catch (e) {}
+    try { mat.lightMap?.dispose?.(); } catch (e) {}
+    try { mat.metalnessMap?.dispose?.(); } catch (e) {}
+    try { mat.normalMap?.dispose?.(); } catch (e) {}
+    try { mat.roughnessMap?.dispose?.(); } catch (e) {}
+    try { mat.specularMap?.dispose?.(); } catch (e) {}
+    try { mat.dispose?.(); } catch (e) {}
+  }
+}
+
+function disposeObject3DResources(root) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (!obj) return;
+    try { obj.geometry?.dispose?.(); } catch (e) {}
+    disposeMaterialResources(obj.material);
+  });
+}
+
 function updateProjectiles(dt) {
     const toRemove = [];
     const intersectables = sceneLoader.getIntersectableMeshes() || [];
@@ -3199,6 +3286,7 @@ if (pos && b.userData.explosive) {
             });
         }
 
+        disposeObject3DResources(b);
         scene.remove(b);
         const idx = projectiles.indexOf(b);
         if (idx !== -1) projectiles.splice(idx, 1);
@@ -3273,6 +3361,7 @@ function updateEnemyProjectiles(dt) {
 
   // Remove expired bullets
   for (const b of toRemove) {
+    disposeObject3DResources(b);
     scene.remove(b);
     const idx = enemyProjectiles.indexOf(b);
     if (idx !== -1) enemyProjectiles.splice(idx, 1);
