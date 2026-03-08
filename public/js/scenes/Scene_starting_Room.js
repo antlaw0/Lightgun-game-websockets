@@ -240,6 +240,13 @@ intensity: 1.2,
 ], // closes lights
   
   environment: {
+    hdri: {
+      file: "assets/textures/HDRI/IndoorEnvironmentHDRI005_1K_HDR.exr",
+      background: false,
+      environmentIntensity: 1.0,
+      backgroundIntensity: 1.0,
+      backgroundBlurriness: 0.0
+    },
     staticObjects: [
 	      {
         id: "crate_01",

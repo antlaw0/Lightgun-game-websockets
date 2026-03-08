@@ -4,6 +4,7 @@ import { ENEMY_INSTANCES } from "./enemy.js";
 window.ENEMY_INSTANCES = ENEMY_INSTANCES;
 
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { EXRLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/EXRLoader.js';
 
 import { Explosion } from './explosion.js';
 
@@ -12,6 +13,8 @@ import { Prop as PropClass } from "./prop.js";
 import { ENEMY_DEFS } from "./listOfEnemies.js";
 import { PROP_DEFS } from "./listOfprops.js";
 import { Projectile } from "./projectile.js";
+
+const DEFAULT_HDRI_FILE = 'assets/textures/HDRI/IndoorEnvironmentHDRI005_1K_HDR.exr';
 
 function ensureUv2ForAo(mesh) {
   const geometry = mesh?.geometry;
@@ -243,10 +246,11 @@ export class Door {
 window.Door = Door;
 
 export class SceneLoader {
-  constructor(scene, camera, player) {
+  constructor(scene, camera, player, renderer = null) {
     this.scene = scene;
     this.camera = camera;
     this.player = player;
+    this.renderer = renderer;
 	// --- NOTE: changed from object maps to arrays for runtime lists ---
     // Arrays are authoritative for iteration; maps exist for O(1) lookup by id.
     this.enemies = [];         // array of Enemy instances
@@ -284,6 +288,24 @@ window.sceneLoader = this;
     this.roomCenterOffset = new THREE.Vector3(0, 0, 0);
 
     this.sceneLights = [];
+
+    // GLTF cache (keyed by model path). We cache the loaded source scene once,
+    // then return clones so geometry/material/texture GPU assets are shared.
+    this._gltfLoader = new GLTFLoader();
+    this.modelCache = new Map();
+
+    // HDRI/PMREM state and cache (keyed by exr file path)
+    this._exrLoader = new EXRLoader();
+    this._hdriCache = new Map();
+    this._activeHdriPath = null;
+    this._activeHdriRequestId = 0;
+    this._isHdriBackgroundActive = false;
+    this._pmremGenerator = this.renderer ? new THREE.PMREMGenerator(this.renderer) : null;
+    if (this._pmremGenerator) {
+      this._pmremGenerator.compileEquirectangularShader();
+    } else {
+      console.warn('SceneLoader: renderer missing, HDRI PMREM generation disabled.');
+    }
     
     // --- Pending Scene Data (for preloading) ---
     this.pendingSceneDef = null;
@@ -297,6 +319,174 @@ window.sceneLoader = this;
     // audio helpers
     this._audioLoader = new THREE.AudioLoader();
     this._audioBufferCache = {};
+  }
+
+  async loadModel(path) {
+    if (!path) {
+      throw new Error('SceneLoader.loadModel requires a valid path.');
+    }
+
+    const cached = this.modelCache.get(path);
+    if (cached?.scene) {
+      return cached.scene.clone();
+    }
+
+    if (cached?.promise) {
+      const scene = await cached.promise;
+      return scene.clone();
+    }
+
+    const pendingPromise = this._gltfLoader.loadAsync(path)
+      .then((gltf) => {
+        const scene = gltf?.scene;
+        if (!scene) {
+          throw new Error(`GLTF at '${path}' did not contain a scene root.`);
+        }
+        this.modelCache.set(path, { scene });
+        return scene;
+      })
+      .catch((err) => {
+        this.modelCache.delete(path);
+        throw err;
+      });
+
+    this.modelCache.set(path, { scene: null, promise: pendingPromise });
+    const loadedScene = await pendingPromise;
+    return loadedScene.clone();
+  }
+
+  _resolveHdriConfig(sceneDef) {
+    const env = sceneDef?.environment;
+    const hdriEntry = env?.hdri;
+
+    if (hdriEntry === false) {
+      return null;
+    }
+
+    if (typeof hdriEntry === 'string') {
+      return {
+        file: hdriEntry,
+        background: false,
+        environmentIntensity: 1,
+        backgroundIntensity: 1,
+        backgroundBlurriness: 0
+      };
+    }
+
+    if (hdriEntry && typeof hdriEntry === 'object') {
+      return {
+        file: hdriEntry.file || DEFAULT_HDRI_FILE,
+        background: !!hdriEntry.background,
+        environmentIntensity: typeof hdriEntry.environmentIntensity === 'number' ? hdriEntry.environmentIntensity : 1,
+        backgroundIntensity: typeof hdriEntry.backgroundIntensity === 'number' ? hdriEntry.backgroundIntensity : 1,
+        backgroundBlurriness: typeof hdriEntry.backgroundBlurriness === 'number' ? hdriEntry.backgroundBlurriness : 0
+      };
+    }
+
+    return {
+      file: DEFAULT_HDRI_FILE,
+      background: false,
+      environmentIntensity: 1,
+      backgroundIntensity: 1,
+      backgroundBlurriness: 0
+    };
+  }
+
+  async _preloadHdri(sceneDef) {
+    const hdri = this._resolveHdriConfig(sceneDef);
+    if (!hdri?.file) return;
+    try {
+      await this._getPmremTextureForHdri(hdri.file);
+    } catch (err) {
+      console.warn('SceneLoader: failed to preload HDRI', hdri.file, err);
+    }
+  }
+
+  async _applyHdriForScene(sceneDef) {
+    const hdri = this._resolveHdriConfig(sceneDef);
+    const requestId = ++this._activeHdriRequestId;
+
+    if (!hdri?.file) {
+      this.scene.environment = null;
+      if (this._isHdriBackgroundActive) {
+        this.scene.background = null;
+        this._isHdriBackgroundActive = false;
+      }
+      this._activeHdriPath = null;
+      return;
+    }
+
+    try {
+      const envMap = await this._getPmremTextureForHdri(hdri.file);
+      if (requestId !== this._activeHdriRequestId) return;
+
+      this.scene.environment = envMap;
+      if (typeof hdri.environmentIntensity === 'number') {
+        this.scene.environmentIntensity = hdri.environmentIntensity;
+      }
+
+      if (hdri.background) {
+        this.scene.background = envMap;
+        if (typeof hdri.backgroundIntensity === 'number') {
+          this.scene.backgroundIntensity = hdri.backgroundIntensity;
+        }
+        if (typeof hdri.backgroundBlurriness === 'number') {
+          this.scene.backgroundBlurriness = hdri.backgroundBlurriness;
+        }
+        this._isHdriBackgroundActive = true;
+      } else if (this._isHdriBackgroundActive) {
+        this.scene.background = null;
+        this._isHdriBackgroundActive = false;
+      }
+
+      this._activeHdriPath = hdri.file;
+      console.log(`SceneLoader: HDRI applied (${hdri.file})`);
+    } catch (err) {
+      if (requestId !== this._activeHdriRequestId) return;
+      console.warn('SceneLoader: failed to apply HDRI', hdri.file, err);
+      this.scene.environment = null;
+      if (this._isHdriBackgroundActive) {
+        this.scene.background = null;
+        this._isHdriBackgroundActive = false;
+      }
+      this._activeHdriPath = null;
+    }
+  }
+
+  _getPmremTextureForHdri(hdriPath) {
+    const cached = this._hdriCache.get(hdriPath);
+    if (cached?.pmremTexture) {
+      return Promise.resolve(cached.pmremTexture);
+    }
+    if (cached?.promise) {
+      return cached.promise;
+    }
+
+    if (!this._pmremGenerator) {
+      return Promise.reject(new Error('PMREMGenerator is unavailable because renderer was not provided.'));
+    }
+
+    const promise = this._exrLoader.loadAsync(hdriPath)
+      .then((exrTexture) => {
+        exrTexture.mapping = THREE.EquirectangularReflectionMapping;
+        const renderTarget = this._pmremGenerator.fromEquirectangular(exrTexture);
+        exrTexture.dispose();
+
+        const entry = {
+          pmremTexture: renderTarget.texture,
+          renderTarget,
+          promise: null
+        };
+        this._hdriCache.set(hdriPath, entry);
+        return entry.pmremTexture;
+      })
+      .catch((err) => {
+        this._hdriCache.delete(hdriPath);
+        throw err;
+      });
+
+    this._hdriCache.set(hdriPath, { promise, pmremTexture: null, renderTarget: null });
+    return promise;
   }
 
   // -------------------------
@@ -567,6 +757,7 @@ _applyCameraSettings() {
   loadScene(sceneDef) {
     this.unloadScene();
     this._loadSceneData(sceneDef, false);
+    this._applyHdriForScene(sceneDef);
     this._applyCameraSettings(sceneDef);
     this._notifyLoaded();
   }
@@ -577,6 +768,7 @@ _applyCameraSettings() {
       this._clearPending();
       this.pendingSceneDef = sceneDef;
       this._loadSceneData(sceneDef, true);
+      this._preloadHdri(sceneDef);
   }
 
   hasPendingScene() {
@@ -617,6 +809,7 @@ _applyCameraSettings() {
       });
       
       // 4. Apply camera settings
+      this._applyHdriForScene(this.sceneDef);
       this._applyCameraSettings(this.sceneDef);
       
       // 5. Clear pending
@@ -844,9 +1037,8 @@ if (pdef.type === "prefab" && pdef.prefab) {
       continue;
     }
 
-    const loader = new GLTFLoader();
-    loader.load(doorModelPath, (gltf) => {
-        const doorMesh = gltf.scene;
+    this.loadModel(doorModelPath)
+      .then((doorMesh) => {
         
         // Apply custom model rotation if specified in scene def (for correcting GLB orientation)
         if (pdef.modelRotation) {
@@ -903,7 +1095,8 @@ if (pdef.type === "prefab" && pdef.prefab) {
         door.doorMesh = doorMesh;
         
         console.log('Door loaded:', pdef.id, 'model:', doorModelPath, 'Rotation:', doorMesh.rotation, 'Position:', doorMesh.position);
-      }, undefined, (err) => {
+      })
+      .catch((err) => {
         console.warn(`Failed to load door model for '${pdef.id}' from '${doorModelPath}':`, err);
       });
 
@@ -913,10 +1106,8 @@ if (pdef.type === "prefab" && pdef.prefab) {
     continue;
 }
   if (pdef.type === "glb" && pdef.file) {
-    const loader = new GLTFLoader();
-
-    loader.load(pdef.file, (gltf) => {
-      const model = gltf.scene;
+    this.loadModel(pdef.file)
+      .then((model) => {
 
       model.position.set(
         pdef.position?.x ?? 0,
@@ -984,13 +1175,18 @@ if (pdef.type === "prefab" && pdef.prefab) {
           return false;
         },
         dispose() {
-          try { if (this.mesh) { this.mesh.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); if (o.material?.map) o.material.map.dispose(); o.material?.dispose(); } }); } } catch(e){}
+          // Cached GLTF instances share geometry/material/texture resources.
+          // Do not dispose those per-instance, only detach the scene node.
+          try { if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh); } catch(e){}
         }
       };
 
       // attach raw definition so the editor can preserve arbitrary keys
       try { propWrapper._sceneDef = _cloneDef(editorDef); } catch(e){}
       this.addProp(propWrapper, isPending);
+    })
+    .catch((err) => {
+      console.warn(`Failed to load GLB prop '${pdef.id}' from '${pdef.file}':`, err);
     });
 
     continue;
@@ -1168,6 +1364,16 @@ if (pdef.type === "prefab" && pdef.prefab) {
     // Explosions
     this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
     this.explosions = [];
+
+    // Scene-level environment state
+    this._activeHdriRequestId++;
+    this.scene.environment = null;
+    this.scene.environmentIntensity = 1;
+    if (this._isHdriBackgroundActive) {
+      this.scene.background = null;
+      this._isHdriBackgroundActive = false;
+    }
+    this._activeHdriPath = null;
   }
 
 _createPrefabProp(pdef, prefab) {

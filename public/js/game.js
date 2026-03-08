@@ -2410,7 +2410,7 @@ document.addEventListener('keydown', (e) => {
 
   // Load using SceneManager for on-rails intro/exit
 // ------------------ Scene / Level management ------------------
-window.sceneLoader = new SceneLoader(scene, camera, player);
+window.sceneLoader = new SceneLoader(scene, camera, player, renderer);
 // Expose spawn helper and enemy list for console testing
 
 
