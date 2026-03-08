@@ -30,6 +30,7 @@ const options = {
 };
 
 const app = express();
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.js')) {
@@ -37,6 +38,86 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
+
+const CRASH_REPORT_DIR = path.join(__dirname, 'crash-reports');
+
+function ensureCrashReportDir() {
+  if (!fs.existsSync(CRASH_REPORT_DIR)) {
+    fs.mkdirSync(CRASH_REPORT_DIR, { recursive: true });
+  }
+}
+
+function safeFilePart(value, fallback = 'unknown') {
+  const str = String(value || fallback).trim().toLowerCase();
+  const clean = str.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return clean || fallback;
+}
+
+function formatSection(title, content) {
+  const lines = [];
+  lines.push(`=== ${title} ===`);
+  if (typeof content === 'string') {
+    lines.push(content);
+  } else {
+    try {
+      lines.push(JSON.stringify(content ?? null, null, 2));
+    } catch (err) {
+      lines.push(`<<failed to stringify section: ${err?.message || err}>>`);
+    }
+  }
+  lines.push('');
+  return lines;
+}
+
+app.post('/api/crash-report', (req, res) => {
+  try {
+    ensureCrashReportDir();
+
+    const payload = req.body || {};
+    const eventType = safeFilePart(payload.eventType, 'runtime');
+    const stamp = new Date();
+    const stampIso = stamp.toISOString();
+    const fileStamp = stampIso.replace(/[:.]/g, '-');
+    const fileName = `crash_${fileStamp}_${eventType}.txt`;
+    const filePath = path.join(CRASH_REPORT_DIR, fileName);
+
+    const report = [];
+    report.push('Lightgun Crash Report');
+    report.push('=====================');
+    report.push(`GeneratedAt: ${stampIso}`);
+    report.push(`RemoteIP: ${req.socket?.remoteAddress || 'unknown'}`);
+    report.push(`UserAgent: ${req.headers['user-agent'] || 'unknown'}`);
+    report.push('');
+
+    report.push(...formatSection('Event', {
+      eventType: payload.eventType || null,
+      createdAt: payload.createdAt || null,
+      reportVersion: payload.reportVersion || null,
+      message: payload.error?.message || null
+    }));
+
+    report.push(...formatSection('Error', payload.error || null));
+    report.push(...formatSection('Context', payload.context || null));
+    report.push(...formatSection('WebGL', payload.webgl || null));
+    report.push(...formatSection('Renderer', payload.renderer || null));
+    report.push(...formatSection('Browser', payload.browser || null));
+    report.push(...formatSection('Performance', payload.performance || null));
+    report.push(...formatSection('Frames', payload.frames || []));
+    report.push(...formatSection('Extra', payload.extra || null));
+    report.push(...formatSection('Breadcrumbs', payload.breadcrumbs || []));
+
+    fs.writeFileSync(filePath, report.join('\n'), 'utf8');
+
+    res.json({
+      ok: true,
+      fileName,
+      relativePath: `crash-reports/${fileName}`
+    });
+  } catch (err) {
+    console.error('Failed to write crash report:', err);
+    res.status(500).json({ ok: false, error: err?.message || 'unknown error' });
+  }
+});
 
 // API: list textures under public/assets/textures (recursive)
 app.get('/api/list-textures', (req, res) => {

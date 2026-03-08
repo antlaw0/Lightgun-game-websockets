@@ -1,0 +1,2638 @@
+Lightgun Crash Report
+=====================
+GeneratedAt: 2026-03-08T00:19:42.687Z
+RemoteIP: ::ffff:192.168.12.239
+UserAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+
+=== Event ===
+{
+  "eventType": "failsafe_frame_spikes",
+  "createdAt": "2026-03-08T00:19:42.672Z",
+  "reportVersion": 1,
+  "message": "Consecutive slow frames threshold reached"
+}
+
+=== Error ===
+{
+  "name": "Error",
+  "message": "Consecutive slow frames threshold reached",
+  "stack": "Error: Consecutive slow frames threshold reached\n    at animate (https://192.168.12.239:8080/js/game.js:3252:9)"
+}
+
+=== Context ===
+{
+  "renderer": {
+    "render": {
+      "calls": 1,
+      "triangles": 1,
+      "points": 0,
+      "lines": 0,
+      "frame": 2460
+    },
+    "memory": {
+      "geometries": 98,
+      "textures": 106
+    },
+    "capabilities": {
+      "isWebGL2": true,
+      "maxTextures": 16,
+      "maxTextureSize": 16384,
+      "maxCubemapSize": 16384,
+      "maxVertexTextures": 16,
+      "maxAnisotropy": null,
+      "precision": "highp",
+      "logarithmicDepthBuffer": false
+    }
+  },
+  "camera": {
+    "position": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    },
+    "rotation": {
+      "x": 0.8199,
+      "y": -0.6822,
+      "z": 0.5941
+    },
+    "fov": 60
+  },
+  "player": {
+    "hp": 10000,
+    "maxHp": 10000,
+    "isReloading": false,
+    "currentWeapon": {
+      "id": "pistol",
+      "name": "Pistol",
+      "ammoInClip": 12,
+      "clipSize": 12,
+      "totalAmmo": 0,
+      "fireMode": "semi-auto",
+      "accuracy": 0.1
+    }
+  },
+  "gameplay": {
+    "isFPSMode": false,
+    "enemyCount": 4,
+    "sceneChildren": 42,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "reticle": {
+      "x": 1720,
+      "y": 652.5
+    },
+    "editorGrid": {
+      "isEditorMode": false,
+      "size": 0,
+      "world": 200,
+      "divisions": 0,
+      "helperCount": 0,
+      "estimatedLinesPerHelper": 0,
+      "estimatedLinesTotal": 0
+    }
+  }
+}
+
+=== WebGL ===
+{
+  "available": true,
+  "vendor": "Google Inc. (NVIDIA)",
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+  "shadingLanguageVersion": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+  "maxTextureSize": 16384,
+  "maxRenderbufferSize": 16384,
+  "maxCombinedTextureImageUnits": 32,
+  "maxVertexUniformVectors": 4095,
+  "maxFragmentUniformVectors": 1024
+}
+
+=== Renderer ===
+{
+  "render": {
+    "calls": 1,
+    "triangles": 1,
+    "points": 0,
+    "lines": 0,
+    "frame": 2460
+  },
+  "memory": {
+    "geometries": 98,
+    "textures": 106
+  },
+  "capabilities": {
+    "isWebGL2": true,
+    "maxTextures": 16,
+    "maxTextureSize": 16384,
+    "maxCubemapSize": 16384,
+    "maxVertexTextures": 16,
+    "maxAnisotropy": null,
+    "precision": "highp",
+    "logarithmicDepthBuffer": false
+  }
+}
+
+=== Browser ===
+{
+  "url": "https://192.168.12.239:8080/game.html",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  "platform": "Win32",
+  "language": "en-US",
+  "hardwareConcurrency": 32,
+  "deviceMemoryGb": 8,
+  "viewport": {
+    "width": 3440,
+    "height": 1305
+  },
+  "screen": {
+    "width": 3440,
+    "height": 1440
+  },
+  "devicePixelRatio": 1
+}
+
+=== Performance ===
+{
+  "nowMs": 6404.100000000093,
+  "timeOrigin": 1772929176268.7,
+  "memory": {
+    "jsHeapSizeLimit": 4294967296,
+    "totalJSHeapSize": 204737343,
+    "usedJSHeapSize": 196597823
+  }
+}
+
+=== Frames ===
+[
+  {
+    "nowMs": 202.4,
+    "deltaMs": -33.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 369.3,
+    "deltaMs": 166.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 1,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 386,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 403.1,
+    "deltaMs": 17.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 419.6,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 453.1,
+    "deltaMs": 33.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 503.1,
+    "deltaMs": 50,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 19,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 536.4,
+    "deltaMs": 33.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 22,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 569.8,
+    "deltaMs": 33.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 22,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 586.1,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 22,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 603.3,
+    "deltaMs": 17.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 22,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 636.4,
+    "deltaMs": 33.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 25,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 719.6,
+    "deltaMs": 83.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 25,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 736,
+    "deltaMs": 16.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 25,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 786.5,
+    "deltaMs": 50.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 26,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 952.8,
+    "deltaMs": 166.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 1,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 27,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1119.6,
+    "deltaMs": 166.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 2,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 53,
+    "textures": 28,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1303.2,
+    "deltaMs": 183.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 3,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1519.9,
+    "deltaMs": 216.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 4,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1553.6,
+    "deltaMs": 33.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1637,
+    "deltaMs": 83.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1669.9,
+    "deltaMs": 32.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1770.2,
+    "deltaMs": 100.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 1,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1820.5,
+    "deltaMs": 50.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1870.7,
+    "deltaMs": 50.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1886.8,
+    "deltaMs": 16.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1903.9,
+    "deltaMs": 17.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 57,
+    "textures": 38,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1921.5,
+    "deltaMs": 17.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 1987.1,
+    "deltaMs": 65.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2070.1,
+    "deltaMs": 83,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2104.2,
+    "deltaMs": 34.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2121,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2137.7,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2160.6,
+    "deltaMs": 22.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2170.7,
+    "deltaMs": 10.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2220.2,
+    "deltaMs": 49.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2237.2,
+    "deltaMs": 17,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2254,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2303.9,
+    "deltaMs": 49.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 58,
+    "textures": 41,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2419.9,
+    "deltaMs": 116,
+    "sceneChildren": 17,
+    "frameSpikeCount": 1,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2653.5,
+    "deltaMs": 233.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 2,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2686.3,
+    "deltaMs": 32.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2703.1,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2736.4,
+    "deltaMs": 33.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2753.5,
+    "deltaMs": 17.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2803.5,
+    "deltaMs": 50,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2820.4,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2837.3,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2853.8,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2870.4,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2886.9,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2904.3,
+    "deltaMs": 17.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2920.6,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2937,
+    "deltaMs": 16.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2953.8,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2970.3,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 2986.6,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3003.7,
+    "deltaMs": 17.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3020.2,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3037,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3053.5,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3070.6,
+    "deltaMs": 17.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3086.9,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3103.8,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3120.7,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3137.3,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3153.5,
+    "deltaMs": 16.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3170.5,
+    "deltaMs": 17,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3187.1,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3204,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3220.5,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3237.4,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3254.1,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3270.7,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3287.1,
+    "deltaMs": 16.4,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3304.1,
+    "deltaMs": 17,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3320.6,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3337.6,
+    "deltaMs": 17,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3353.9,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3370.2,
+    "deltaMs": 16.3,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3387.4,
+    "deltaMs": 17.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3404,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3420.9,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3437.8,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3454,
+    "deltaMs": 16.2,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3470.6,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3487.3,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3504.1,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3520.6,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3536.7,
+    "deltaMs": 16.1,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3553.4,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3570,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3586.6,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3603.4,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3620,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3636.7,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3653.3,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3670,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3686.7,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3703.3,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3720.1,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3736.6,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3753.4,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3770,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3786.7,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3803.6,
+    "deltaMs": 16.9,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3820.3,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3836.9,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3853.4,
+    "deltaMs": 16.5,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3870.1,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3886.8,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3903.6,
+    "deltaMs": 16.8,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3920.2,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3936.8,
+    "deltaMs": 16.6,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3953.5,
+    "deltaMs": 16.7,
+    "sceneChildren": 17,
+    "frameSpikeCount": 0,
+    "enemyCount": 3,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 63,
+    "textures": 48,
+    "cameraPos": {
+      "x": 8,
+      "y": 1.7,
+      "z": 12
+    }
+  },
+  {
+    "nowMs": 3970.2,
+    "deltaMs": 16.7,
+    "sceneChildren": 41,
+    "frameSpikeCount": 0,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 50,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 4753.8,
+    "deltaMs": 783.6,
+    "sceneChildren": 40,
+    "frameSpikeCount": 1,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 50,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 4770.5,
+    "deltaMs": 16.7,
+    "sceneChildren": 41,
+    "frameSpikeCount": 0,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 50,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 4787.2,
+    "deltaMs": 16.7,
+    "sceneChildren": 41,
+    "frameSpikeCount": 0,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 70,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 5154,
+    "deltaMs": 366.8,
+    "sceneChildren": 41,
+    "frameSpikeCount": 1,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 80,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 5337.5,
+    "deltaMs": 183.5,
+    "sceneChildren": 41,
+    "frameSpikeCount": 2,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 94,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 5887.8,
+    "deltaMs": 550.3,
+    "sceneChildren": 42,
+    "frameSpikeCount": 3,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 97,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  },
+  {
+    "nowMs": 6005.7,
+    "deltaMs": 117.9,
+    "sceneChildren": 42,
+    "frameSpikeCount": 4,
+    "enemyCount": 4,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 98,
+    "textures": 106,
+    "cameraPos": {
+      "x": 15.3,
+      "y": 1.7,
+      "z": 21.68
+    }
+  }
+]
+
+=== Extra ===
+{
+  "deltaMs": 333.40000000000055,
+  "frameSpikeCount": 5,
+  "thresholdMs": 100,
+  "maxFrameSpikes": 5
+}
+
+=== Breadcrumbs ===
+[]

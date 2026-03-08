@@ -188,8 +188,8 @@ scale:  {  x:  1, y:  1, z:  1 }
     },
     
 	material: {
-  horizontalRepeat:  25,
-  verticalRepeat:  16,
+  horizontalRepeat:  1,
+  verticalRepeat:  1,
   map: "assets/textures/pavingstone.png",                  // base color / albedo
   normalMap: "assets/textures/pavingstoneNormal.png",  // normal map for bumps
   roughnessMap: "assets/textures/pavingstoneRoughness.png", // roughness map

@@ -5,8 +5,8 @@ import { l_shaped_hallway } from "./l_shaped_hallway.js";
 // OUTER WALL MATERIAL (module scope)
 // =====================================================
 const outerWall = {
-  horizontalRepeat: 25,
-  verticalRepeat: 16,
+  horizontalRepeat: 1,
+  verticalRepeat: 1,
   map: "assets/textures/bricks01/bricks01Color.png",
   normalMap: "assets/textures/bricks01/bricks01Normal.png",
   roughnessMap: "assets/textures/bricks01/bricks01Roughness.png",
@@ -20,8 +20,8 @@ const outerWall = {
 }; // closes outerWall
 
 const ceilingTexture = {
-  horizontalRepeat: 10,
-  verticalRepeat: 15,
+  horizontalRepeat: 1,
+  verticalRepeat: 1,
   map: "assets/textures/rock01/rock01Color.png",
   normalMap: "assets/textures/rock01/rock01Normal.png",
   roughnessMap: "assets/textures/rock01/rock01Roughness.png",
@@ -35,8 +35,8 @@ const ceilingTexture = {
 }; // closes ceiling
 
 const floorTexture = {
-  horizontalRepeat: 10,
-  verticalRepeat: 15,
+  horizontalRepeat: 1,
+  verticalRepeat: 1,
   map: "assets/textures/concrete01/concrete01Color.png",
   normalMap: "assets/textures/concrete01/concrete01Normal.png",
   roughnessMap: "assets/textures/concrete01/concrete01Roughness.png",
@@ -301,13 +301,33 @@ hitSounds:  sounds.ricMetal
         
       }, // closes wall_2
 
-      {
-        id: "wall_3_object",
+      
+	  {
+        id: "wall_3_leftSideExitDoor",
         type: "object",
         def: "wall",
         material: outerWall,
         position: { x: 27, y: 0, z: 0 },
-        size: { x: 1, y: 7, z: 19 },
+        size: { x: 1, y: 2.2, z: 1.9 },
+        
+      }, // closes wall_3
+	  
+	  {
+        id: "wall_3_rightSideExitDoor",
+        type: "object",
+        def: "wall",
+        material: outerWall,
+        position: { x: 27, y: 0, z: 0 },
+        size: { x: 1, y: 2.2, z: 15.9 },
+        
+      }, // closes wall_3
+{
+        id: "wall_3aboveexitDoor",
+        type: "object",
+        def: "wall",
+        material: outerWall,
+        position: { x: 27, y: 2.2, z: 0 },
+        size: { x: 1, y: 4.8, z: 19 },
         
       }, // closes wall_3
 
@@ -409,13 +429,13 @@ position: { x: 4, y: 2.2, z: 18 },
 
 
 	  {
-    id: "exitDoor_object",
+    id: "exitDoor",
     type: "door",
     model: "assets/models/props/door1.glb",
     position: {
-        x: 28,
+        x: 27,
         y: 0,
-        z: 9
+        z: 2
     },
     rotation: {
         x: 0,
@@ -423,7 +443,7 @@ position: { x: 4, y: 2.2, z: 18 },
         z: 0
     },
     size: {
-        x: 1.2,
+        x: 2.2,
         y: 2.2,
         z: 0.15
     },
@@ -534,8 +554,188 @@ position: { x: 4, y: 2.2, z: 18 },
     hp: 9999,
     maxHp: 9999,
     indestructible: true
-  }
-    ] // closes staticObjects
+  },
+    {
+        def:  "wall",
+		id: "wall_01_zone2",
+        type: "wall",
+        position: {
+          x: 28,
+          y: 0,
+          z: 0
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 6,
+          y: 3,
+          z: 0.2
+        },
+        hp: 9999,
+		material:  outerWall
+      },
+      {
+        def:  "wall",
+		id: "wall_02_zone2",
+        type: "wall",
+        position: {
+          x: 28,
+          y: 0,
+          z: 5
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 10,
+          y: 3,
+          z: 0.2
+        },
+        hp: 9999,
+		material:  outerWall
+      },
+      {
+    id: "floor_zone2",
+    type: "tile",
+    position: {
+        x: 31,
+        y: 0,
+        z: 3
+    },
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 6,
+        y: 0.2,
+        z: 5
+    },
+    hp: 9999,
+    material:  floorTexture,
+    _convertedToCenter: true,
+    coverType: "none"
+},
+{
+    id: "ceiling_zone2",
+    type: "tile",
+    position: {
+        x: 31,
+        y: 3,
+        z: 3
+    },
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 6,
+        y: 0.2,
+        z: 5
+    },
+    hp: 9999,
+    material:  ceilingTexture,
+    _convertedToCenter: true,
+    coverType: "none"
+},
+{
+        id: "wall_secondl_zone2",
+        type: "wall",
+        position: {
+          x: 34,
+          y: 0,
+          z: -2
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 0.2,
+          y: 3,
+          z: 6
+        },
+        _convertedToCenter: true,
+		material:  outerWall,
+        hp: 9999
+      },
+      {
+        id: "wall_second_l_outer_zone2",
+        type: "wall",
+        position: {
+          x: 38,
+          y: 0,
+          z: 0
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 0.2,
+          y: 3,
+          z: 10
+        },
+        _convertedToCenter: true,
+		material:  outerWall,
+        hp: 9999
+      },
+      {
+        id: "floor_second_l_zone2",
+        type: "tile",
+        position: {
+          x: 36,
+          y: 0,
+          z: -1
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 4,
+          y: 0.2,
+          z: 12
+        },
+        _convertedToCenter: true,
+		material:  floorTexture,
+        hp: 9999
+      },
+	  {
+        id: "ceiling_second_l_zone2",
+        type: "tile",
+        position: {
+          x: 36,
+          y: 3,
+          z: -1
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 4,
+          y: 0.2,
+          z: 12
+        },
+        _convertedToCenter: true,
+		material:  floorTexture,
+        hp: 9999
+      }
+      
+      
+	] // closes staticObjects
   }, // closes environment
 
   enemies: [

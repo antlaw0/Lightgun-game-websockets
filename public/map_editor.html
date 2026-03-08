@@ -366,6 +366,29 @@ function updateItem(item) {
   updateLayerVisibility();
 }
 
+function parsePropertiesInput(raw, itemName = "item") {
+  const text = String(raw || "").trim();
+  if (!text) return {};
+
+  // First, accept strict JSON.
+  try {
+    return JSON.parse(text);
+  } catch (jsonErr) {
+    // Then accept JS object literals (unquoted keys, trailing commas, etc.).
+    try {
+      const parsed = Function('"use strict"; return (' + text + ')')();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("properties must evaluate to an object");
+      }
+      return parsed;
+    } catch (jsErr) {
+      throw new Error(
+        `Invalid properties for \"${itemName || "item"}\": ${jsErr.message || jsonErr.message}`
+      );
+    }
+  }
+}
+
 /* ================= MODAL ================= */
 
 function openEditModal(item) {
@@ -396,7 +419,7 @@ function openEditModal(item) {
         <input id="editHeight" type="number" value="${item.height}">
       </label>
 
-      <label>Properties (raw JSON)
+      <label>Properties (JS object or JSON)
         <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
       </label>
 
@@ -449,7 +472,7 @@ function openEditModal(item) {
         <textarea id="editNotes">${item.notes}</textarea>
       </label>
 
-      <label>Properties (raw JSON)
+      <label>Properties (JS object or JSON)
         <textarea id="editProps" rows="6">${item.propertiesRaw || ""}</textarea>
       </label>
 
@@ -677,9 +700,9 @@ exportBtn.onclick = () => {
       let props = {};
       if (propertiesRaw && propertiesRaw.trim() !== "") {
         try {
-          props = JSON.parse(propertiesRaw);
+          props = parsePropertiesInput(propertiesRaw, name);
         } catch (e) {
-          console.warn("Invalid JSON in propertiesRaw for", name, e);
+          console.warn("Invalid properties in propertiesRaw for", name, e);
         }
       }
 

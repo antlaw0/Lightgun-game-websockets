@@ -18,6 +18,7 @@ import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
 import { WeaponManager } from './weaponManager.js';
+import { createCrashReporter } from './crashReporter.js';
 // Editor mode flag and helpers (default OFF)
 window.engine = window.engine || { isEditorMode: false };
 
@@ -72,19 +73,31 @@ const DEFAULT_LIGHT_DEFINITIONS = {
   }
 };
 
+// Assigned after post-processing passes are created.
+let applyEditorRenderPerformanceMode = () => {};
+
 function setEditorMode(enabled) {
   window.engine.isEditorMode = !!enabled;
+  const g = window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
+
   if (window.engine.isEditorMode) {
     // disable enemy AI and combat, enable free FPS movement
     try { setEnemyAIEnabled(false); } catch(_) {}
     isFPSMode = true;
     window.engine.disableCombat = true;
+    // Restore last active grid size, if any, when re-entering editor mode.
+    if (!g.size && g.lastEditorSize) g.size = g.lastEditorSize;
+    applyEditorRenderPerformanceMode(true);
     console.log('[EDITOR] Editor mode ENABLED');
     try { if (window.speak) window.speak('Editor mode on', { interrupt: true }); } catch(e){}
     toggleLightHelpers(true);
   } else {
     try { setEnemyAIEnabled(true); } catch(_) {}
     window.engine.disableCombat = false;
+    // Force grid off outside editor mode to avoid unnecessary GPU load.
+    if (g.size > 0) g.lastEditorSize = g.size;
+    g.size = 0;
+    applyEditorRenderPerformanceMode(false);
     console.log('[EDITOR] Editor mode DISABLED');
     try { if (window.speak) window.speak('Editor mode off', { interrupt: true }); } catch(e){}
     toggleLightHelpers(false);
@@ -1316,6 +1329,11 @@ function _cleanLightObject(o) {
 }
 
 function _cleanStaticObject(o) {
+  const livePos = (o && o.mesh && o.mesh.position) ? _serializeVector3(o.mesh.position) : null;
+  const liveRot = (o && o.mesh && o.mesh.rotation)
+    ? { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z }
+    : null;
+
   // If a stored raw scene definition exists, prefer it (preserves arbitrary keys)
   if (o && o._sceneDef && typeof o._sceneDef === 'object') {
     try {
@@ -1323,12 +1341,14 @@ function _cleanStaticObject(o) {
       // Ensure id exists
       out.id = out.id ?? (o.id || null);
       // Overlay runtime transforms so exported data matches live scene
-      if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
-      else if (o.mesh && o.mesh.position) out.position = _serializeVector3(o.mesh.position);
-      if (o.rotation && o.rotation.x !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
-      else if (o.mesh && o.mesh.rotation) out.rotation = { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z };
+      if (livePos) out.position = livePos;
+      else if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
+      if (liveRot) out.rotation = liveRot;
+      else if (o.rotation && o.rotation.x !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
       if (o.size) out.size = Object.assign({}, o.size);
       else if (o.mesh && o.mesh.scale) out.size = { x: o.mesh.scale.x, y: o.mesh.scale.y, z: o.mesh.scale.z };
+      // Exported editor objects are authored in center-space; keep this explicit so loader won't offset them.
+      out._convertedToCenter = true;
       if (typeof o.hp === 'number') out.hp = o.hp;
       if (o.coverType) out.coverType = o.coverType;
       if (o.type) out.type = out.type ?? o.type;
@@ -1343,11 +1363,12 @@ function _cleanStaticObject(o) {
   out.id = o.id || null;
   // type: prefer explicit, then mesh userData
   out.type = o.type || (o.mesh && o.mesh.userData && o.mesh.userData.type) || 'prop';
-  if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
-  else if (o.mesh && o.mesh.position) out.position = _serializeVector3(o.mesh.position);
-  if (o.rotation && o.rotation.y !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
-  else if (o.mesh && o.mesh.rotation) out.rotation = { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z };
+  if (livePos) out.position = livePos;
+  else if (o.position && o.position.x !== undefined) out.position = { x: o.position.x, y: o.position.y, z: o.position.z };
+  if (liveRot) out.rotation = liveRot;
+  else if (o.rotation && o.rotation.y !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
   if (o.size) out.size = Object.assign({}, o.size);
+  out._convertedToCenter = true;
   if (typeof o.hp === 'number') out.hp = o.hp;
   if (o.coverType) out.coverType = o.coverType;
   // material/texture info not available for editor-spawned objects; leave out if missing
@@ -1499,6 +1520,32 @@ const fxaaPass = new ShaderPass(FXAAShader);
 fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
 composer.addPass(fxaaPass);
 
+const editorPostFxState = {
+  initialized: false,
+  bloomEnabled: true,
+  ssaoEnabled: true
+};
+
+applyEditorRenderPerformanceMode = (isEditorMode) => {
+  try {
+    if (!editorPostFxState.initialized) {
+      editorPostFxState.initialized = true;
+      editorPostFxState.bloomEnabled = bloomPass.enabled;
+      editorPostFxState.ssaoEnabled = ssaoPass.enabled;
+    }
+    if (isEditorMode) {
+      // Editor view favors responsiveness over cinematic post FX.
+      bloomPass.enabled = false;
+      ssaoPass.enabled = false;
+    } else {
+      bloomPass.enabled = editorPostFxState.bloomEnabled;
+      ssaoPass.enabled = editorPostFxState.ssaoEnabled;
+    }
+  } catch (err) {
+    console.warn('applyEditorRenderPerformanceMode failed', err);
+  }
+};
+
 function resize() {
     cw = canvas.width = window.innerWidth;
     ch = canvas.height = window.innerHeight;
@@ -1509,9 +1556,188 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+function vec3Snapshot(v) {
+  if (!v) return null;
+  return {
+    x: Number(v.x.toFixed(4)),
+    y: Number(v.y.toFixed(4)),
+    z: Number(v.z.toFixed(4))
+  };
+}
+
+function collectRendererInfo() {
+  try {
+    const info = renderer.info || {};
+    const caps = renderer.capabilities || {};
+    return {
+      render: {
+        calls: info.render?.calls ?? null,
+        triangles: info.render?.triangles ?? null,
+        points: info.render?.points ?? null,
+        lines: info.render?.lines ?? null,
+        frame: info.render?.frame ?? null
+      },
+      memory: {
+        geometries: info.memory?.geometries ?? null,
+        textures: info.memory?.textures ?? null
+      },
+      capabilities: {
+        isWebGL2: caps.isWebGL2 ?? null,
+        maxTextures: caps.maxTextures ?? null,
+        maxTextureSize: caps.maxTextureSize ?? null,
+        maxCubemapSize: caps.maxCubemapSize ?? null,
+        maxVertexTextures: caps.maxVertexTextures ?? null,
+        maxAnisotropy: typeof renderer.getMaxAnisotropy === 'function' ? renderer.getMaxAnisotropy() : null,
+        precision: caps.precision ?? null,
+        logarithmicDepthBuffer: caps.logarithmicDepthBuffer ?? null
+      }
+    };
+  } catch (err) {
+    return { collectRendererInfoError: err?.message || String(err) };
+  }
+}
+
+function collectWebGLDiagnostics() {
+  try {
+    const gl = renderer.getContext();
+    if (!gl) return { available: false, reason: 'no-context' };
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+    const rendererName = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return {
+      available: true,
+      vendor,
+      renderer: rendererName,
+      version: gl.getParameter(gl.VERSION),
+      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+      maxCombinedTextureImageUnits: gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS),
+      maxVertexUniformVectors: gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS),
+      maxFragmentUniformVectors: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)
+    };
+  } catch (err) {
+    return { available: false, error: err?.message || String(err) };
+  }
+}
+
+function collectPlayerSnapshot() {
+  try {
+    if (!player) return null;
+    const w = player.currentWeapon || null;
+    return {
+      hp: player.hp ?? null,
+      maxHp: player.maxHp ?? null,
+      isReloading: w ? !!w.isReloading : null,
+      currentWeapon: w ? {
+        id: w.id ?? null,
+        name: w.name ?? null,
+        ammoInClip: w.ammoInClip ?? null,
+        clipSize: w.clipSize ?? null,
+        totalAmmo: w.totalAmmo ?? null,
+        fireMode: w.fireMode ?? null,
+        accuracy: w.accuracy ?? null
+      } : null
+    };
+  } catch (err) {
+    return { collectPlayerSnapshotError: err?.message || String(err) };
+  }
+}
+
+function collectEditorGridSnapshot() {
+  try {
+    const g = window.engine?.editorGrid;
+    if (!g) return null;
+    const size = Number(g.size || 0);
+    const world = Number(g.worldSize || 200);
+    const divisions = size > 0 ? Math.max(2, Math.round(world / size)) : 0;
+    const helperCount = Array.isArray(g.helpers) ? g.helpers.length : 0;
+    // THREE.GridHelper uses LineSegments; rough line count is (divisions + 1) * 4 per helper.
+    const estimatedLinesPerHelper = divisions > 0 ? (divisions + 1) * 4 : 0;
+    return {
+      isEditorMode: !!window.engine?.isEditorMode,
+      size,
+      world,
+      divisions,
+      helperCount,
+      estimatedLinesPerHelper,
+      estimatedLinesTotal: estimatedLinesPerHelper * helperCount
+    };
+  } catch (err) {
+    return { collectEditorGridSnapshotError: err?.message || String(err) };
+  }
+}
+
+const crashReporter = createCrashReporter({
+  endpoint: '/api/crash-report',
+  maxFrameSamples: 240,
+  contextProvider: () => ({
+    renderer: collectRendererInfo(),
+    camera: {
+      position: vec3Snapshot(camera.position),
+      rotation: { x: Number(camera.rotation.x.toFixed(4)), y: Number(camera.rotation.y.toFixed(4)), z: Number(camera.rotation.z.toFixed(4)) },
+      fov: camera.fov
+    },
+    player: collectPlayerSnapshot(),
+    gameplay: {
+      isFPSMode,
+      enemyCount: ENEMY_INSTANCES.length,
+      sceneChildren: scene.children.length,
+      playerProjectiles: projectiles.length,
+      enemyProjectiles: enemyProjectiles.length,
+      reticle: { x: Number(displayedRet.x.toFixed(2)), y: Number(displayedRet.y.toFixed(2)) },
+      editorGrid: collectEditorGridSnapshot()
+    }
+  }),
+  webglProvider: collectWebGLDiagnostics
+});
+
+const runtimeCrashState = {
+  stopped: false,
+  reason: null
+};
+
+async function stopLoopAndReport(reason, error, extra = null) {
+  if (runtimeCrashState.stopped) return;
+  runtimeCrashState.stopped = true;
+  runtimeCrashState.reason = reason;
+
+  const err = error instanceof Error ? error : new Error(String(error || reason));
+  console.error('[CRASH][STOP LOOP]', reason, err, extra || '');
+  try { logDebug(`[CRASH] Loop stopped: ${reason}`); } catch (_) {}
+
+  const result = await crashReporter.reportCrash(reason, err, extra);
+  if (result?.ok && result?.body?.relativePath) {
+    console.error(`[CRASH][REPORT SAVED] ${result.body.relativePath}`);
+    try { logDebug(`[CRASH] Report saved: ${result.body.relativePath}`); } catch (_) {}
+  } else {
+    console.error('[CRASH][REPORT FAILED]', result);
+  }
+}
+
+window.forceCrashReport = (reason = 'manual_test') => {
+  stopLoopAndReport(reason, new Error('Manual crash report trigger'), { manual: true });
+};
+
+crashReporter.installGlobalHandlers((kind, error, extra) => {
+  stopLoopAndReport(kind, error, extra);
+});
+
+canvas.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  const statusMessage = event?.statusMessage || null;
+  stopLoopAndReport('webgl_context_lost', new Error('webglcontextlost'), { statusMessage });
+}, { passive: false });
+
+canvas.addEventListener('webglcontextrestored', () => {
+  crashReporter.addBreadcrumb('webglcontextrestored', { at: Date.now() });
+  console.warn('[CRASH][WEBGL] context restored (manual reload recommended)');
+});
+
 // ------------------ Editor Grid (visual + snapping) ------------------
 window.engine = window.engine || {};
 window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
+const MAX_EDITOR_GRID_DIVISIONS = 200;
 
 function _snapToGridValue(v, spacing) {
   if (!spacing || spacing <= 0) return v;
@@ -1548,27 +1774,38 @@ window.updateEditorGrid = function() {
     if (!g.size || g.size <= 0) return; // grid OFF
 
     const world = g.worldSize || 200;
-    const divisions = Math.max(2, Math.round(world / g.size));
+    const requestedDivisions = Math.max(2, Math.round(world / g.size));
+    const divisions = Math.min(requestedDivisions, MAX_EDITOR_GRID_DIVISIONS);
+    crashReporter.addBreadcrumb('editor_grid_rebuild', {
+      isEditorMode: !!window.engine?.isEditorMode,
+      size: g.size,
+      world,
+      requestedDivisions,
+      divisions,
+      helperCountBefore: Array.isArray(g.helpers) ? g.helpers.length : 0,
+      estimatedLinesPerHelper: (divisions + 1) * 4
+    });
 
-    // Create three overlaid grid helpers with different colors for contrast
-    const colors = [0x000000, 0xffffff, 0xffff00];
-    const opacities = [0.6, 0.95, 0.95];
-    for (let i = 0; i < colors.length; i++) {
-      const col = colors[i];
-      const grid = new THREE.GridHelper(world, divisions, col, col);
-      grid.position.y = 0.5; // raised up 0.5 units as requested
-      grid.renderOrder = 9999 + i;
-      // Ensure visibility and layered rendering
-      try {
-        if (Array.isArray(grid.material)) {
-          grid.material.forEach(m => { m.opacity = opacities[i]; m.transparent = true; m.depthTest = false; });
-        } else {
-          grid.material.opacity = opacities[i]; grid.material.transparent = true; grid.material.depthTest = false;
-        }
-      } catch (e) {}
-      scene.add(grid);
-      g.helpers.push(grid);
-    }
+    const gridColor = 0x9fb8a1;
+    const centerLineColor = 0x6f8f72;
+    const grid = new THREE.GridHelper(world, divisions, centerLineColor, gridColor);
+    grid.position.y = 0.5; // raised up 0.5 units as requested
+    // Keep depth testing on so the grid does not overdraw the entire frame.
+    try {
+      if (Array.isArray(grid.material)) {
+        grid.material.forEach(m => {
+          m.transparent = false;
+          m.depthTest = true;
+          m.depthWrite = false;
+        });
+      } else {
+        grid.material.transparent = false;
+        grid.material.depthTest = true;
+        grid.material.depthWrite = false;
+      }
+    } catch (e) {}
+    scene.add(grid);
+    g.helpers.push(grid);
   } catch (e) { console.warn('updateEditorGrid failed', e); }
 };
 
@@ -1990,6 +2227,10 @@ function applyEditedJSON() {
         sel.size = parsed.size;
       }
       if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
+
+      // Keep wrapper transform fields synced so export always reflects current scene state.
+      sel.position = { x: sel.mesh.position.x, y: sel.mesh.position.y, z: sel.mesh.position.z };
+      sel.rotation = { x: sel.mesh.rotation.x, y: sel.mesh.rotation.y, z: sel.mesh.rotation.z };
 
       // ensure userData updated for id/propId/type
       if (!sel.mesh.userData) sel.mesh.userData = {};
@@ -2995,131 +3236,167 @@ const FRAME_THRESHOLD = 100;      // ms per frame = 10 FPS
 const MAX_SCENE_CHILDREN = 800;   // scene object limit for failsafe
 
 function animate(nowMs) {
-    // --- Failsafe: frame time monitoring ---
-  const deltaMs = nowMs - lastMs;
-  lastMs = nowMs;
+  if (runtimeCrashState.stopped) return;
 
-  if (deltaMs > FRAME_THRESHOLD) frameSpikeCount++;
-  else frameSpikeCount = 0;
-
-  if (frameSpikeCount >= MAX_FRAME_SPIKES) {
-    console.warn("🚨 GPU/CPU overload detected! Stopping animate loop to prevent crash.");
-    return; // exit animate loop
-  }
-
-  // --- Failsafe: scene object limit ---
-  if (scene.children.length > MAX_SCENE_CHILDREN) {
-    console.warn(`🚨 Scene has too many objects (${scene.children.length}). Stopping animate loop.`);
-    return;
-  }
-
-  requestAnimationFrame(animate); // call next frame
-  // --- FPS Mode Movement ---
-  if (isFPSMode) {
-    const moveSpeed = fpsState.speed * (deltaMs / 1000);
-    // Flatten movement vectors to XZ plane so WASD doesn't change height
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    right.y = 0;
-    right.normalize();
-
-    if (fpsState.keys.w) camera.position.addScaledVector(forward, moveSpeed);
-    if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveSpeed);
-    if (fpsState.keys.a) camera.position.addScaledVector(right, -moveSpeed);
-    if (fpsState.keys.d) camera.position.addScaledVector(right, moveSpeed);
-    if (fpsState.keys.q) camera.position.y += moveSpeed; // ascend
-    if (fpsState.keys.z) camera.position.y -= moveSpeed; // descend
-  }
-
-  // --- Reticle Smoothing ---
-  if (!isFPSMode) {
-    displayedRet.x += (ret.x - displayedRet.x) * LERP_SPEED;
-    displayedRet.y += (ret.y - displayedRet.y) * LERP_SPEED;
-    if (reticleDiv) {
-      reticleDiv.style.left = `${displayedRet.x}px`;
-      reticleDiv.style.top = `${displayedRet.y}px`;
-    }
-  } else {
-    // In FPS mode, reticle is always centered
-    displayedRet.x = cw / 2;
-    displayedRet.y = ch / 2;
-    if (reticleDiv) {
-      reticleDiv.style.left = `${cw / 2}px`;
-      reticleDiv.style.top = `${ch / 2}px`;
-    }
-  }
-
-  // --- Ducking/Zooming ---
-  if (!isFPSMode) {
-    const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
-    camera.position.y += (targetY - camera.position.y) * 0.1;
-  }
-  const targetFov = zoomed ? 30 : 60;
-  camera.fov += (targetFov - camera.fov) * 0.1;
-  camera.updateProjectionMatrix();
-
-  // Update enemy animation mixers (advance three.js AnimationMixers)
   try {
-    const deltaSec = deltaMs / 1000;
-    ENEMY_INSTANCES.forEach(e => { if (e.mixer) try { e.mixer.update(deltaSec); } catch(_){} });
-    try { if (window.weaponManager && typeof window.weaponManager.update === 'function') window.weaponManager.update(deltaSec); } catch(_) {}
-    // Debug: once per second, log first enemy hip quaternion to verify animations
+    // --- Failsafe: frame time monitoring ---
+    const deltaMs = nowMs - lastMs;
+    lastMs = nowMs;
+
+    if (deltaMs > FRAME_THRESHOLD) frameSpikeCount++;
+    else frameSpikeCount = 0;
+
+    if (frameSpikeCount >= MAX_FRAME_SPIKES) {
+      stopLoopAndReport(
+        'failsafe_frame_spikes',
+        new Error('Consecutive slow frames threshold reached'),
+        { deltaMs, frameSpikeCount, thresholdMs: FRAME_THRESHOLD, maxFrameSpikes: MAX_FRAME_SPIKES }
+      );
+      return;
+    }
+
+    // --- Failsafe: scene object limit ---
+    if (scene.children.length > MAX_SCENE_CHILDREN) {
+      stopLoopAndReport(
+        'failsafe_scene_children_limit',
+        new Error('Scene object count limit reached'),
+        { sceneChildren: scene.children.length, maxSceneChildren: MAX_SCENE_CHILDREN }
+      );
+      return;
+    }
+
+    requestAnimationFrame(animate); // call next frame
+    // --- FPS Mode Movement ---
+    if (isFPSMode) {
+      const moveSpeed = fpsState.speed * (deltaMs / 1000);
+      // Flatten movement vectors to XZ plane so WASD doesn't change height
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      forward.y = 0;
+      forward.normalize();
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      right.y = 0;
+      right.normalize();
+
+      if (fpsState.keys.w) camera.position.addScaledVector(forward, moveSpeed);
+      if (fpsState.keys.s) camera.position.addScaledVector(forward, -moveSpeed);
+      if (fpsState.keys.a) camera.position.addScaledVector(right, -moveSpeed);
+      if (fpsState.keys.d) camera.position.addScaledVector(right, moveSpeed);
+      if (fpsState.keys.q) camera.position.y += moveSpeed; // ascend
+      if (fpsState.keys.z) camera.position.y -= moveSpeed; // descend
+    }
+
+    // --- Reticle Smoothing ---
+    if (!isFPSMode) {
+      displayedRet.x += (ret.x - displayedRet.x) * LERP_SPEED;
+      displayedRet.y += (ret.y - displayedRet.y) * LERP_SPEED;
+      if (reticleDiv) {
+        reticleDiv.style.left = `${displayedRet.x}px`;
+        reticleDiv.style.top = `${displayedRet.y}px`;
+      }
+    } else {
+      // In FPS mode, reticle is always centered
+      displayedRet.x = cw / 2;
+      displayedRet.y = ch / 2;
+      if (reticleDiv) {
+        reticleDiv.style.left = `${cw / 2}px`;
+        reticleDiv.style.top = `${ch / 2}px`;
+      }
+    }
+
+    // --- Ducking/Zooming ---
+    if (!isFPSMode) {
+      const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
+      camera.position.y += (targetY - camera.position.y) * 0.1;
+    }
+    const targetFov = zoomed ? 30 : 60;
+    camera.fov += (targetFov - camera.fov) * 0.1;
+    camera.updateProjectionMatrix();
+
+    // Update enemy animation mixers (advance three.js AnimationMixers)
     try {
-      if (!window._debug_last_bone_log) window._debug_last_bone_log = 0;
-      if (nowMs - window._debug_last_bone_log > 1000) {
-        window._debug_last_bone_log = nowMs;
-        const en = ENEMY_INSTANCES[0];
-        if (en && en.mesh) {
-          let hip = null;
-          try { hip = (en.mesh.skeleton && en.mesh.skeleton.bones) ? en.mesh.skeleton.bones.find(b => /hip/i.test(b.name)) : en.mesh.getObjectByName && en.mesh.getObjectByName('mixamorig9Hips'); } catch(_) { hip = null; }
-          if (hip) {
-            try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
-          } else {
-            //console.log('[DEBUG] hip bone not found on first enemy');
+      const deltaSec = deltaMs / 1000;
+      ENEMY_INSTANCES.forEach(e => { if (e.mixer) try { e.mixer.update(deltaSec); } catch(_){} });
+      try { if (window.weaponManager && typeof window.weaponManager.update === 'function') window.weaponManager.update(deltaSec); } catch(_) {}
+      // Debug: once per second, log first enemy hip quaternion to verify animations
+      try {
+        if (!window._debug_last_bone_log) window._debug_last_bone_log = 0;
+        if (nowMs - window._debug_last_bone_log > 1000) {
+          window._debug_last_bone_log = nowMs;
+          const en = ENEMY_INSTANCES[0];
+          if (en && en.mesh) {
+            let hip = null;
+            try { hip = (en.mesh.skeleton && en.mesh.skeleton.bones) ? en.mesh.skeleton.bones.find(b => /hip/i.test(b.name)) : en.mesh.getObjectByName && en.mesh.getObjectByName('mixamorig9Hips'); } catch(_) { hip = null; }
+            if (hip) {
+              try { console.log('[DEBUG] hip quat:', hip.quaternion.toArray().map(n=>n.toFixed(4)).join(',')); } catch(_) {}
+            }
           }
         }
-      }
+      } catch (e) {}
     } catch (e) {}
-  } catch (e) {}
 
-  // Update HUD
-  if (window.hud) window.hud.update(deltaMs / 1000);
+    // Update HUD
+    if (window.hud) window.hud.update(deltaMs / 1000);
 
-  // Update Scene (enemies, etc)
-  if (window.sceneLoader) window.sceneLoader.update(deltaMs, nowMs);
+    // Update Scene (enemies, etc)
+    if (window.sceneLoader) window.sceneLoader.update(deltaMs, nowMs);
 
-  // Update Scene Manager (Transitions)
-  if (window.sceneManager) window.sceneManager.update(deltaMs);
+    // Update Scene Manager (Transitions)
+    if (window.sceneManager) window.sceneManager.update(deltaMs);
 
-  // Update projectiles
-  updateProjectiles(deltaMs);
-  updateEnemyProjectiles(deltaMs);
+    // Update projectiles
+    updateProjectiles(deltaMs);
+    updateEnemyProjectiles(deltaMs);
 
-  // Update sparks
-  updateSparks(deltaMs / 1000);
-  updateSmokeParticles(deltaMs);
+    // Update sparks
+    updateSparks(deltaMs / 1000);
+    updateSmokeParticles(deltaMs);
 
-  // Update auto-fire
-  updateAutoFire(nowMs);
+    // Update auto-fire
+    updateAutoFire(nowMs);
 
-  // Update player arm/recoil
-  if (player) {
-      if (typeof player.updateArm === 'function') player.updateArm(deltaMs);
-      if (typeof player.updateRecoil === 'function') player.updateRecoil(deltaMs);
+    // Update player arm/recoil
+    if (player) {
+        if (typeof player.updateArm === 'function') player.updateArm(deltaMs);
+        if (typeof player.updateRecoil === 'function') player.updateRecoil(deltaMs);
+    }
+
+    // Update reticle
+    if (player && player.currentWeapon) {
+        updateDynamicReticle({
+            camera: camera,
+            weapon: player.currentWeapon
+        });
+    }
+
+    // Render
+    composer.render();
+
+    // Keep rolling frame diagnostics so the crash report has lead-up context.
+    crashReporter.noteFrame({
+      nowMs: Number(nowMs.toFixed(3)),
+      deltaMs: Number(deltaMs.toFixed(3)),
+      sceneChildren: scene.children.length,
+      frameSpikeCount,
+      enemyCount: ENEMY_INSTANCES.length,
+      playerProjectiles: projectiles.length,
+      enemyProjectiles: enemyProjectiles.length,
+      renderCalls: renderer.info?.render?.calls ?? null,
+      renderTriangles: renderer.info?.render?.triangles ?? null,
+      renderPoints: renderer.info?.render?.points ?? null,
+      renderLines: renderer.info?.render?.lines ?? null,
+      geometries: renderer.info?.memory?.geometries ?? null,
+      textures: renderer.info?.memory?.textures ?? null,
+      cameraPos: vec3Snapshot(camera.position)
+    });
+  } catch (err) {
+    stopLoopAndReport('animate_exception', err, {
+      lastNowMs: nowMs,
+      sceneChildren: scene.children.length,
+      enemyCount: ENEMY_INSTANCES.length,
+      playerProjectiles: projectiles.length,
+      enemyProjectiles: enemyProjectiles.length
+    });
   }
-
-  // Update reticle
-  if (player && player.currentWeapon) {
-      updateDynamicReticle({
-          camera: camera,
-          weapon: player.currentWeapon
-      });
-  }
-
-  // Render
-  composer.render();
 }
 
 // Start the first level immediately
