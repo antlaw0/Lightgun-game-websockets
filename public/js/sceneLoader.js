@@ -671,6 +671,11 @@ _applyCameraSettings() {
     }
 
     // Helper: convert edge-based (min-corner) position -> center-based position
+    function _cloneDef(def) {
+      if (!def || typeof def !== 'object') return {};
+      try { return JSON.parse(JSON.stringify(def)); } catch (e) { return { ...def }; }
+    }
+
     function _ensureCenterPosition(def) {
       if (!def || !def.position) return;
       // avoid double conversion
@@ -693,7 +698,12 @@ _applyCameraSettings() {
     };
 
     for (let idx = 0; idx < staticObjects.length; idx++) {
-      let pdef = staticObjects[idx];
+      const authoredDef = staticObjects[idx] || {};
+      let pdef = _cloneDef(authoredDef);
+      const editorDef = _cloneDef(authoredDef);
+
+      if (!pdef.id) pdef.id = `prop_${idx}`;
+      if (!editorDef.id) editorDef.id = pdef.id;
 
       // Convert edge-based authored maps into center-based positions/sizes
       // (map export uses min-corner grid coordinates; Three.js expects centered geometry positions)
@@ -706,8 +716,6 @@ _applyCameraSettings() {
   if (pdef.def && PROP_DEFS[pdef.def]) {
     pdef = { ...PROP_DEFS[pdef.def], ...pdef };
   }
-
-  if (!pdef.id) pdef.id = `prop_${idx}`;
 
   // =============================
   // PREFAB PROP
@@ -786,7 +794,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
 
     // Add prop to SceneLoader (tracks props + adds mesh to scene)
     // preserve original scene definition on the runtime instance
-    try { propInstance._sceneDef = pdef; } catch(e){}
+    try { propInstance._sceneDef = _cloneDef(editorDef); } catch(e){}
     this.addProp(propInstance, isPending);
 
     console.log(`Prefab prop loaded: ${pdef.id}`, propInstance.mesh.position);
@@ -899,7 +907,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
         console.warn(`Failed to load door model for '${pdef.id}' from '${doorModelPath}':`, err);
       });
 
-    try { door._sceneDef = pdef; } catch(e){}
+    try { door._sceneDef = _cloneDef(editorDef); } catch(e){}
 
     this.addProp(door, isPending);
     continue;
@@ -981,7 +989,7 @@ if (pdef.type === "prefab" && pdef.prefab) {
       };
 
       // attach raw definition so the editor can preserve arbitrary keys
-      try { propWrapper._sceneDef = pdef; } catch(e){}
+      try { propWrapper._sceneDef = _cloneDef(editorDef); } catch(e){}
       this.addProp(propWrapper, isPending);
     });
 
@@ -1008,40 +1016,41 @@ if (pdef.type === "prefab" && pdef.prefab) {
     }
   });
 
-  try { p._sceneDef = pdef; } catch(e){}
+  try { p._sceneDef = _cloneDef(editorDef); } catch(e){}
   this.addProp(p, isPending);
 }
 
 // Enemies
     const enemyDefs = sceneDef.enemies ?? [];
     enemyDefs.forEach((edef) => {
+      const runtimeEnemyDef = _cloneDef(edef);
       // Resolve base definition
       let def = null;
-      if (edef.def && ENEMY_DEFS[edef.def]) {
-        def = ENEMY_DEFS[edef.def];
-      } else if (edef.type && ENEMY_DEFS[edef.type]) {
-        def = ENEMY_DEFS[edef.type];
+      if (runtimeEnemyDef.def && ENEMY_DEFS[runtimeEnemyDef.def]) {
+        def = ENEMY_DEFS[runtimeEnemyDef.def];
+      } else if (runtimeEnemyDef.type && ENEMY_DEFS[runtimeEnemyDef.type]) {
+        def = ENEMY_DEFS[runtimeEnemyDef.type];
       }
 
       // Diagnostic: log enemy entries and whether a type definition exists
       try {
-        console.log(`SceneLoader: enemy entry id='${edef.id}' type='${edef.type}' def='${edef.def}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
+        console.log(`SceneLoader: enemy entry id='${runtimeEnemyDef.id}' type='${runtimeEnemyDef.type}' def='${runtimeEnemyDef.def}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
       } catch (e) { /* ignore logging errors */ }
-      if (!def) { console.warn(`SceneLoader: unknown enemy type/def '${edef.type || edef.def}' for id='${edef.id}'`); return; }
+      if (!def) { console.warn(`SceneLoader: unknown enemy type/def '${runtimeEnemyDef.type || runtimeEnemyDef.def}' for id='${runtimeEnemyDef.id}'`); return; }
 
       // Convert enemy instance edge-based positions to center-based (if present)
-      if (edef && edef.position) {
-        const sx = Number(edef.size?.x ?? def?.size?.x ?? 1);
-        const sz = Number(edef.size?.z ?? def?.size?.z ?? 1);
-        edef.position = {
-          x: (edef.position.x ?? 0) + sx / 2,
-          y: edef.position.y ?? 0,
-          z: (edef.position.z ?? 0) + sz / 2
+      if (runtimeEnemyDef && runtimeEnemyDef.position && !runtimeEnemyDef._convertedToCenter) {
+        const sx = Number(runtimeEnemyDef.size?.x ?? def?.size?.x ?? 1);
+        const sz = Number(runtimeEnemyDef.size?.z ?? def?.size?.z ?? 1);
+        runtimeEnemyDef.position = {
+          x: (runtimeEnemyDef.position.x ?? 0) + sx / 2,
+          y: runtimeEnemyDef.position.y ?? 0,
+          z: (runtimeEnemyDef.position.z ?? 0) + sz / 2
         };
-        edef._convertedToCenter = true;
+        runtimeEnemyDef._convertedToCenter = true;
       }
 
-      const e = new Enemy(this.scene, def, edef, this.player, () => {});
+      const e = new Enemy(this.scene, def, runtimeEnemyDef, this.player, () => {});
       e.lastHitFrame = -1;
 
   // Hook automatic objective check on death

@@ -201,8 +201,42 @@ intensity: 1.2,
     distance: 10,
     decay: 2,
     position: { x: 14.5, y: 6.5, z: 21 }
-  } // closes intro point light
-
+  }, // closes intro point light
+{
+    type: "point",
+    color: 16777215,
+    intensity: 1.5,
+    position: {
+        x: 31,
+        y: 2.9767222803837043,
+        z: 2.416479299134121
+    },
+    distance: 10,
+    decay: 2,
+    castShadow: true,
+    shadow: {
+        mapSize: {
+            width: 1024,
+            height: 1024
+        },
+        camera: {
+            near: 0.5,
+            far: 50
+        },
+        bias: -0.0001
+    },
+    id: "zone2_firstPointLight",
+    rotation: {
+        x: 0,
+        y: 0,
+        z: 0
+    },
+    size: {
+        x: 1,
+        y: 1,
+        z: 1
+    }
+}
 ], // closes lights
   
   environment: {
@@ -314,8 +348,8 @@ hitSounds:  sounds.ricMetal
         type: "object",
         def: "wall",
         material: outerWall,
-        position: { x: 27, y: 0, z: 0 },
-        size: { x: 1, y: 2.2, z: 15.9 },
+        position: { x: 27, y: 0, z: 3.1 },
+        size: { x: 1, y: 2.2, z: 15 },
         
       }, // closes wall_3
 {
@@ -597,7 +631,8 @@ position: { x: 4, y: 2.2, z: 18 },
 		material:  outerWall
       },
       {
-    id: "floor_zone2",
+    def:  "tile",
+	id: "floor_zone2",
     type: "tile",
     position: {
         x: 31,
@@ -620,7 +655,8 @@ position: { x: 4, y: 2.2, z: 18 },
     coverType: "none"
 },
 {
-    id: "ceiling_zone2",
+    def:  "tile",
+	id: "ceiling_zone2",
     type: "tile",
     position: {
         x: 31,
@@ -643,12 +679,13 @@ position: { x: 4, y: 2.2, z: 18 },
     coverType: "none"
 },
 {
-        id: "wall_secondl_zone2",
+        def:  "wall",
+		id: "wall_secondl_zone2",
         type: "wall",
         position: {
           x: 34,
           y: 0,
-          z: -2
+          z: -3
         },
         rotation: {
           x: 0,
@@ -665,7 +702,8 @@ position: { x: 4, y: 2.2, z: 18 },
         hp: 9999
       },
       {
-        id: "wall_second_l_outer_zone2",
+        def:  "wall",
+		id: "wall_second_l_outer_zone2",
         type: "wall",
         position: {
           x: 38,
@@ -687,7 +725,8 @@ position: { x: 4, y: 2.2, z: 18 },
         hp: 9999
       },
       {
-        id: "floor_second_l_zone2",
+        def:  "tile",
+		id: "floor_second_l_zone2",
         type: "tile",
         position: {
           x: 36,
@@ -709,7 +748,8 @@ position: { x: 4, y: 2.2, z: 18 },
         hp: 9999
       },
 	  {
-        id: "ceiling_second_l_zone2",
+        def: "tile",
+		id: "ceiling_second_l_zone2",
         type: "tile",
         position: {
           x: 36,

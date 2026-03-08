@@ -774,15 +774,9 @@ window.addEventListener('keydown', (e) => {
       if (window.engine?.editorGrid?.size) snapVector3ToEditorGrid(mesh.position);
     } catch (e) {}
 
-    // sync wrapper position fields if present
+    // sync wrapper position fields in authored coordinate space
     try {
-      if (obj.position) {
-        obj.position.x = mesh.position.x;
-        obj.position.y = mesh.position.y;
-        obj.position.z = mesh.position.z;
-      } else {
-        obj.position = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
-      }
+      _syncWrapperAuthoredPositionFromMesh(obj);
       // rotation store in degrees for easier scene export
       if (obj.rotation) {
         obj.rotation.x = mesh.rotation.x;
@@ -799,7 +793,8 @@ window.addEventListener('keydown', (e) => {
         if (p.depth !== undefined) obj.size.z = p.depth * mesh.scale.z;
       }
       if (obj._editorHighlight) obj._editorHighlight.update();
-      logDebug(`Editor: moved/rotated ${obj.id || '(no-id)'} -> ${mesh.position.x.toFixed(3)},${mesh.position.y.toFixed(3)},${mesh.position.z.toFixed(3)}`);
+      const authoredPos = _getAuthoredPositionForObject(obj) || mesh.position;
+      logDebug(`Editor: moved/rotated ${obj.id || '(no-id)'} -> ${authoredPos.x.toFixed(3)},${authoredPos.y.toFixed(3)},${authoredPos.z.toFixed(3)}`);
     } catch (e) { console.warn('sync after move failed', e); }
     e.preventDefault();
   }
@@ -859,19 +854,17 @@ window.addEventListener('keydown', (e) => {
         if (!sel.mesh) return console.warn('Selected has no mesh');
         const n = Number(val);
         if (Number.isNaN(n)) return console.warn('Invalid numeric value');
-        if (target === 'x') sel.mesh.position.x = n;
-        else if (target === 'y') sel.mesh.position.y = n;
-        else if (target === 'z') sel.mesh.position.z = n;
+        const authoredPos = _getAuthoredPositionForObject(sel) || { x: sel.mesh.position.x, y: sel.mesh.position.y, z: sel.mesh.position.z };
+        if (target === 'x') authoredPos.x = n;
+        else if (target === 'y') authoredPos.y = n;
+        else if (target === 'z') authoredPos.z = n;
         else return console.warn('Unknown position axis');
 
+        const runtimePos = _authoredToRuntimePosition(sel, authoredPos, sel._sceneDef) || authoredPos;
+        sel.mesh.position.set(runtimePos.x, runtimePos.y, runtimePos.z);
+
         // sync wrapper position
-        if (sel.position) {
-          sel.position.x = sel.mesh.position.x;
-          sel.position.y = sel.mesh.position.y;
-          sel.position.z = sel.mesh.position.z;
-        } else {
-          sel.position = { x: sel.mesh.position.x, y: sel.mesh.position.y, z: sel.mesh.position.z };
-        }
+        _syncWrapperAuthoredPositionFromMesh(sel);
 
         try { if (sel._editorHighlight) sel._editorHighlight.update(); } catch (e) {}
         console.log(`Applied position ${target}=${n} to ${sel.id || '(no-id)'} `);
@@ -1242,6 +1235,79 @@ function _serializeVector3(v) {
   return { x: v.x, y: v.y, z: v.z };
 }
 
+function _hasFiniteNumber(v) {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function _resolveObjectType(obj, defOverride = null) {
+  const def = defOverride || obj?._sceneDef || null;
+  return String(def?.type || obj?.type || obj?.mesh?.userData?.type || '').toLowerCase();
+}
+
+function _resolveObjectSize(obj, defOverride = null) {
+  const def = defOverride || obj?._sceneDef || null;
+  const sx = Number(def?.size?.x ?? obj?.size?.x);
+  const sz = Number(def?.size?.z ?? obj?.size?.z);
+  if (!_hasFiniteNumber(sx) || !_hasFiniteNumber(sz)) return null;
+  return { x: sx, z: sz };
+}
+
+function _isEdgeAuthoredObject(obj, defOverride = null) {
+  if (!obj) return false;
+  const def = defOverride || obj._sceneDef || null;
+  const type = _resolveObjectType(obj, def);
+  if (type === 'door' || type === 'light') return false;
+  const size = _resolveObjectSize(obj, def);
+  if (!size) return false;
+  if (def && def._convertedToCenter === true) return false;
+  return true;
+}
+
+function _runtimeToAuthoredPosition(obj, runtimePos, defOverride = null) {
+  if (!runtimePos) return null;
+  if (!_isEdgeAuthoredObject(obj, defOverride)) {
+    return { x: runtimePos.x, y: runtimePos.y, z: runtimePos.z };
+  }
+  const size = _resolveObjectSize(obj, defOverride) || { x: 0, z: 0 };
+  return {
+    x: runtimePos.x - size.x / 2,
+    y: runtimePos.y,
+    z: runtimePos.z - size.z / 2
+  };
+}
+
+function _authoredToRuntimePosition(obj, authoredPos, defOverride = null) {
+  if (!authoredPos) return null;
+  if (!_isEdgeAuthoredObject(obj, defOverride)) {
+    return { x: authoredPos.x, y: authoredPos.y, z: authoredPos.z };
+  }
+  const size = _resolveObjectSize(obj, defOverride) || { x: 0, z: 0 };
+  return {
+    x: authoredPos.x + size.x / 2,
+    y: authoredPos.y,
+    z: authoredPos.z + size.z / 2
+  };
+}
+
+function _getAuthoredPositionForObject(obj) {
+  if (!obj) return null;
+  if (obj.mesh?.position) return _runtimeToAuthoredPosition(obj, obj.mesh.position, obj._sceneDef);
+  if (obj.position && _hasFiniteNumber(obj.position.x) && _hasFiniteNumber(obj.position.y) && _hasFiniteNumber(obj.position.z)) {
+    return { x: obj.position.x, y: obj.position.y, z: obj.position.z };
+  }
+  return null;
+}
+
+function _syncWrapperAuthoredPositionFromMesh(obj) {
+  if (!obj || !obj.mesh?.position) return;
+  const authoredPos = _runtimeToAuthoredPosition(obj, obj.mesh.position, obj._sceneDef);
+  if (!authoredPos) return;
+  obj.position = authoredPos;
+  if (obj._sceneDef && typeof obj._sceneDef === 'object') {
+    obj._sceneDef.position = { ...authoredPos };
+  }
+}
+
 function _lightToDef(light) {
   if (!light) return null;
   const def = {};
@@ -1329,7 +1395,8 @@ function _cleanLightObject(o) {
 }
 
 function _cleanStaticObject(o) {
-  const livePos = (o && o.mesh && o.mesh.position) ? _serializeVector3(o.mesh.position) : null;
+  const authoredLivePos = _getAuthoredPositionForObject(o);
+  const livePos = authoredLivePos ? { x: authoredLivePos.x, y: authoredLivePos.y, z: authoredLivePos.z } : null;
   const liveRot = (o && o.mesh && o.mesh.rotation)
     ? { x: o.mesh.rotation.x, y: o.mesh.rotation.y, z: o.mesh.rotation.z }
     : null;
@@ -1347,8 +1414,7 @@ function _cleanStaticObject(o) {
       else if (o.rotation && o.rotation.x !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
       if (o.size) out.size = Object.assign({}, o.size);
       else if (o.mesh && o.mesh.scale) out.size = { x: o.mesh.scale.x, y: o.mesh.scale.y, z: o.mesh.scale.z };
-      // Exported editor objects are authored in center-space; keep this explicit so loader won't offset them.
-      out._convertedToCenter = true;
+      if (out._convertedToCenter !== undefined) delete out._convertedToCenter;
       if (typeof o.hp === 'number') out.hp = o.hp;
       if (o.coverType) out.coverType = o.coverType;
       if (o.type) out.type = out.type ?? o.type;
@@ -1368,7 +1434,6 @@ function _cleanStaticObject(o) {
   if (liveRot) out.rotation = liveRot;
   else if (o.rotation && o.rotation.y !== undefined) out.rotation = { x: o.rotation.x ?? 0, y: o.rotation.y ?? 0, z: o.rotation.z ?? 0 };
   if (o.size) out.size = Object.assign({}, o.size);
-  out._convertedToCenter = true;
   if (typeof o.hp === 'number') out.hp = o.hp;
   if (o.coverType) out.coverType = o.coverType;
   // material/texture info not available for editor-spawned objects; leave out if missing
@@ -1979,7 +2044,7 @@ function selectObjectFromCenter() {
       _clearHighlight(window.selectedObject);
       window.selectedObject = wrapper;
       _applyHighlight(wrapper);
-      const pos = wrapper.mesh && wrapper.mesh.position ? wrapper.mesh.position : wrapper.position || { x: 0, y: 0, z: 0 };
+      const pos = _getAuthoredPositionForObject(wrapper) || wrapper.position || { x: 0, y: 0, z: 0 };
       const type = wrapper.type || wrapper.mesh?.userData?.type || 'unknown';
       const id = wrapper.id || wrapper.mesh?.userData?.propId || '(no-id)';
       logDebug(`Selected: id=${id}, type=${type}, pos=${pos.x},${pos.y},${pos.z}`);
@@ -2210,7 +2275,10 @@ function applyEditedJSON() {
   try {
     // transforms
     if (sel.mesh) {
-      if (parsed.position) sel.mesh.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
+      if (parsed.position) {
+        const runtimePos = _authoredToRuntimePosition(sel, parsed.position, parsed) || parsed.position;
+        sel.mesh.position.set(runtimePos.x, runtimePos.y, runtimePos.z);
+      }
       if (parsed.rotation) sel.mesh.rotation.set(parsed.rotation.x, parsed.rotation.y, parsed.rotation.z);
       if (parsed.size) {
         try {
@@ -2229,7 +2297,7 @@ function applyEditedJSON() {
       if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
 
       // Keep wrapper transform fields synced so export always reflects current scene state.
-      sel.position = { x: sel.mesh.position.x, y: sel.mesh.position.y, z: sel.mesh.position.z };
+      _syncWrapperAuthoredPositionFromMesh(sel);
       sel.rotation = { x: sel.mesh.rotation.x, y: sel.mesh.rotation.y, z: sel.mesh.rotation.z };
 
       // ensure userData updated for id/propId/type
