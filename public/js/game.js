@@ -5,20 +5,26 @@ import { SceneManager } from './sceneManager.js';
 import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
 import { AudioManager } from "./audio/AudioManager.js";
 import { AUDIO_MANIFEST } from "./audio/audioManifest.js";
-import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { SSAOPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/SSAOPass.js';
-import { FXAAShader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/shaders/FXAAShader.js';
-import { ShaderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/postprocessing/ShaderPass.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { createRenderPipeline } from './game/renderPipeline.js';
+import { attachInputController } from './game/inputController.js';
+import { attachEditorInputController } from './game/editorInputController.js';
+import { setupCrashRuntime } from './game/crashRuntime.js';
+import { setupSceneRuntime } from './game/sceneRuntime.js';
+import { createDynamicReticleUpdater } from './game/reticleRuntime.js';
+import { createFireController } from './game/combat/fireController.js';
+import { createProjectileRuntime } from './game/combat/projectileRuntime.js';
+import { createControllerRuntime } from './game/network/controllerRuntime.js';
+import { attachDesktopSimulation } from './game/input/desktopSimulation.js';
+import { createBallistics } from './game/combat/ballistics.js';
+import { createDoorRuntime } from './game/doorRuntime.js';
+import { setupEditorJsonModal } from './game/editorJsonModal.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
 killAllEnemies();
 import { ENEMY_AI_ENABLED, setEnemyAIEnabled, ENEMY_INSTANCES } from './enemy.js';
 import { WeaponManager } from './weaponManager.js';
-import { createCrashReporter } from './crashReporter.js';
 // Editor mode flag and helpers (default OFF)
 window.engine = window.engine || { isEditorMode: false };
 
@@ -201,6 +207,63 @@ function logDebug(msg) {
 let lastPlayerFireMs = 0;
 const FIRE_COOLDOWN_MS = 150; // 150 ms minimum between fired shots
 let isFiring = false;
+let fireController = null;
+let projectileRuntime = null;
+let controllerRuntime = null;
+let doorRuntime = null;
+let editorJsonModalRuntime = null;
+
+function triggerReload() {
+  return fireController?.triggerReload();
+}
+
+function updateAutoFire(nowMs) {
+  return fireController?.updateAutoFire(nowMs);
+}
+
+function triggerFire() {
+  return fireController?.triggerFire() ?? false;
+}
+
+function spawnProjectileUnified(origin, direction, options = {}) {
+  return projectileRuntime?.spawnProjectileUnified(origin, direction, options);
+}
+
+function updateProjectiles(dt) {
+  return projectileRuntime?.updateProjectiles(dt);
+}
+
+function updateEnemyProjectiles(dt) {
+  return projectileRuntime?.updateEnemyProjectiles(dt);
+}
+
+function updateSmokeParticles(dt) {
+  return projectileRuntime?.updateSmokeParticles(dt);
+}
+
+function sendDesktopPayload(overrides = {}) {
+  return controllerRuntime?.sendDesktopPayload(overrides);
+}
+
+function sendWeaponInfo() {
+  return controllerRuntime?.sendWeaponInfo();
+}
+
+function tryInteractDoor() {
+  return doorRuntime?.tryInteractDoor();
+}
+
+function openEditSelectedJSON() {
+  return editorJsonModalRuntime?.openEditSelectedJSON();
+}
+
+function closeEditModal() {
+  return editorJsonModalRuntime?.closeEditModal();
+}
+
+function applyEditedJSON() {
+  return editorJsonModalRuntime?.applyEditedJSON();
+}
 // ------------------ Projectiles ------------------
 const projectiles = [];
 const PROJECTILE_SPEED = 50;  // units per second
@@ -220,63 +283,32 @@ const MIN_RETICLE_RADIUS_PX = 8; // smallest reticle radius when accuracy == 1.0
 // Maximum radius is a fraction of the screen; computed at runtime from viewport size
 const MAX_RETICLE_RADIUS_PCT = 0.45; // use min(width,height) * this for maximum radius
 
+const ballistics = createBallistics({
+  THREE,
+  maxConeAngleDeg: MAX_CONE_ANGLE_DEG,
+  getFallbackQuaternion: () => window.camera?.quaternion || null
+});
+
 // Helper: clamp accuracy to allowed domain [0.01, 1.0]
 function clampAccuracy(a) {
-  return THREE.MathUtils.clamp(a ?? 1.0, 0.01, 1.0);
+  return ballistics.clampAccuracy(a);
 }
 
 // Convert accuracy -> full cone angle (radians). Uses explicit constant above.
 // inaccuracy = 1.0 - accuracy; coneAngleFull = inaccuracy * MAX_CONE_ANGLE_DEG
 function accuracyToConeHalfAngleRad(accuracy) {
-  const acc = clampAccuracy(accuracy);
-  const inaccuracy = 1.0 - acc;
-  const coneFullDeg = inaccuracy * MAX_CONE_ANGLE_DEG;
-  // half-angle in radians for sampling spherical-cap
-  return THREE.MathUtils.degToRad(coneFullDeg * 0.5);
+  return ballistics.accuracyToConeHalfAngleRad(accuracy);
 }
 
 // Sample a random direction uniformly inside a cone (spherical cap) around `forward`.
 // If accuracy == 1.0 the halfAngle will be zero and this returns the forward vector
 function sampleDirectionInCone(forward, halfAngleRad) {
-  const forwardN = forward.clone().normalize();
-  if (halfAngleRad <= 0) return forwardN.clone();
-
-  // Build orthonormal basis
-  let right = new THREE.Vector3().crossVectors(forwardN, new THREE.Vector3(0, 1, 0)).normalize();
-  if (right.lengthSq() < 1e-6) right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
-  const up = new THREE.Vector3().crossVectors(right, forwardN).normalize();
-
-  // Uniform spherical-cap sampling
-  const u = Math.random();
-  const v = Math.random();
-  const cosTheta = 1 - u * (1 - Math.cos(halfAngleRad));
-  const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
-  const phi = 2 * Math.PI * v;
-
-  const sample = forwardN.clone().multiplyScalar(cosTheta)
-    .add(right.clone().multiplyScalar(Math.cos(phi) * sinTheta))
-    .add(up.clone().multiplyScalar(Math.sin(phi) * sinTheta))
-    .normalize();
-
-  return sample;
+  return ballistics.sampleDirectionInCone(forward, halfAngleRad);
 }
 
 // Generate pellet directions for shotguns: final pellet direction = accuracy cone + pellet spread cone
 function generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy, pelletSpreadDeg) {
-  const directions = [];
-  // Base aim direction is sampled once from the accuracy cone
-  const accHalf = accuracyToConeHalfAngleRad(weaponAccuracy);
-  const baseDir = sampleDirectionInCone(forwardDir, accHalf);
-
-  const pelletHalfRad = THREE.MathUtils.degToRad(pelletSpreadDeg ?? 0) * 0.5;
-
-  for (let i = 0; i < numPellets; i++) {
-    // Each pellet is sampled inside the pellet spread cone around the base direction
-    const pelletDir = sampleDirectionInCone(baseDir, pelletHalfRad);
-    directions.push(pelletDir);
-  }
-
-  return directions;
+  return ballistics.generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy, pelletSpreadDeg);
 }
 
 
@@ -291,93 +323,26 @@ const debugConsole = document.getElementById('debugConsole');
 let cw = canvas.width = window.innerWidth;
 let ch = canvas.height = window.innerHeight;
 
+// Reticle state must be initialized before input listeners are attached.
+let ret = { x: cw / 2, y: ch / 2 }; // target position from controller (pixels)
+let displayedRet = { x: cw / 2, y: ch / 2 }; // smoothed position shown on screen
+const LERP_SPEED = 0.9;
 
-function sendDesktopPayload(overrides = {}) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    const payload = {
-        x: (ret.x / cw) * 2 - 1,
-        y: (ret.y / ch) * 2 - 1,
-        alpha: 0,
-        beta: 0,
-        gamma: 0,
-        fire: isFiring,
-        reload: false,
-        calibrate: false,
-        ...overrides
-    };
-
-    ws.send(JSON.stringify({ type: "controller", payload }));
-}
-
-// WebSocket setup (unchanged)
-// Use secure WS when page is HTTPS, otherwise plain WS.
-const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + window.location.hostname + ':8080';
-const ws = new WebSocket(WS_URL);
-ws.onopen = () => { connStatus && (connStatus.textContent = 'WS: connected'); ws.send(JSON.stringify({ type:'register', client:'game' })); };
-ws.onclose = () => { connStatus && (connStatus.textContent = 'WS: disconnected'); };
-ws.onerror = (e) => { connStatus && (connStatus.textContent = 'WS: error'); console.error(e); };
-ws.onmessage = (ev) => {
-  try {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'registered') { logDebug(`WS registered ${msg.client}`); return; }
-    if (msg.type === 'controller') {
-      const p = msg.payload;
-      // p.x and p.y are normalized -1..1 from controller
-      // In FPS mode ignore controller positional updates; keep fire/reload commands
-      if (!isFPSMode) {
-        ret.x = ((p.x+1)/2)*cw;
-        ret.y = ((p.y+1)/2)*ch;
-      }
-      if (retXY) retXY.textContent = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
-      if (abc) abc.textContent = `${p.alpha?.toFixed(1) ?? ''}, ${p.beta?.toFixed(1) ?? ''}, ${p.gamma?.toFixed(1) ?? ''}`;
-      // Handle firing with edge detection so semi-auto fires once per press
-      const pFire = !!p.fire;
-      const w = player?.currentWeapon;
-      if (pFire && !window._lastControllerFire) {
-        // rising edge: single-shot for semi-auto, start continuous for auto
-        if (w) w._dryFirePlayed = false;
-        if (w && w.fireMode === 'semi-auto') {
-          triggerFire();
-        } else {
-          isFiring = true;
-        }
-      } else if (!pFire && window._lastControllerFire) {
-        // falling edge: stop auto fire
-        isFiring = false;
-      }
-      window._lastControllerFire = pFire;
-
-      if (p.reload) triggerReload();
-    }
-  } catch (e) {
-    console.warn("ws message parse failed", e);
-  }
-};
-
-// Send current weapon info to controller so it can play weapon sounds locally
-function sendWeaponInfo() {
-  try {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const w = player?.currentWeapon;
-    if (!w) return;
-    const payload = {
-      currentWeapon: {
-        id: w.id,
-        name: w.name,
-        fireSound: w.fireSound,
-        reloadSound: w.reloadSound,
-        fireMode: w.fireMode
-      }
-    };
-    ws.send(JSON.stringify({ type: 'game', payload }));
-    console.log('Sent weapon info to controller', payload);
-  } catch (e) { console.warn('sendWeaponInfo failed', e); }
-}
-
-// Send initial weapon info on connect + when player's ammo/weapon changes
-ws.addEventListener('open', () => { setTimeout(sendWeaponInfo, 200); });
-if (player && player.addEventListener) player.addEventListener('ammoChanged', sendWeaponInfo);
+controllerRuntime = createControllerRuntime({
+  connStatus,
+  retXY,
+  abc,
+  logDebug,
+  getRet: () => ret,
+  setRet: ({ x, y }) => { ret.x = x; ret.y = y; },
+  getViewport: () => ({ cw, ch }),
+  getIsFiring: () => isFiring,
+  setIsFiring: (next) => { isFiring = !!next; },
+  getIsFPSMode: () => isFPSMode,
+  getPlayer: () => player,
+  triggerFire,
+  triggerReload
+});
 
 // ------------------ Three.js Setup ------------------
 const scene = new THREE.Scene();
@@ -481,121 +446,68 @@ console.log("window.hud:", window.hud);
 
 initSparks(scene);
 
+doorRuntime = createDoorRuntime({ THREE });
+window.openDoorById = (doorId, callback) => doorRuntime?.openDoorById(doorId, callback);
+window.closeDoorById = (doorId, callback) => doorRuntime?.closeDoorById(doorId, callback);
+
+projectileRuntime = createProjectileRuntime({
+  THREE,
+  scene,
+  camera,
+  getPlayer: () => player,
+  getSceneLoader: () => window.sceneLoader,
+  getProjectiles: () => projectiles,
+  getEnemyProjectiles: () => enemyProjectiles,
+  getRocketModel: () => rocketModel,
+  projectileSpeed: PROJECTILE_SPEED,
+  projectileLifetime: PROJECTILE_LIFETIME,
+  spawnSparks,
+  logDebug,
+  getSpawnTestExplosion: () => window.spawnTestExplosion
+});
+
+fireController = createFireController({
+  THREE,
+  camera,
+  audioManager,
+  clampAccuracy,
+  logDebug,
+  getPlayer: () => player,
+  getWeaponManager: () => window.weaponManager,
+  getSceneLoader: () => window.sceneLoader,
+  getIsEditorMode: () => !!(window.engine && window.engine.isEditorMode),
+  getIsFiring: () => isFiring,
+  getLastPlayerFireMs: () => lastPlayerFireMs,
+  setLastPlayerFireMs: (value) => { lastPlayerFireMs = value; },
+  getRet: () => ret,
+  getViewport: () => ({ cw, ch }),
+  getDisplayedRet: () => displayedRet,
+  generateSpreadDirections,
+  spawnProjectileUnified
+});
+
 
 // -----------------------------------------------------
 // DEBUG FREE CAMERA (WASD + QE + Arrow keys)
 // -----------------------------------------------------
 const camSpeed = 0.1;
 const camRotSpeed = 0.02;
-
-window.addEventListener(
-  "pointerdown",
-  () => {
-    if (window.enemyVoiceManager?.listener?.context.state !== "running") {
-      window.enemyVoiceManager.listener.context.resume();
-      console.log("[AUDIO] AudioContext resumed");
-    }
-  },
-  { once: true }
-);
-
-window.addEventListener("wheel", e => {
-  const direction = e.deltaY > 0 ? 1 : -1;
-  if (player && typeof player.cycleWeapon === 'function') player.cycleWeapon(direction);
-});
-
-// Toggle FPS mode with Tab: pointer lock + mouse look. Press Tab again to exit.
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Tab') {
-    e.preventDefault();
-    isFPSMode = !isFPSMode;
-    if (isFPSMode) {
-      // enter FPS: center reticle and request pointer lock
-      ret.x = cw / 2; ret.y = ch / 2;
-      try { canvas.requestPointerLock(); } catch(_) {}
-      document.body.style.cursor = 'none';
-      fpsState.yaw = camera.rotation.y; fpsState.pitch = camera.rotation.x;
-    } else {
-      try { if (document.exitPointerLock) document.exitPointerLock(); } catch(_) {}
-      document.body.style.cursor = 'auto';
-    }
-  }
-});
-
-// Pointer lock change handler: if pointer lock leaves unexpectedly, disable FPS mode
-document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== canvas && isFPSMode) {
-    isFPSMode = false;
-    document.body.style.cursor = 'auto';
-  }
-});
-
-// Mouse look when pointer locked (FPS mode)
-document.addEventListener('mousemove', (e) => {
-  if (!isFPSMode) return;
-  if (document.pointerLockElement !== canvas) return;
-  fpsState.yaw -= e.movementX * fpsState.mouseSensitivity;
-  fpsState.pitch -= e.movementY * fpsState.mouseSensitivity;
-  // clamp pitch to avoid flipping
-  const maxPitch = Math.PI / 2 - 0.01;
-  fpsState.pitch = Math.max(-maxPitch, Math.min(maxPitch, fpsState.pitch));
-  camera.rotation.set(fpsState.pitch, fpsState.yaw, 0, 'YXZ');
-});
-
-// Key state for continuous movement in FPS mode
-document.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  // movement keys: WASD, Q (ascend), Z (descend), X (snap to ground)
-  if (e.code === 'KeyX') {
-    if (isFPSMode) camera.position.y = 1.7; // snap to ground height
-    return;
-  }
-  // When FPS enabled, intercept movement keys
-  if (isFPSMode) {
-    switch (e.code) {
-      case 'KeyW': fpsState.keys.w = true; break;
-      case 'KeyS': fpsState.keys.s = true; break;
-      case 'KeyA': fpsState.keys.a = true; break;
-      case 'KeyD': fpsState.keys.d = true; break;
-      case 'KeyQ': fpsState.keys.q = true; break; // ascend
-      case 'KeyZ': fpsState.keys.z = true; break; // descend
-    }
-  }
-});
-document.addEventListener('keyup', (e) => {
-  if (isFPSMode) {
-    switch (e.code) {
-      case 'KeyW': fpsState.keys.w = false; break;
-      case 'KeyS': fpsState.keys.s = false; break;
-      case 'KeyA': fpsState.keys.a = false; break;
-      case 'KeyD': fpsState.keys.d = false; break;
-      case 'KeyQ': fpsState.keys.q = false; break;
-      case 'KeyZ': fpsState.keys.z = false; break;
-    }
-  }
-});
-
-// =========================
-// Mouse Auto-Fire
-// =========================
-window.addEventListener("mousedown", (e) => {
-    if (e.button === 0) {
-        isFiring = true;
-        if (player?.currentWeapon) player.currentWeapon._dryFirePlayed = false;
-        sendDesktopPayload({ fire: true });
-    }
-});
-
-window.addEventListener("mouseup", (e) => {
-    if (e.button === 0) {
-        isFiring = false;
-        sendDesktopPayload({ fire: false });
-    }
-});
-
-window.addEventListener("mouseleave", () => {
-    isFiring = false;
-    sendDesktopPayload({ fire: false });
+const inputController = attachInputController({
+  canvas,
+  camera,
+  fpsState,
+  ret,
+  getViewportSize: () => ({ cw, ch }),
+  getIsFPSMode: () => isFPSMode,
+  setIsFPSMode: (next) => { isFPSMode = !!next; },
+  setIsFiring: (next) => { isFiring = !!next; },
+  sendDesktopPayload,
+  getPlayer: () => player,
+  getEnemyVoiceManager: () => window.enemyVoiceManager,
+  triggerReload,
+  logDebug,
+  camSpeed,
+  camRotSpeed
 });
 
 window.addEventListener("keydown", e => {
@@ -635,169 +547,17 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// Toggle Editor Mode (F2)
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (e.code === 'F2') {
-    setEditorMode(!window.engine.isEditorMode);
-    logDebug(`Editor mode: ${window.engine.isEditorMode ? 'ON' : 'OFF'}`);
-  }
-});
-
-// Editor spawn key bindings
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (!window.engine?.isEditorMode) return;
-  if (e.code === 'Digit1') { e.preventDefault(); spawnEditorObject('wall'); }
-  else if (e.code === 'Digit2') { e.preventDefault(); spawnEditorObject('door'); }
-  else if (e.code === 'Digit3') { e.preventDefault(); showLightPicker(); }
-  else if (e.code === 'Digit4') { e.preventDefault(); spawnEditorObject('crate'); }
-});
-
-// Cycle editor grid with G (Off -> 1 -> 0.5 -> 0.25)
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (!window.engine?.isEditorMode) return;
-  if (e.code === 'KeyG') {
-    e.preventDefault();
-    const g = window.engine.editorGrid = window.engine.editorGrid || { sizes: [0,1,0.5,0.25], index: 0, size: 0 };
-    g.index = (g.index + 1) % g.sizes.length;
-    g.size = g.sizes[g.index];
-    try { window.updateEditorGrid(); } catch (err) {}
-    logDebug(`Editor grid: ${g.size === 0 ? 'OFF' : g.size}`);
-  }
-});
-
-// Selection binding: press E to raycast from camera center and select nearest object
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (!window.engine?.isEditorMode) return;
-  if (e.code === 'KeyE') {
-    e.preventDefault();
-    selectObjectFromCenter();
-  }
-});
-
-// Open JSON editor for selected object with T (works even if other handlers exist)
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (!window.engine?.isEditorMode) return;
-  if (e.code === 'KeyT') {
-    e.preventDefault();
-    console.log('KeyT pressed - attempting to open JSON editor');
-    openEditSelectedJSON();
-  }
-});
-
-// Editor manipulation: move, rotate, delete selected object via keyboard
-window.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (!window.engine?.isEditorMode) return;
-  if (!window.selectedObject) return;
-
-  // Determine step size
-  // Determine step size: use editor grid size as base when active, otherwise 0.1
-  let baseStep = 0.1;
-  try { const gs = window.engine?.editorGrid?.size; if (gs && gs > 0) baseStep = gs; } catch (e) {}
-  let step = baseStep;
-  if (e.shiftKey) step = baseStep / 10;
-  else if (e.ctrlKey) step = baseStep / 100;
-
-  const obj = window.selectedObject;
-  const mesh = obj.mesh;
-  if (!mesh) return;
-
-  let moved = false;
-
-  switch (e.code) {
-    case 'ArrowUp':
-      mesh.position.z -= step; moved = true; e.preventDefault(); break;
-    case 'ArrowDown':
-      mesh.position.z += step; moved = true; e.preventDefault(); break;
-    case 'ArrowLeft':
-      mesh.position.x -= step; moved = true; e.preventDefault(); break;
-    case 'ArrowRight':
-      mesh.position.x += step; moved = true; e.preventDefault(); break;
-    case 'PageUp':
-      mesh.position.y += step; moved = true; e.preventDefault(); break;
-    case 'PageDown':
-      mesh.position.y -= step; moved = true; e.preventDefault(); break;
-    case 'KeyR':
-      // rotate Y by 90 degrees
-      mesh.rotation.y += Math.PI / 2; moved = true; e.preventDefault(); break;
-    case 'Delete':
-    case 'Backspace':
-      // delete selected object
-      try {
-        // remove mesh from scene
-        if (mesh.parent) mesh.parent.remove(mesh);
-
-        // remove from sceneLoader lists if present
-        const sl = window.sceneLoader;
-        if (sl) {
-          // props
-          const pidx = sl.props.findIndex(p => p === obj || p.id === obj.id);
-          if (pidx >= 0) { const p = sl.props.splice(pidx,1)[0]; if (p.id) delete sl.propsById[p.id]; }
-          // staticObjects
-          const sidx = sl.staticObjects.findIndex(s => s === obj || s.id === obj.id);
-          if (sidx >= 0) sl.staticObjects.splice(sidx,1);
-          // also remove from sceneDef.environment.staticObjects if present
-          try {
-            if (sl.sceneDef && sl.sceneDef.environment && Array.isArray(sl.sceneDef.environment.staticObjects)) {
-              const aidx = sl.sceneDef.environment.staticObjects.findIndex(s => s && ((s.id && obj.id && s.id === obj.id) || s === obj));
-              if (aidx >= 0) sl.sceneDef.environment.staticObjects.splice(aidx,1);
-            }
-            if (obj.light && sl.sceneDef && Array.isArray(sl.sceneDef.lights)) {
-              const lidx = sl.sceneDef.lights.findIndex(l => l && l.id && obj.id && l.id === obj.id);
-              if (lidx >= 0) sl.sceneDef.lights.splice(lidx,1);
-            }
-          } catch(e) {}
-          // sceneLights
-          if (obj.light) {
-            const li = sl.sceneLights.indexOf(obj.light);
-            if (li >= 0) sl.sceneLights.splice(li,1);
-          }
-        }
-
-        // clear highlight and selection
-        _clearHighlight(window.selectedObject);
-        window.selectedObject = null;
-        logDebug('Editor: object deleted');
-      } catch (err) { console.warn('Delete failed', err); }
-      e.preventDefault();
-      return;
-  }
-
-  if (moved) {
-    // Snap to editor grid if active
-    try {
-      if (window.engine?.editorGrid?.size) snapVector3ToEditorGrid(mesh.position);
-    } catch (e) {}
-
-    // sync wrapper position fields in authored coordinate space
-    try {
-      _syncWrapperAuthoredPositionFromMesh(obj);
-      // rotation store in degrees for easier scene export
-      if (obj.rotation) {
-        obj.rotation.x = mesh.rotation.x;
-        obj.rotation.y = mesh.rotation.y;
-        obj.rotation.z = mesh.rotation.z;
-      } else {
-        obj.rotation = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
-      }
-      if (obj.size && mesh.geometry && mesh.geometry.parameters) {
-        // attempt to keep size in sync for box geometries
-        const p = mesh.geometry.parameters;
-        if (p.width !== undefined) obj.size.x = p.width * mesh.scale.x;
-        if (p.height !== undefined) obj.size.y = p.height * mesh.scale.y;
-        if (p.depth !== undefined) obj.size.z = p.depth * mesh.scale.z;
-      }
-      if (obj._editorHighlight) obj._editorHighlight.update();
-      const authoredPos = _getAuthoredPositionForObject(obj) || mesh.position;
-      logDebug(`Editor: moved/rotated ${obj.id || '(no-id)'} -> ${authoredPos.x.toFixed(3)},${authoredPos.y.toFixed(3)},${authoredPos.z.toFixed(3)}`);
-    } catch (e) { console.warn('sync after move failed', e); }
-    e.preventDefault();
-  }
+const editorInputController = attachEditorInputController({
+  setEditorMode,
+  logDebug,
+  spawnEditorObject,
+  showLightPicker,
+  selectObjectFromCenter,
+  openEditSelectedJSON,
+  clearHighlight: _clearHighlight,
+  snapVector3ToEditorGrid,
+  syncWrapperAuthoredPositionFromMesh: _syncWrapperAuthoredPositionFromMesh,
+  getAuthoredPositionForObject: _getAuthoredPositionForObject
 });
 
   // -----------------------------
@@ -1107,75 +867,6 @@ function spawnEditorObject(type, defOverride = null) {
 }
 
 window.spawnEditorObject = spawnEditorObject;
-        
-		// Movement
-        document.addEventListener('keydown', (e) => {
-      if (isFPSMode) return; // don't run debug free-camera keys while FPS mode active
-    switch(e.key.toLowerCase()) {
-        case 'w': // forward
-            camera.position.z -= camSpeed;
-            break;
-        case 's': // backward
-            camera.position.z += camSpeed;
-            break;
-        case 'a': // left
-            camera.position.x -= camSpeed;
-            break;
-        case 'd': // right
-            camera.position.x += camSpeed;
-            break;
-        case 'q': // down
-            camera.position.y -= camSpeed;
-            break;
-        case 'e': // up
-            camera.position.y += camSpeed;
-            break;
-        case 'arrowleft':
-            camera.rotation.y += camRotSpeed;
-            break;
-        case 'arrowright':
-            camera.rotation.y -= camRotSpeed;
-            break;
-        case 'arrowup':
-            camera.rotation.x += camRotSpeed;
-            break;
-        case 'arrowdown':
-            camera.rotation.x -= camRotSpeed;
-            break;
-    }
-});
-
-
-
-
-// ========================
-// Reload Key (R) With Rules
-// ========================
-let lastReloadPressMs = 0;
-const RELOAD_COOLDOWN_MS = 500; // half-second cooldown
-
-document.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if (e.key.toLowerCase() !== 'r') return;
-
-    const now = performance.now();
-    if (now - lastReloadPressMs < RELOAD_COOLDOWN_MS) {
-        return; // Prevent reload spam
-    }
-
-    const w = player?.currentWeapon;
-    if (!w) return;
-    if (w.isReloading) return;
-
-    // Only reload if ammoInClip < clipSize
-    if (w.ammoInClip < w.clipSize) {
-        lastReloadPressMs = now;
-        triggerReload();
-    } else {
-        // Optional: debug log to show reload is blocked
-        logDebug("Reload ignored: clip full.");
-    }
-});
 
 // --- Light Picker UI ---
 function showLightPicker() {
@@ -1555,95 +1246,20 @@ window.addEventListener('keydown', (e) => {
 });
 
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.physicallyCorrectLights = true;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.6;
-renderer.setClearColor(0x000000, 1);
-scene.background = new THREE.Color(0x000000);
-
-
-// --- Post-processing ---
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-composer.addPass(renderPass);
-
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.3, 0.4, 0.85);
-composer.addPass(bloomPass);
-
-const ssaoPass = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
-ssaoPass.kernelRadius = 16;
-composer.addPass(ssaoPass);
-
-const fxaaPass = new ShaderPass(FXAAShader);
-fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
-composer.addPass(fxaaPass);
-
-const RENDER_QUALITY_PRESETS = {
-  low: {
-    pixelRatioCap: 0.9,
-    bloomEnabled: false,
-    ssaoEnabled: false,
-    fxaaEnabled: true,
-    ssaoKernelRadius: 8,
-    ssaoScale: 0.5
-  },
-  medium: {
-    pixelRatioCap: 1.1,
-    bloomEnabled: true,
-    ssaoEnabled: false,
-    fxaaEnabled: true,
-    ssaoKernelRadius: 10,
-    ssaoScale: 0.6
-  },
-  high: {
-    pixelRatioCap: 1.25,
-    bloomEnabled: true,
-    ssaoEnabled: true,
-    fxaaEnabled: true,
-    ssaoKernelRadius: 12,
-    ssaoScale: 0.75
-  }
-};
-
-const renderQualityState = {
-  current: 'medium',
-  previousBeforeEditor: 'medium',
-  ssaoScale: 1
-};
-
-function _getSafePixelRatio(cap) {
-  const dpr = window.devicePixelRatio || 1;
-  return Math.min(dpr, cap);
-}
-
-function applyRenderQualityProfile(profileName) {
-  const preset = RENDER_QUALITY_PRESETS[profileName] || RENDER_QUALITY_PRESETS.medium;
-  renderQualityState.current = RENDER_QUALITY_PRESETS[profileName] ? profileName : 'medium';
-  renderQualityState.ssaoScale = preset.ssaoScale;
-
-  const pixelRatio = _getSafePixelRatio(preset.pixelRatioCap);
-  renderer.setPixelRatio(pixelRatio);
-  renderer.setSize(cw, ch, false);
-  composer.setSize(cw, ch);
-
-  bloomPass.enabled = !!preset.bloomEnabled;
-  ssaoPass.enabled = !!preset.ssaoEnabled;
-  fxaaPass.enabled = !!preset.fxaaEnabled;
-  ssaoPass.kernelRadius = preset.ssaoKernelRadius;
-
-  const ssaoWidth = Math.max(1, Math.floor(cw * renderQualityState.ssaoScale));
-  const ssaoHeight = Math.max(1, Math.floor(ch * renderQualityState.ssaoScale));
-  ssaoPass.setSize(ssaoWidth, ssaoHeight);
-
-  const pr = renderer.getPixelRatio ? renderer.getPixelRatio() : pixelRatio;
-  fxaaPass.material.uniforms['resolution'].value.set(1 / (cw * pr), 1 / (ch * pr));
-}
+const {
+  renderer,
+  composer,
+  renderQualityState,
+  applyRenderQualityProfile,
+  handleResize: resizeRenderPipeline
+} = createRenderPipeline({
+  THREE,
+  canvas,
+  scene,
+  camera,
+  width: cw,
+  height: ch
+});
 
 window.setRenderQuality = function(quality = 'medium') {
   applyRenderQualityProfile(quality);
@@ -1662,13 +1278,10 @@ applyEditorRenderPerformanceMode = (isEditorMode) => {
   }
 };
 
-// Start at medium quality for stable FPS/VRAM on a wide range of GPUs.
-applyRenderQualityProfile('medium');
-
 function resize() {
     cw = canvas.width = window.innerWidth;
     ch = canvas.height = window.innerHeight;
-    applyRenderQualityProfile(renderQualityState.current);
+  resizeRenderPipeline(cw, ch);
 }
 window.addEventListener('resize', resize);
 
@@ -1681,173 +1294,19 @@ function vec3Snapshot(v) {
   };
 }
 
-function collectRendererInfo() {
-  try {
-    const info = renderer.info || {};
-    const caps = renderer.capabilities || {};
-    return {
-      render: {
-        calls: info.render?.calls ?? null,
-        triangles: info.render?.triangles ?? null,
-        points: info.render?.points ?? null,
-        lines: info.render?.lines ?? null,
-        frame: info.render?.frame ?? null
-      },
-      memory: {
-        geometries: info.memory?.geometries ?? null,
-        textures: info.memory?.textures ?? null
-      },
-      capabilities: {
-        isWebGL2: caps.isWebGL2 ?? null,
-        maxTextures: caps.maxTextures ?? null,
-        maxTextureSize: caps.maxTextureSize ?? null,
-        maxCubemapSize: caps.maxCubemapSize ?? null,
-        maxVertexTextures: caps.maxVertexTextures ?? null,
-        maxAnisotropy: typeof renderer.getMaxAnisotropy === 'function' ? renderer.getMaxAnisotropy() : null,
-        precision: caps.precision ?? null,
-        logarithmicDepthBuffer: caps.logarithmicDepthBuffer ?? null
-      }
-    };
-  } catch (err) {
-    return { collectRendererInfoError: err?.message || String(err) };
-  }
-}
-
-function collectWebGLDiagnostics() {
-  try {
-    const gl = renderer.getContext();
-    if (!gl) return { available: false, reason: 'no-context' };
-    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-    const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
-    const rendererName = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-    return {
-      available: true,
-      vendor,
-      renderer: rendererName,
-      version: gl.getParameter(gl.VERSION),
-      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-      maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-      maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
-      maxCombinedTextureImageUnits: gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS),
-      maxVertexUniformVectors: gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS),
-      maxFragmentUniformVectors: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)
-    };
-  } catch (err) {
-    return { available: false, error: err?.message || String(err) };
-  }
-}
-
-function collectPlayerSnapshot() {
-  try {
-    if (!player) return null;
-    const w = player.currentWeapon || null;
-    return {
-      hp: player.hp ?? null,
-      maxHp: player.maxHp ?? null,
-      isReloading: w ? !!w.isReloading : null,
-      currentWeapon: w ? {
-        id: w.id ?? null,
-        name: w.name ?? null,
-        ammoInClip: w.ammoInClip ?? null,
-        clipSize: w.clipSize ?? null,
-        totalAmmo: w.totalAmmo ?? null,
-        fireMode: w.fireMode ?? null,
-        accuracy: w.accuracy ?? null
-      } : null
-    };
-  } catch (err) {
-    return { collectPlayerSnapshotError: err?.message || String(err) };
-  }
-}
-
-function collectEditorGridSnapshot() {
-  try {
-    const g = window.engine?.editorGrid;
-    if (!g) return null;
-    const size = Number(g.size || 0);
-    const world = Number(g.worldSize || 200);
-    const divisions = size > 0 ? Math.max(2, Math.round(world / size)) : 0;
-    const helperCount = Array.isArray(g.helpers) ? g.helpers.length : 0;
-    // THREE.GridHelper uses LineSegments; rough line count is (divisions + 1) * 4 per helper.
-    const estimatedLinesPerHelper = divisions > 0 ? (divisions + 1) * 4 : 0;
-    return {
-      isEditorMode: !!window.engine?.isEditorMode,
-      size,
-      world,
-      divisions,
-      helperCount,
-      estimatedLinesPerHelper,
-      estimatedLinesTotal: estimatedLinesPerHelper * helperCount
-    };
-  } catch (err) {
-    return { collectEditorGridSnapshotError: err?.message || String(err) };
-  }
-}
-
-const crashReporter = createCrashReporter({
-  endpoint: '/api/crash-report',
-  maxFrameSamples: 240,
-  contextProvider: () => ({
-    renderer: collectRendererInfo(),
-    camera: {
-      position: vec3Snapshot(camera.position),
-      rotation: { x: Number(camera.rotation.x.toFixed(4)), y: Number(camera.rotation.y.toFixed(4)), z: Number(camera.rotation.z.toFixed(4)) },
-      fov: camera.fov
-    },
-    player: collectPlayerSnapshot(),
-    gameplay: {
-      isFPSMode,
-      enemyCount: ENEMY_INSTANCES.length,
-      sceneChildren: scene.children.length,
-      playerProjectiles: projectiles.length,
-      enemyProjectiles: enemyProjectiles.length,
-      reticle: { x: Number(displayedRet.x.toFixed(2)), y: Number(displayedRet.y.toFixed(2)) },
-      editorGrid: collectEditorGridSnapshot()
-    }
-  }),
-  webglProvider: collectWebGLDiagnostics
-});
-
-const runtimeCrashState = {
-  stopped: false,
-  reason: null
-};
-
-async function stopLoopAndReport(reason, error, extra = null) {
-  if (runtimeCrashState.stopped) return;
-  runtimeCrashState.stopped = true;
-  runtimeCrashState.reason = reason;
-
-  const err = error instanceof Error ? error : new Error(String(error || reason));
-  console.error('[CRASH][STOP LOOP]', reason, err, extra || '');
-  try { logDebug(`[CRASH] Loop stopped: ${reason}`); } catch (_) {}
-
-  const result = await crashReporter.reportCrash(reason, err, extra);
-  if (result?.ok && result?.body?.relativePath) {
-    console.error(`[CRASH][REPORT SAVED] ${result.body.relativePath}`);
-    try { logDebug(`[CRASH] Report saved: ${result.body.relativePath}`); } catch (_) {}
-  } else {
-    console.error('[CRASH][REPORT FAILED]', result);
-  }
-}
-
-window.forceCrashReport = (reason = 'manual_test') => {
-  stopLoopAndReport(reason, new Error('Manual crash report trigger'), { manual: true });
-};
-
-crashReporter.installGlobalHandlers((kind, error, extra) => {
-  stopLoopAndReport(kind, error, extra);
-});
-
-canvas.addEventListener('webglcontextlost', (event) => {
-  event.preventDefault();
-  const statusMessage = event?.statusMessage || null;
-  stopLoopAndReport('webgl_context_lost', new Error('webglcontextlost'), { statusMessage });
-}, { passive: false });
-
-canvas.addEventListener('webglcontextrestored', () => {
-  crashReporter.addBreadcrumb('webglcontextrestored', { at: Date.now() });
-  console.warn('[CRASH][WEBGL] context restored (manual reload recommended)');
+const { crashReporter, runtimeCrashState, stopLoopAndReport } = setupCrashRuntime({
+  canvas,
+  renderer,
+  camera,
+  scene,
+  vec3Snapshot,
+  getPlayer: () => player,
+  getIsFPSMode: () => isFPSMode,
+  getEnemyCount: () => ENEMY_INSTANCES.length,
+  getPlayerProjectilesCount: () => projectiles.length,
+  getEnemyProjectilesCount: () => enemyProjectiles.length,
+  getDisplayedRet: () => displayedRet,
+  logDebug
 });
 
 // ------------------ Editor Grid (visual + snapping) ------------------
@@ -1928,9 +1387,6 @@ window.updateEditorGrid = function() {
 
 
 // ------------------ Reticle Tracking ------------------
-let ret = { x: cw/2, y: ch/2 };         // target position from controller (pixels)
-let displayedRet = { x: cw/2, y: ch/2 }; // smoothed position shown on screen
-const LERP_SPEED = 0.9;
 
 // ------------------ Raycaster ------------------
 const raycaster = new THREE.Raycaster();
@@ -1959,97 +1415,6 @@ function _applyHighlight(obj) {
     obj._editorHighlight = helper;
   } catch (e) { console.warn('applyHighlight failed', e); }
 }
-
-/**
- * Try to interact with a nearby door (F key)
- * Finds the closest door within proximity and opens it
- */
-function tryInteractDoor() {
-  if (!window.sceneLoader || !window.sceneLoader.props) return;
-  if (!window.player || !window.player.camera) return;
-
-  // Get player position from camera
-  const playerPos = window.player.camera.position.clone();
-  
-  // Find all doors
-  const doors = window.sceneLoader.props.filter(prop => {
-    return prop && (prop.openDoor || (prop.mesh && prop.mesh.userData && prop.mesh.userData.isDoor));
-  });
-
-  if (doors.length === 0) {
-    console.log('No doors available');
-    return;
-  }
-
-  // Find closest door within proximity.
-  // Use horizontal distance first so doors on floor level stay interactable.
-  const PROXIMITY_DISTANCE = 6.0;
-  const HORIZONTAL_PROXIMITY = 5.5;
-  let closestDoor = null;
-  let closestDistance = PROXIMITY_DISTANCE;
-
-  doors.forEach(door => {
-    if (door.mesh) {
-      const doorPos = (typeof door.getDoorCenterPosition === 'function')
-        ? door.getDoorCenterPosition()
-        : new THREE.Vector3().setFromMatrixPosition(door.mesh.matrixWorld);
-      const dx = playerPos.x - doorPos.x;
-      const dz = playerPos.z - doorPos.z;
-      const horizontalDistance = Math.hypot(dx, dz);
-      const distance = playerPos.distanceTo(doorPos);
-      const effectiveDistance = Math.min(distance, horizontalDistance);
-      
-      if (effectiveDistance < closestDistance && (distance <= PROXIMITY_DISTANCE || horizontalDistance <= HORIZONTAL_PROXIMITY)) {
-        closestDistance = effectiveDistance;
-        closestDoor = door;
-      }
-    }
-  });
-
-  // Open/close the closest door
-  if (closestDoor) {
-    console.log('Interacting with door:', closestDoor.id);
-    if (typeof closestDoor.openDoor === 'function') {
-      if (closestDoor.isOpen) {
-        closestDoor.closeDoor();
-      } else {
-        closestDoor.openDoor();
-      }
-    } else {
-      console.warn('Door does not have openDoor method');
-    }
-  } else {
-    console.log('No doors within proximity');
-  }
-}
-
-/**
- * Externally open a door by ID (for camera rails sequences)
- * Usage: window.openDoorById('door_01')
- */
-window.openDoorById = function(doorId, callback) {
-  if (!window.sceneLoader || !window.sceneLoader.propsById) return;
-  const door = window.sceneLoader.propsById[doorId];
-  if (door && typeof door.openDoor === 'function') {
-    door.openDoor(callback);
-  } else {
-    console.warn('Door not found or missing openDoor method:', doorId);
-  }
-};
-
-/**
- * Externally close a door by ID
- * Usage: window.closeDoorById('door_01')
- */
-window.closeDoorById = function(doorId, callback) {
-  if (!window.sceneLoader || !window.sceneLoader.propsById) return;
-  const door = window.sceneLoader.propsById[doorId];
-  if (door && typeof door.closeDoor === 'function') {
-    door.closeDoor(callback);
-  } else {
-    console.warn('Door not found or missing closeDoor method:', doorId);
-  }
-};
 
 function selectObjectFromCenter() {
   if (!window.engine?.isEditorMode) return null;
@@ -2115,548 +1480,29 @@ function selectObjectFromCenter() {
 // -----------------------------
 // JSON Editor for selected object
 // -----------------------------
-function _getEditableDefForSelected() {
-  const sel = window._editorModalTarget || window.selectedObject;
-  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
-  if (!sel) return null;
-  try {
-    // Use existing helper to produce a clean static object definition when possible
-    const def = _cleanStaticObject(sel);
-    // include extra known properties if present
-    if (sel.hp !== undefined) def.hp = sel.hp;
-    if (sel.coverType) def.coverType = sel.coverType;
-    if (sel.type) def.type = sel.type;
-    if (sel.type === 'light') {
-        // Use the specialized cleaner for lights to get full properties
-        return _cleanLightObject(sel);
-    }
-    if (sel.size) def.size = Object.assign({}, sel.size);
-    return def;
-  } catch (e) {
-    return { id: sel.id || null, type: sel.type || null };
-  }
-}
-
-// Format an object as a JavaScript object literal string
-function _formatAsJsLiteral(obj, indent = 4, level = 0) {
-  const pad = (n) => ' '.repeat(n);
-  const cur = pad(level * indent);
-  const next = pad((level + 1) * indent);
-
-  if (obj === null) return 'null';
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return '[]';
-    const items = obj.map(it => {
-      if (typeof it === 'object') return _formatAsJsLiteral(it, indent, level + 1);
-      return typeof it === 'string' ? JSON.stringify(it) : String(it);
-    }).map(s => next + s).join(',\n');
-    return '[\n' + items + '\n' + cur + ']';
-  }
-
-  if (typeof obj === 'object') {
-    const keys = Object.keys(obj);
-    if (keys.length === 0) return '{}';
-    const lines = keys.map(k => {
-      const v = obj[k];
-      let valStr;
-      if (typeof v === 'object') valStr = _formatAsJsLiteral(v, indent, level + 1);
-      else if (typeof v === 'string') valStr = JSON.stringify(v);
-      else valStr = String(v);
-      return next + k + ': ' + valStr;
-    });
-    return '{\n' + lines.join(',\n') + '\n' + cur + '}';
-  }
-
-  if (typeof obj === 'string') return JSON.stringify(obj);
-  return String(obj);
-}
-
-function openEditSelectedJSON() {
-  if (!window.engine?.isEditorMode) return;
-  const sel = window._editorModalTarget || window.selectedObject;
-  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
-  if (!sel) { alert('No object selected'); return; }
-  console.log('openEditSelectedJSON called for', sel && (sel.id || sel.mesh && sel.mesh.userData && sel.mesh.userData.propId));
-  const modal = document.getElementById('jsonEditModal');
-  const ta = document.getElementById('jsonEditInput');
-  const title = document.getElementById('jsonEditTitle');
-  const errs = document.getElementById('jsonEditErrors');
-  // accessibility: save focus, hide background from AT, announce
-  window._lastFocusedBeforeModal = document.activeElement;
-  // hide all body children except modal from assistive tech
-  Array.from(document.body.children).forEach(ch => { if (ch.id !== 'jsonEditModal') ch.setAttribute('aria-hidden', 'true'); });
-  errs.textContent = '';
-  const def = _getEditableDefForSelected();
-  title.textContent = `Edit Object JSON - ${def.id || '(no-id)'} `;
-  try { ta.value = _formatAsJsLiteral(def, 4); } catch(e){ ta.value = '{}'; }
-  modal.style.display = 'flex';
-  // ensure focus goes to input and NVDA is aware
-  setTimeout(() => { try { ta.focus(); ta.setSelectionRange(0,0); } catch(e){} }, 50);
-
-  // install focus trap
-  _installModalFocusTrap(modal);
-  // mark modal open and remember selected object to ensure apply targets it
-  window._editorModalOpen = true;
-  window._editorModalTarget = sel;
-}
-
-function closeEditModal() {
-  const modal = document.getElementById('jsonEditModal');
-  modal.style.display = 'none';
-  // restore aria-hidden on body children
-  Array.from(document.body.children).forEach(ch => { if (ch.id !== 'jsonEditModal') ch.removeAttribute('aria-hidden'); });
-  // remove focus trap
-  _removeModalFocusTrap();
-  // restore focus
-  try { if (window._lastFocusedBeforeModal && typeof window._lastFocusedBeforeModal.focus === 'function') window._lastFocusedBeforeModal.focus(); } catch(e){}
-  // clear modal flags
-  window._editorModalOpen = false;
-  window._editorModalTarget = null;
-}
-
-// Focus trap helpers
-function _installModalFocusTrap(modal) {
-  if (!modal) return;
-  // ensure we only install once
-  if (modal._focusTrapInstalled) return;
-  modal._focusTrapInstalled = true;
-  modal._focusHandler = function(e) {
-    if (e.key !== 'Tab') return;
-    const focusable = modal.querySelectorAll('button, [href], textarea, input, select, [tabindex]:not([tabindex="-1"])');
-    const list = Array.from(focusable).filter(el => !el.hasAttribute('disabled'));
-    if (list.length === 0) { e.preventDefault(); return; }
-    const first = list[0];
-    const last = list[list.length - 1];
-    if (e.shiftKey) {
-      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-    } else {
-      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
-  };
-  document.addEventListener('keydown', modal._focusHandler);
-}
-
-function _removeModalFocusTrap() {
-  const modal = document.getElementById('jsonEditModal');
-  if (!modal || !modal._focusTrapInstalled) return;
-  document.removeEventListener('keydown', modal._focusHandler);
-  modal._focusTrapInstalled = false;
-  modal._focusHandler = null;
-}
-
-function _validateEditedDef(obj, sel) {
-  const errors = [];
-  if (typeof obj !== 'object' || obj === null) { errors.push('Top-level JSON must be an object'); return errors; }
-
-  // Allow arbitrary properties for static props; only validate types when present
-
-  if (obj.position) {
-    ['x','y','z'].forEach(k => { if (obj.position[k] === undefined || typeof obj.position[k] !== 'number') errors.push(`position.${k} must be a number`); });
-  }
-  if (obj.rotation) {
-    ['x','y','z'].forEach(k => { if (obj.rotation[k] === undefined || typeof obj.rotation[k] !== 'number') errors.push(`rotation.${k} must be a number`); });
-  }
-  if (obj.scale) {
-    ['x','y','z'].forEach(k => { if (obj.scale[k] === undefined || typeof obj.scale[k] !== 'number') errors.push(`scale.${k} must be a number`); });
-  }
-  if (obj.size) {
-    ['x','y','z'].forEach(k => { if (obj.size[k] === undefined || typeof obj.size[k] !== 'number') errors.push(`size.${k} must be a number`); });
-  }
-  if (obj.hitSounds && !Array.isArray(obj.hitSounds)) errors.push('hitSounds must be an array of sound paths');
-  if (obj.texture && typeof obj.texture !== 'string') errors.push('texture must be a string path');
-  return errors;
-}
-
-function applyEditedJSON() {
-  const ta = document.getElementById('jsonEditInput');
-  const errsHost = document.getElementById('jsonEditErrors');
-  errsHost.textContent = '';
-  let parsed;
-  const raw = ta.value;
-  // Try JSON.parse first (handles strict JSON)
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e1) {
-    // Try converting JS-style unquoted keys to quoted keys for JSON.parse
-    try {
-      const quoted = raw.replace(/([\{,\n\r\s])([A-Za-z0-9_]+)\s*:/g, '$1"$2":');
-      parsed = JSON.parse(quoted);
-    } catch (e2) {
-      // Last resort: attempt to evaluate as JS expression (object literal)
-      try {
-        // Use Function to evaluate in local scope safely-ish
-        // Wrap in parentheses so object literal parses correctly
-        parsed = Function('"use strict"; return (' + raw + ')')();
-      } catch (e3) {
-        errsHost.textContent = 'JSON parse error: ' + e1.message + ' — fallback parse failed: ' + (e2 && e2.message ? e2.message : (e3 && e3.message ? e3.message : 'invalid input'));
-        try { if (window.speak) window.speak('JSON parse error', { interrupt: true }); } catch(e){}
-        return;
-      }
-    }
-  }
-  const sel = window._editorModalTarget || window.selectedObject;
-  const oldSize = sel && sel.size ? { x: sel.size.x, y: sel.size.y, z: sel.size.z } : null;
-  const errors = _validateEditedDef(parsed, sel);
-  if (errors.length) {
-    errsHost.innerHTML = errors.map(s => `- ${s}`).join('<br>');
-    try { if (window.speak) window.speak('Errors found, changes not applied', { interrupt: true }); } catch(e){}
-    return;
-  }
-
-  // apply to selected object
-  if (!sel) { errsHost.textContent = 'No selected object'; return; }
-
-  // Store raw user-edited definition on the runtime wrapper so unknown keys are preserved
-  try { sel._sceneDef = parsed; } catch (e) { /* ignore */ }
-
-  // update id mapping if changed
-  const oldId = sel.id;
-  if (parsed.id && parsed.id !== oldId) {
-    sel.id = parsed.id;
-    const sl = window.sceneLoader;
-    try {
-      if (sl) {
-        if (sl.propsById && oldId && sl.propsById[oldId]) { delete sl.propsById[oldId]; sl.propsById[sel.id] = sel; }
-        if (sl.enemiesById && oldId && sl.enemiesById[oldId]) { delete sl.enemiesById[oldId]; sl.enemiesById[sel.id] = sel; }
-      }
-    } catch (e) { /* ignore */ }
-  }
-
-  // reflect parsed values into runtime fields (but keep arbitrary keys inside _sceneDef)
-  try {
-    // transforms
-    if (sel.mesh) {
-      if (parsed.position) {
-        const runtimePos = _authoredToRuntimePosition(sel, parsed.position, parsed) || parsed.position;
-        sel.mesh.position.set(runtimePos.x, runtimePos.y, runtimePos.z);
-      }
-      if (parsed.rotation) sel.mesh.rotation.set(parsed.rotation.x, parsed.rotation.y, parsed.rotation.z);
-      if (parsed.size) {
-        try {
-          const ms = sel.mesh.scale || { x: 1, y: 1, z: 1 };
-          if (oldSize && oldSize.x && oldSize.y && oldSize.z) {
-            const fx = parsed.size.x / oldSize.x;
-            const fy = parsed.size.y / oldSize.y;
-            const fz = parsed.size.z / oldSize.z;
-            sel.mesh.scale.set((ms.x || 1) * fx, (ms.y || 1) * fy, (ms.z || 1) * fz);
-          } else {
-            sel.mesh.scale.set(parsed.size.x, parsed.size.y, parsed.size.z);
-          }
-        } catch (e) {}
-        sel.size = parsed.size;
-      }
-      if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
-
-      // Keep wrapper transform fields synced so export always reflects current scene state.
-      _syncWrapperAuthoredPositionFromMesh(sel);
-      sel.rotation = { x: sel.mesh.rotation.x, y: sel.mesh.rotation.y, z: sel.mesh.rotation.z };
-
-      // ensure userData updated for id/propId/type
-      if (!sel.mesh.userData) sel.mesh.userData = {};
-      if (sel.id) sel.mesh.userData.propId = sel.id;
-      if (sel.type || parsed.type) sel.mesh.userData.type = parsed.type ?? sel.type;
-
-      // texture
-      if (parsed.texture && typeof parsed.texture === 'string') {
-        try {
-          const loader = new THREE.TextureLoader();
-          const tex = loader.load(parsed.texture, () => { try { if (sel.mesh && sel.mesh.material) { sel.mesh.material.map = tex; sel.mesh.material.needsUpdate = true; } } catch(e){} });
-        } catch (e) { console.warn('Failed to load texture', e); }
-      }
-
-      // hit sounds
-      if (parsed.hitSounds && Array.isArray(parsed.hitSounds)) {
-        sel.hitSounds = parsed.hitSounds.slice();
-      }
-
-      // common runtime props
-      if (parsed.hp !== undefined) sel.hp = parsed.hp;
-      if (parsed.maxHp !== undefined) sel.maxHp = parsed.maxHp;
-      if (parsed.indestructible !== undefined) sel.indestructible = !!parsed.indestructible;
-    } else {
-      if (parsed.position) sel.position = parsed.position;
-      if (parsed.rotation) sel.rotation = parsed.rotation;
-    }
-
-    // Lights: update light object if present
-    if (sel.light || (sel.type === 'light' && sel.mesh)) {
-      const light = sel.light || (sel.mesh && sel.mesh.children && sel.mesh.children.find(c => c.isLight));
-      const holder = sel.mesh || null;
-      if (holder && parsed.position) {
-        holder.position.set(parsed.position.x, parsed.position.y, parsed.position.z);
-      }
-      if (light) {
-        if (parsed.color !== undefined) {
-          try { if (typeof parsed.color === 'number') light.color.setHex(parsed.color); else light.color.set(parsed.color); } catch(e){}
-        }
-        if (parsed.intensity !== undefined) light.intensity = parsed.intensity;
-        if (parsed.distance !== undefined) light.distance = parsed.distance;
-        if (parsed.decay !== undefined) light.decay = parsed.decay;
-        if (parsed.angle !== undefined) light.angle = parsed.angle;
-        if (parsed.penumbra !== undefined) light.penumbra = parsed.penumbra;
-        if (parsed.castShadow !== undefined) light.castShadow = !!parsed.castShadow;
-        
-        // Hemisphere specific
-        if (light.isHemisphereLight) {
-             if (parsed.groundColor !== undefined) {
-                 try { if (typeof parsed.groundColor === 'number') light.groundColor.setHex(parsed.groundColor); else light.groundColor.set(parsed.groundColor); } catch(e){}
-             }
-             if (parsed.skyColor !== undefined) {
-                 try { if (typeof parsed.skyColor === 'number') light.color.setHex(parsed.skyColor); else light.color.set(parsed.skyColor); } catch(e){}
-             }
-        }
-      }
-    }
-  } catch (e) {
-    errsHost.textContent = 'Failed to apply transforms: ' + e.message;
-    return;
-  }
-
-  // reflect updated raw def into scene-level sceneDef if present (so file -> editor round-trip preserved)
-  try {
-    const sl = window.sceneLoader;
-    if (sl && sl.sceneDef && sl.sceneDef.environment && Array.isArray(sl.sceneDef.environment.staticObjects)) {
-      const arr = sl.sceneDef.environment.staticObjects;
-      const idx = arr.findIndex(o => (o && o.id && sel.id && o.id === sel.id) || (o === sel));
-      if (idx >= 0) {
-        arr[idx] = JSON.parse(JSON.stringify(parsed));
-      } else {
-        arr.push(JSON.parse(JSON.stringify(parsed)));
-      }
-    }
-
-    // If editing a light and sceneDef.lights exists, update or append
-    if (sl && sel && (sel.type === 'light' || sel.light) && sl.sceneDef && Array.isArray(sl.sceneDef.lights)) {
-      const lids = sl.sceneDef.lights;
-      const li = lids.findIndex(l => l && l.id && sel.id && l.id === sel.id);
-      if (li >= 0) lids[li] = JSON.parse(JSON.stringify(parsed));
-      else lids.push(JSON.parse(JSON.stringify(parsed)));
-    }
-
-    // reflect in the sceneLoader staticObjects array
-    if (sl && Array.isArray(sl.staticObjects)) {
-      const idx2 = sl.staticObjects.findIndex(o => o === sel || (o.id && sel.id && o.id === sel.id));
-      if (idx2 >= 0) sl.staticObjects[idx2] = sel;
-    }
-  } catch (e) {}
-
-  // success
-  try { if (window.speak) window.speak('Changes applied', { interrupt: true }); } catch(e){}
-  closeEditModal();
-}
-
-// Hook up modal buttons and keyboard
-const cancel = document.getElementById('jsonEditCancel');
-const submit = document.getElementById('jsonEditSubmit');
-if (cancel) cancel.addEventListener('click', () => closeEditModal());
-if (submit) submit.addEventListener('click', () => applyEditedJSON());
-// ESC closes
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && window._editorModalOpen) {
-    closeEditModal();
-  }
+editorJsonModalRuntime = setupEditorJsonModal({
+  THREE,
+  cleanStaticObject: _cleanStaticObject,
+  cleanLightObject: _cleanLightObject,
+  authoredToRuntimePosition: _authoredToRuntimePosition,
+  syncWrapperAuthoredPositionFromMesh: _syncWrapperAuthoredPositionFromMesh
 });
 
 // ------------------ Scene / Level management ------------------
-
-  // Load using SceneManager for on-rails intro/exit
-// ------------------ Scene / Level management ------------------
-if (window.sceneLoader && typeof window.sceneLoader.destroy === 'function') {
-  try { window.sceneLoader.destroy(); } catch (e) {}
-}
-window.sceneLoader = new SceneLoader(scene, camera, player, renderer);
-// Expose spawn helper and enemy list for console testing
-
-
-let currentLevel = Level_Warehouse;
-let currentSceneIndex = 0;
-if (window.sceneManager && typeof window.sceneManager.destroy === 'function') {
-  try { window.sceneManager.destroy(); } catch (e) {}
-}
-window.sceneManager = new SceneManager(camera, sceneLoader);
-
-// Debug helper: load a scene by its name from the browser console.
-// Usage: loadSceneByName("Scene Name")
-window.loadSceneByName = async function(name) {
-  if (!name) {
-    console.warn('Usage: loadSceneByName("Scene Name")');
-    return;
-  }
-  if (!window.sceneManager) {
-    console.warn('sceneManager not available');
-    return;
-  }
-
-  const matchName = (s) => s && s.name && s.name.toLowerCase() === name.toLowerCase();
-
-  // Try current level first
-  let target = currentLevel?.scenes?.find(matchName);
-  let levelFound = currentLevel;
-
-  // Fallback: try known level `Level_Warehouse`
-  if (!target && typeof Level_Warehouse !== 'undefined') {
-    target = Level_Warehouse.scenes?.find(matchName);
-    if (target) levelFound = Level_Warehouse;
-  }
-
-  // Fallback: try any levels exposed on window.ALL_LEVELS (optional)
-  if (!target && window.ALL_LEVELS && Array.isArray(window.ALL_LEVELS)) {
-    for (const lv of window.ALL_LEVELS) {
-      target = lv.scenes?.find(matchName);
-      if (target) { levelFound = lv; break; }
-    }
-  }
-
-  if (!target) {
-    console.warn(`Scene not found: ${name}`);
-    return;
-  }
-
-  // Set current level/index so `nextScene()` works as expected
-  currentLevel = levelFound;
-  currentSceneIndex = currentLevel.scenes.indexOf(target);
-
-  console.log(`Loading scene '${target.name}' (index ${currentSceneIndex}) from level '${currentLevel.name || 'unknown'}'`);
-  await window.sceneManager.loadScene(target);
-};
-
-// --- Scene picker UI (F3) --------------------------------------------------
-// Creates an overlay select element populated from `ALL_SCENES`.
-(function installScenePicker() {
-  if (typeof document === 'undefined') return;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'scene-picker-overlay';
-  overlay.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:#fff;padding:12px;border-radius:8px;z-index:9999;display:none;min-width:320px;';
-
-  const label = document.createElement('div');
-  label.textContent = 'Select scene (Enter to load, Esc to close)';
-  label.style.marginBottom = '8px';
-  overlay.appendChild(label);
-
-  const sel = document.createElement('select');
-  sel.id = 'scene-picker-select';
-  sel.style.width = '100%';
-  sel.style.fontSize = '14px';
-  sel.size = 8; // show multiple rows
-  overlay.appendChild(sel);
-
-  const hint = document.createElement('div');
-  hint.style.marginTop = '8px';
-  hint.style.opacity = '0.8';
-  hint.textContent = `Scenes: ${ALL_SCENES.length}`;
-  overlay.appendChild(hint);
-
-  document.body.appendChild(overlay);
-
-  function populate() {
-    sel.innerHTML = '';
-    ALL_SCENES.forEach((entry, i) => {
-      const opt = document.createElement('option');
-      opt.value = String(i);
-      opt.textContent = entry.scene.name || entry.id || (`Scene ${i}`);
-      sel.appendChild(opt);
-    });
-    hint.textContent = `Scenes: ${ALL_SCENES.length}`;
-  }
-
-  function show() {
-    populate();
-    overlay.style.display = 'block';
-    sel.focus();
-    // select first if none selected
-    if (sel.selectedIndex < 0) sel.selectedIndex = 0;
-  }
-
-  function hide() {
-    overlay.style.display = 'none';
-  }
-
-  // Toggle on F3, close on Esc
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'F3') {
-      if (overlay.style.display === 'block') hide();
-      else show();
-      e.preventDefault();
-    } else if (e.key === 'Escape') {
-      if (overlay.style.display === 'block') { hide(); e.preventDefault(); }
-    } else if (e.key === 'Enter') {
-      if (overlay.style.display === 'block' && document.activeElement === sel) {
-        const idx = Number(sel.value || sel.selectedIndex || 0);
-        const entry = ALL_SCENES[idx];
-        if (entry && entry.scene) {
-          // set currentLevel/currentSceneIndex so nextScene behaves reasonably
-          currentLevel = { name: '(single)', scenes: [entry.scene] };
-          currentSceneIndex = 0;
-          window.sceneManager.loadScene(entry.scene);
-        }
-        hide();
-        e.preventDefault();
-      }
-    }
-  }, true);
-
-  // Double-click or double-press Enter loads too
-  sel.addEventListener('dblclick', () => {
-    const idx = Number(sel.value || sel.selectedIndex || 0);
-    const entry = ALL_SCENES[idx];
-    if (entry && entry.scene) {
-      currentLevel = { name: '(single)', scenes: [entry.scene] };
-      currentSceneIndex = 0;
-      window.sceneManager.loadScene(entry.scene);
-    }
-    hide();
-  });
-
-})();
-
-function loadLevel(level) {
-    currentLevel = level;
-    currentSceneIndex = 0;
-    loadSceneIndex(currentSceneIndex);
-}
-
-async function loadSceneIndex(index) {
-    if (!currentLevel?.scenes) return;
-    if (index < 0 || index >= currentLevel.scenes.length) return;
-
-    const sceneObj = currentLevel.scenes[index];
-
-    await window.sceneManager.loadScene(sceneObj);
-
-    logDebug(`Scene complete: ${sceneObj.name}`);
-}
-
-function nextScene() {
-    const next = currentSceneIndex + 1;
-    if (next < currentLevel.scenes.length) {
-        currentSceneIndex = next;
-        loadSceneIndex(currentSceneIndex);
-    } else {
-        logDebug(`Level ${currentLevel.name} complete.`);
-        window.dispatchEvent(new CustomEvent("levelComplete", { detail: { level: currentLevel } }));
-    }
-}
-
-// Hook sceneLoaded event to announce
-window.addEventListener("sceneLoaded", (e) => {
-  logDebug(`sceneLoaded: ${e.detail.scene.name}`);
-  // Sync player height and FPS state to the new scene camera
-  playerStandingHeight = camera.position.y;
-  fpsState.yaw = camera.rotation.y;
-  fpsState.pitch = camera.rotation.x;
+const { loadLevel, nextScene } = setupSceneRuntime({
+  SceneLoader,
+  SceneManager,
+  scene,
+  camera,
+  player,
+  renderer,
+  Level_Warehouse,
+  ALL_SCENES,
+  fpsState,
+  setPlayerStandingHeight: (value) => { playerStandingHeight = value; },
+  logDebug
 });
 
-// Hook enemyDied event for info
-window.addEventListener("enemyDied", (e) => {
-  logDebug(`enemyDied: ${e.detail.id}`);
-});
-
-// Hook enemyFiredHitPlayer
-window.addEventListener("enemyFiredHitPlayer", (e) => {
-  const dmg = e.detail.damage || 1;
-  if (player && typeof player.takeDamage === "function") player.takeDamage(dmg);
-});
 function enemyFireProjectile(enemy, playerPos, projectileSpeed = 25) {
   // Use accuracy->cone conversion and sample inside cone. When accuracy==1.0
   // the half-angle becomes zero and the resulting direction is exactly the forward vector
@@ -2691,27 +1537,7 @@ window.addEventListener("keydown", (e) => {
 // For shotguns (multiple pellets with non-zero `projectileSpread`) we apply
 // the accuracy cone once (base aim) and then sample each pellet inside the pellet spread cone.
 function generateSpreadDirections(forwardDir, numProjectiles, spreadDeg = 0, weaponAccuracy = 1.0) {
-  const acc = clampAccuracy(weaponAccuracy);
-
-  // Single projectile: accuracy drives the cone. No shotgun logic.
-  if (numProjectiles <= 1) {
-    const half = accuracyToConeHalfAngleRad(acc);
-    // If accuracy == 1.0 half==0 and this returns forward exactly (deterministic)
-    return [sampleDirectionInCone(forwardDir, half)];
-  }
-
-  // Multiple projectiles: if spreadDeg > 0 treat as shotgun (pellet spread)
-  if (numProjectiles > 1 && (spreadDeg ?? 0) > 0) {
-    return generateShotgunPelletDirections(forwardDir, numProjectiles, acc, spreadDeg);
-  }
-
-  // Otherwise: multiple projectiles but no shotgun spread -> each projectile is affected by accuracy cone individually
-  const half = accuracyToConeHalfAngleRad(acc);
-  const dirs = [];
-  for (let i = 0; i < numProjectiles; i++) {
-    dirs.push(sampleDirectionInCone(forwardDir, half));
-  }
-  return dirs;
+  return ballistics.generateSpreadDirections(forwardDir, numProjectiles, spreadDeg, weaponAccuracy);
 }
 
 
@@ -2753,545 +1579,29 @@ function spawnProjectile(origin, direction, damage = 1) {
 }
 
 // ------------------ Input: Desktop simulation (mouse/keyboard) ------------------
-(function setupDesktopControls() {
-    logDebug("Desktop control simulation ON");
+attachDesktopSimulation({
+  logDebug,
+  sendDesktopPayload,
+  triggerReload,
+  getIsFPSMode: () => isFPSMode,
+  getIsFiring: () => isFiring,
+  setIsFiring: (next) => {
+    isFiring = !!next;
+  }
+});
 
-    let lastX = 0;
-    let lastY = 0;
-
-    // Desktop → WS payload sender
-    function sendDesktopPayload(overrides = {}) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-        const payload = {
-            x: lastX,
-            y: lastY,
-            alpha: 0,
-            beta: 0,
-            gamma: 0,
-            fire: isFiring,
-            reload: false,
-            calibrate: false,
-            ...overrides
-        };
-
-        ws.send(JSON.stringify({ type: "controller", payload }));
-    }   // <--- CORRECT CLOSING BRACE
-
-
-    // ------------------------------
-    // MOUSE MOVEMENT
-    // ------------------------------
-    window.addEventListener("mousemove", (e) => {
-      if (isFPSMode) return; // ignore desktop mouse while in FPS mode
-      lastX = (e.clientX / window.innerWidth) * 2 - 1;
-      lastY = (e.clientY / window.innerHeight) * 2 - 1;
-      sendDesktopPayload();   // keep fire state
-    });
-
-
-    // ------------------------------
-    // LEFT CLICK → FIRE
-    // ------------------------------
-    window.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return;
-        isFiring = true;
-        sendDesktopPayload({ fire: true });
-    });
-
-    window.addEventListener("mouseup", (e) => {
-        if (e.button !== 0) return;
-        isFiring = false;
-        sendDesktopPayload({ fire: false });
-    });
-
-
-    // ------------------------------
-    // RIGHT CLICK = RELOAD
-    // ------------------------------
-    window.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-
-        try {
-            const reloadSound = new Audio("sounds/reload.ogg");
-            reloadSound.currentTime = 0;
-            reloadSound.play().catch(() => {});
-        } catch (_) {}
-
-        sendDesktopPayload({ reload: true });
-        triggerReload();
-    });
-
-})();   // <--- CORRECT CLOSING OF IIFE
-
-
-let lastFireMs = 0;
 
 // ------------------ Fire / Reload functions ------------------
-function triggerReload() {
-   if (window.weaponManager && window.weaponManager.isSwitching) return;
-   const w = player?.currentWeapon;
-   if (w && w.isReloading) return;
-   const soundPath = (w && w.reloadSound) ? w.reloadSound : 'sounds/reload.ogg';
-
-   try { const reloadSound = new Audio(soundPath); reloadSound.currentTime = 0; reloadSound.play().catch(()=>{}); } catch(e){}
-    
-  if (player && typeof player.reload === 'function') player.reload();
-  try { if (window.weaponManager && typeof window.weaponManager.triggerReload === 'function') window.weaponManager.triggerReload(); } catch(e) { console.warn('weaponManager.triggerReload failed', e); }
-  logDebug("Player reloaded"); 
-}
-
-
-function updateAutoFire(nowMs) {
-  const w = player?.currentWeapon;
-  if (!w) return;
-
-    if (w.fireMode === "auto") {
-        if (!isFiring) return;
-
-        const elapsed = nowMs - lastPlayerFireMs;
-        if (elapsed >= w.rateOfFire) {
-            triggerFire();
-        }
-    }
-}
-
-function triggerFire() {
-  if (window.engine && window.engine.isEditorMode) {
-    logDebug('Editor mode: firing disabled');
-    return false;
-  }
-  if (window.weaponManager && window.weaponManager.isSwitching) return false;
-  const w = player?.currentWeapon;
-  if (!w) return false;
-
-  // Enforce Rate of Fire
-  const now = performance.now();
-  const rof = w.rateOfFire || 100;
-  if (w.lastShotTime && (now - w.lastShotTime < rof)) {
-      return false;
-  }
-
-  if (!(player && player.useAmmo && player.useAmmo(1))) {
-        if (w.isReloading) return false;
-        if (w.fireMode === 'auto') {
-            if (w._dryFirePlayed) return false;
-            w._dryFirePlayed = true;
-        }
-
-        logDebug("No ammo! Reload first.");
-        try {
-            const clickSound = new Audio('sounds/click.ogg');
-            clickSound.currentTime = 0;
-            clickSound.play().catch(()=>{});
-        } catch(e){}
-        return false;
-    }
-
-    w.lastShotTime = now;
-    lastPlayerFireMs = now;
-    
-    // Try to trigger weapon manager animation/sound/muzzle flash if available.
-    try {
-      if (window.weaponManager && typeof window.weaponManager.triggerFire === 'function') {
-        window.weaponManager.triggerFire({ soundDelayMs: 0, muzzleFlash: true });
-      }
-    } catch (e) { console.warn('weaponManager.triggerFire failed', e); }
-
-    if (w.fireSound) {
-      if (w.fireSound.includes('/') || w.fireSound.includes('.')) {
-        const s = new Audio(w.fireSound);
-        s.currentTime = 0;
-        s.play().catch(() => {});
-      } else {
-        try {
-          audioManager.play2D(w.fireSound);
-        } catch (e) { console.warn('audioManager.play2D failed', e); }
-      }
-    }
-        
-	
-    // Compute shooting origin and forward direction:
-    // Aim along the camera ray through the reticle so projectiles pass through the reticle center.
-    const retNDC = new THREE.Vector2((ret.x / cw) * 2 - 1, -(ret.y / ch) * 2 + 1);
-    raycaster.setFromCamera(retNDC, camera);
-
-    // 1. Find target point in world space (what we are aiming at)
-    const intersectables = window.sceneLoader ? window.sceneLoader.getIntersectableMeshes() : [];
-    const hits = raycaster.intersectObjects(intersectables, true);
-    const targetPoint = (hits.length > 0) ? hits[0].point : raycaster.ray.at(100, new THREE.Vector3());
-
-    // 2. Determine shoot origin (muzzle)
-    let shootOrigin = window.weaponManager ? window.weaponManager.getMuzzlePosition() : null;
-    if (!shootOrigin) {
-        const muzzleOffset = new THREE.Vector3(0, -0.35, -0.6);
-        shootOrigin = camera.position.clone().add(muzzleOffset.applyQuaternion(camera.quaternion));
-    }
-
-    // 3. Determine direction from muzzle to target
-    const forwardDir = new THREE.Vector3().subVectors(targetPoint, shootOrigin).normalize();
-
-    // Generate spread directions around the aim direction (pass accuracy adjusted by recoil)
-    const recoilInfluence2 = Math.min(0.9, (player.recoilPx || 0) / (Math.min(window.innerWidth, window.innerHeight) * 0.5));
-    const effectiveAcc2 = clampAccuracy((w.accuracy ?? 1.0) - recoilInfluence2);
-    const directions = generateSpreadDirections(forwardDir, w.projectilesPerShot, w.projectileSpread, effectiveAcc2);
-
-    // Spawn each projectile
-    for (const dir of directions) {
-      spawnProjectileUnified(shootOrigin, dir, {
-        damage: w.damage,
-        explosive: w.explosive,
-        explosionRadius: w.explosionRadius,
-        explosionDamage: w.explosionDamage,
-        explosionSounds: w.explosionSounds,
-        projectileType: w.projectileType ?? "bullet"
-      });
-    }
-    // Apply weapon recoil to player (visual reticle expansion + accuracy influence)
-    try { player.addRecoil && player.addRecoil(w.recoil || 0); } catch(_) {}
-
-    // Trigger HUD visual feedback (frame-based) from single hook
-    try { window.hud && window.hud.onWeaponFire && window.hud.onWeaponFire({ retX: displayedRet.x, retY: displayedRet.y, weapon: w, isAuto: (w.fireMode === 'auto') }); } catch(_) {}
-}
 // ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
-// ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
-function updateDynamicReticle({
-  camera,
-  weapon,
-  projectionDistance = 15,
-  basePlayerConeRad = 0.0015,
-  maxWeaponInaccuracyRad = 0.008
-}) {
-  if (!camera || !weapon) return;
-  // Weapon stats: clamp accuracy only at [0.01, 1.0] per spec
-  const weaponAccuracy = clampAccuracy(weapon.accuracy ?? 1.0);
-
-  // Compute cone half-angle (radians) from accuracy and MAX_CONE constants
-  const accHalfAngle = accuracyToConeHalfAngleRad(weaponAccuracy);
-
-  // Project the accuracy cone to world point at projectionDistance, then to screen to measure radius
-  const retNDC = new THREE.Vector2(
-    (ret.x / window.innerWidth) * 2 - 1,
-    -(ret.y / window.innerHeight) * 2 + 1
-  );
-
-  const tmpRay = new THREE.Raycaster();
-  tmpRay.setFromCamera(retNDC, camera);
-  const camPos = camera.position.clone();
-  const forward = tmpRay.ray.direction.clone().normalize();
-  const centerWorld = camPos.clone().add(forward.clone().multiplyScalar(projectionDistance));
-
-  // world-space spread radius from accuracy cone only
-  const spreadRadiusWorld = Math.tan(accHalfAngle) * projectionDistance;
-
-  // Project a point at the right edge of the cone to screen and measure pixel radius
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
-  const edgeWorld = centerWorld.clone().add(right.clone().multiplyScalar(spreadRadiusWorld));
-  const projectToScreen = v => {
-    const p = v.clone().project(camera);
-    return {
-      x: (p.x * 0.5 + 0.5) * window.innerWidth,
-      y: (-p.y * 0.5 + 0.5) * window.innerHeight
-    };
-  };
-
-  const centerScreen = projectToScreen(centerWorld);
-  const edgeScreen = projectToScreen(edgeWorld);
-  let radiusPx = Math.hypot(edgeScreen.x - centerScreen.x, edgeScreen.y - centerScreen.y);
-
-  // Shotguns: optionally add visual offset for pellet spread (not used for single-shot reticle)
-  if ((weapon.projectileSpread ?? 0) > 0) {
-    const pelletHalfRad = THREE.MathUtils.degToRad(weapon.projectileSpread) * 0.5;
-    const pelletSpreadWorld = Math.tan(pelletHalfRad) * projectionDistance;
-    const pelletEdgeWorld = centerWorld.clone().add(right.clone().multiplyScalar(pelletSpreadWorld));
-    const pelletEdgeScreen = projectToScreen(pelletEdgeWorld);
-    const pelletRadiusPx = Math.hypot(pelletEdgeScreen.x - centerScreen.x, pelletEdgeScreen.y - centerScreen.y);
-    // Visual offset: add pellet spread to reticle so player sees potential pellet extent
-    radiusPx += pelletRadiusPx;
-    document.documentElement.style.setProperty("--reticle-pellet-spread", `${weapon.projectileSpread}`);
-  } else {
-    document.documentElement.style.removeProperty("--reticle-pellet-spread");
-  }
-
-  // Clamp radius to reasonable values to avoid overly large/small visuals
-  const clampedRadius = THREE.MathUtils.clamp(
-    radiusPx,
-    MIN_RETICLE_RADIUS_PX,
-    Math.min(window.innerWidth, window.innerHeight) * MAX_RETICLE_RADIUS_PCT
-  );
-
-  // Add player's current recoil (screen-space px) to the reticle visual radius
-  const extraRecoilPx = (player && player.recoilPx) ? player.recoilPx : 0;
-  const finalRadius = clampedRadius + extraRecoilPx;
-
-  document.documentElement.style.setProperty("--reticle-size", `${(finalRadius * 2).toFixed(1)}px`);
-}
-
-// --- Smoke Trail System ---
-const smokeParticles = [];
-const smokeTexture = (() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 32; canvas.height = 32;
-    const ctx = canvas.getContext('2d');
-    const grad = ctx.createRadialGradient(16,16,0, 16,16,16);
-    grad.addColorStop(0, 'rgba(200,200,200,1)');
-    grad.addColorStop(1, 'rgba(200,200,200,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0,0,32,32);
-    return new THREE.CanvasTexture(canvas);
-})();
-
-function spawnSmokeTrail(pos) {
-    const spriteMaterial = new THREE.SpriteMaterial({ 
-        map: smokeTexture, 
-        color: 0xaaaaaa,
-        transparent: true, 
-        opacity: 0.4,
-        depthWrite: false 
-    });
-    const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.position.copy(pos);
-    const scale = 0.5 + Math.random() * 0.3;
-    sprite.scale.set(scale, scale, scale);
-    scene.add(sprite);
-    smokeParticles.push({ mesh: sprite, age: 0, lifetime: 0.8, velocity: new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1 + 0.2, (Math.random()-0.5)*0.1) });
-}
-
-function updateSmokeParticles(dt) {
-    const delta = dt / 1000;
-    for (let i = smokeParticles.length - 1; i >= 0; i--) {
-        const p = smokeParticles[i];
-        p.age += delta;
-        if (p.age >= p.lifetime) { scene.remove(p.mesh); p.mesh.material.dispose(); smokeParticles.splice(i, 1); continue; }
-        p.mesh.material.opacity = 0.4 * (1 - p.age / p.lifetime);
-        p.mesh.scale.addScalar(delta * 1.5);
-        p.mesh.position.addScaledVector(p.velocity, delta);
-    }
-}
-
-/**
- * Spawn a projectile (player or enemy)
- * @param {THREE.Vector3} origin - start position
- * @param {THREE.Vector3} direction - normalized travel direction
- * @param {Object} options - extra options
- *   - damage: number
- *   - color: hex color
- *   - speed: units/sec
- *   - isEnemy: boolean
- *   - size: bullet size (radius)
- *   - lifetime: seconds
- *   - explosive: boolean
- *   - trail: boolean
- */
-function spawnProjectileUnified(origin, direction, options = {}) {
-    const {
-        damage = 1,
-        color = 0xffff00,
-    speed = PROJECTILE_SPEED,
-        isEnemy = false,
-        size = 0.02,
-        lifetime = PROJECTILE_LIFETIME,
-        explosive = false,
-        trail = true
-  ,        projectileType = "bullet"
-    } = options;
-
-    const dir = direction.clone().normalize();
-
-  // Geometry & material
-  let bullet;
-  let finalSpeed = speed;
-
-  if (projectileType === "rocket" && rocketModel) {
-      bullet = rocketModel.clone();
-      bullet.position.copy(origin);
-      // Align rocket to direction (assuming +Z forward model, adjust if needed)
-      bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-      // Scale rocket if needed (using size param or fixed)
-      bullet.scale.setScalar(3.0); 
-  } else if (projectileType === "laser") {
-    const radius = Math.max(0.005, size);
-    const length = 0.5;
-    const geo = new THREE.CylinderGeometry(radius, radius, length, 8, 1);
-    geo.rotateX(Math.PI / 2); // make cylinder's axis point along +Z
-    const mat = new THREE.MeshBasicMaterial({ color: color ?? 0xffffff });
-    // Make lasers faster by default if caller didn't override speed
-    if (typeof options.speed === 'undefined') finalSpeed = PROJECTILE_SPEED * 4;
-    bullet = new THREE.Mesh(geo, mat);
-    bullet.position.copy(origin);
-    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
-  } else {
-    const geo = new THREE.CapsuleGeometry(size, size * 4, 4, 8);
-    const mat = new THREE.MeshBasicMaterial({ color });
-    bullet = new THREE.Mesh(geo, mat);
-    bullet.position.copy(origin);
-    bullet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-  }
-
-    bullet.userData = {
-      direction: dir,
-      bornTime: performance.now(),
-      damage,
-      isEnemy,
-      explosive,
-      speed: finalSpeed,
-      trail: null,
-      projectileType
-    };
-
-    // Motion trail
-    if (trail && projectileType !== "rocket") {
-      const trailLength = Math.max(0.02, size * 5);
-      let points;
-      if (projectileType === "laser") points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -trailLength)];
-      else points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -trailLength, 0)];
-
-      const trailGeo = new THREE.BufferGeometry().setFromPoints(points);
-      const trailMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
-      const line = new THREE.Line(trailGeo, trailMat);
-      bullet.add(line);
-      bullet.userData.trail = line;
-    }
-
-    scene.add(bullet);
-
-    if (isEnemy) enemyProjectiles.push(bullet);
-    else projectiles.push(bullet);
-
-    return bullet;
-}
-
-function disposeMaterialResources(material) {
-  if (!material) return;
-  const mats = Array.isArray(material) ? material : [material];
-  for (const mat of mats) {
-    if (!mat) continue;
-    try { mat.map?.dispose?.(); } catch (e) {}
-    try { mat.alphaMap?.dispose?.(); } catch (e) {}
-    try { mat.aoMap?.dispose?.(); } catch (e) {}
-    try { mat.bumpMap?.dispose?.(); } catch (e) {}
-    try { mat.displacementMap?.dispose?.(); } catch (e) {}
-    try { mat.emissiveMap?.dispose?.(); } catch (e) {}
-    try { mat.envMap?.dispose?.(); } catch (e) {}
-    try { mat.lightMap?.dispose?.(); } catch (e) {}
-    try { mat.metalnessMap?.dispose?.(); } catch (e) {}
-    try { mat.normalMap?.dispose?.(); } catch (e) {}
-    try { mat.roughnessMap?.dispose?.(); } catch (e) {}
-    try { mat.specularMap?.dispose?.(); } catch (e) {}
-    try { mat.dispose?.(); } catch (e) {}
-  }
-}
-
-function disposeObject3DResources(root) {
-  if (!root) return;
-  root.traverse((obj) => {
-    if (!obj) return;
-    try { obj.geometry?.dispose?.(); } catch (e) {}
-    disposeMaterialResources(obj.material);
-  });
-}
-
-function updateProjectiles(dt) {
-    const toRemove = [];
-    const intersectables = sceneLoader.getIntersectableMeshes() || [];
-    const rayTemp = new THREE.Raycaster();
-
-    for (const bullet of projectiles) {
-        // --- SAVE PREVIOUS POSITION ---
-        const prevPos = bullet.position.clone();
-
-        // --- MOVE BULLET ---
-        const dir = bullet.userData.direction;
-const moveDist = bullet.userData.speed * (dt / 1000);
-		
-        bullet.position.addScaledVector(dir, moveDist);
-
-        if (bullet.userData.projectileType === 'rocket') {
-            spawnSmokeTrail(bullet.position);
-        }
-
-        // --- LIFETIME CHECK ---
-        const aliveTime = (performance.now() - bullet.userData.bornTime) / 1000;
-        if (aliveTime > PROJECTILE_LIFETIME) {
-            bullet.updateMatrixWorld(true);
-            const worldPos = new THREE.Vector3();
-            bullet.getWorldPosition(worldPos);
-            bullet.userData.explosionPos = worldPos;
-            toRemove.push(bullet);
-            continue;
-        }
-
-        // --- COLLISION CHECK ---
-        const travelVec = new THREE.Vector3().subVectors(bullet.position, prevPos);
-        const travelDist = travelVec.length();
-        if (travelDist > 0) {
-            rayTemp.set(prevPos, travelVec.normalize());
-            rayTemp.far = travelDist;
-
-            const hits = rayTemp.intersectObjects(intersectables, true);
-            if (hits.length > 0) {
-                const hit = hits[0];
-				  console.log("Hit object:", hits[0].object);
-  console.log("userData:", hits[0].object.userData);
-                  spawnSparks(
-    hit.point,
-    hit.face?.normal?.clone().transformDirection(hit.object.matrixWorld)
-      || new THREE.Vector3(0, 1, 0)
-  );
-				
-				
-				const mesh = hit.object;
-
-                bullet.userData.explosionPos = hit.point.clone();
-
-                if (mesh.userData.enemy) {
-                    mesh.userData.enemy.takeDamage(bullet.userData.damage);
-                } else {
-                    // If this is a bullet hitting room geometry, play a positional ricochet
-                    try {
-                      let obj = mesh;
-                      while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId && obj.userData.type !== 'room') obj = obj.parent;
-                      if (bullet.userData.projectileType === 'bullet' && obj && obj.userData && obj.userData.type === 'room') {
-                        const paths = [
-                          'assets/sfx/ric1.ogg',
-                          'assets/sfx/ric2.ogg',
-                          'assets/sfx/ric3.ogg',
-                          'assets/sfx/ric4.ogg',
-                          'assets/sfx/ric5.ogg'
-                        ];
-                        try { sceneLoader.playPositionalImpactSound(paths, hit.point, 0.9, 6); } catch (e) {}
-                      }
-                    } catch (e) {}
-
-                    sceneLoader.applyDamageToMesh(mesh, bullet.userData.damage, { suppressRoomSound: bullet.userData.projectileType === 'bullet' });
-                }
-
-                logDebug(`Projectile hit ${mesh.name || "object"} for ${bullet.userData.damage} damage`);
-                toRemove.push(bullet);
-            }
-        }
-    }
-
-    // --- REMOVE EXPIRED BULLETS ---
-    for (const b of toRemove) {
-        const pos = b.userData.explosionPos;
-if (pos && b.userData.explosive) {			
-            window.spawnTestExplosion({
-                x: pos.x,
-                y: pos.y,
-                z: pos.z,
-                blastRadius: player?.currentWeapon?.explosionRadius,
-                maxDamage: player?.currentWeapon?.explosionDamage,
-                explosionSounds: player?.currentWeapon?.explosionSounds
-            });
-        }
-
-        disposeObject3DResources(b);
-        scene.remove(b);
-        const idx = projectiles.indexOf(b);
-        if (idx !== -1) projectiles.splice(idx, 1);
-    }
-}
+const updateDynamicReticle = createDynamicReticleUpdater({
+  THREE,
+  clampAccuracy,
+  accuracyToConeHalfAngleRad,
+  minReticleRadiusPx: MIN_RETICLE_RADIUS_PX,
+  maxReticleRadiusPct: MAX_RETICLE_RADIUS_PCT,
+  getRet: () => ret,
+  getPlayer: () => player
+});
 
 // left mouse down firing (canvas click) - only attach one handler
 canvas.removeEventListener('mousedown', triggerFireWrapper, false); // safe to call even if not attached
@@ -3300,88 +1610,7 @@ function triggerFireWrapper(e) {
 }
 canvas.addEventListener('mousedown', triggerFireWrapper, false);
 
-function updateEnemyProjectiles(dt) {
-  const toRemove = [];
-
-  // tuning
-  const PLAYER_HIT_RADIUS = 0.35;
-  const PLAYER_HIT_FORWARD_OFFSET = 0.15;
-
-  for (const bullet of enemyProjectiles) {
-    const dir = bullet.userData.direction;
-
-    // Save previous position for swept test
-    const prevPos = bullet.position.clone();
-    bullet.position.addScaledVector(dir, PROJECTILE_SPEED * (dt / 1000));
-
-    // Lifetime check
-    if ((performance.now() - bullet.userData.bornTime) / 1000 > PROJECTILE_LIFETIME) {
-      toRemove.push(bullet);
-      continue;
-    }
-
-    // Swept-segment vs camera-sphere to avoid tunneling
-    const a = prevPos;
-    const b = bullet.position.clone();
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const center = camera.position.clone().add(forward.multiplyScalar(PLAYER_HIT_FORWARD_OFFSET));
-
-    // Closest point on segment to center
-    const ab = b.clone().sub(a);
-    const abLenSq = ab.lengthSq();
-    let hit = false;
-    if (abLenSq === 0) {
-      hit = a.distanceToSquared(center) <= (PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS);
-    } else {
-      const t = THREE.MathUtils.clamp(center.clone().sub(a).dot(ab) / abLenSq, 0, 1);
-      const closest = a.clone().add(ab.multiplyScalar(t));
-      if (closest.distanceToSquared(center) <= (PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS)) hit = true;
-    }
-
-    // head sphere
-    if (!hit) {
-      const headCenter = center.clone().add(new THREE.Vector3(0, 0.18, 0));
-      const headRadius = Math.max(0.12, PLAYER_HIT_RADIUS * 0.6);
-      const ab2 = b.clone().sub(a);
-      const ab2LenSq = ab2.lengthSq();
-      if (ab2LenSq === 0) {
-        hit = a.distanceToSquared(headCenter) <= (headRadius * headRadius);
-      } else {
-        const t2 = THREE.MathUtils.clamp(headCenter.clone().sub(a).dot(ab2) / ab2LenSq, 0, 1);
-        const closest2 = a.clone().add(ab2.multiplyScalar(t2));
-        if (closest2.distanceToSquared(headCenter) <= (headRadius * headRadius)) hit = true;
-      }
-    }
-
-    if (hit) {
-      player.takeDamage(bullet.userData.damage);
-      toRemove.push(bullet);
-    }
-  }
-
-  // Remove expired bullets
-  for (const b of toRemove) {
-    disposeObject3DResources(b);
-    scene.remove(b);
-    const idx = enemyProjectiles.indexOf(b);
-    if (idx !== -1) enemyProjectiles.splice(idx, 1);
-  }
-}
-
-// ------------------ Duck & Zoom (unchanged) ------------------
-let ducking = false;
-let zoomed = false;
-document.addEventListener('keydown', (e) => {
-  if (window._editorModalOpen) return;
-  if(e.key==='Shift') ducking=true;
-  // Only treat Z as zoom when NOT in FPS mode
-  if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=true;
-});
-document.addEventListener('keyup', (e) => {
-  if (window._editorModalOpen) return;
-  if(e.key==='Shift') ducking=false;
-  if (!isFPSMode && (e.key==='z' || e.key==='Z')) zoomed=false;
-});
+// ------------------ Duck & Zoom (from input controller state) ------------------
 
 // ------------------ Reticle smoothing & render loop ------------------
 const LERP = 0.9;
@@ -3462,10 +1691,10 @@ function animate(nowMs) {
 
     // --- Ducking/Zooming ---
     if (!isFPSMode) {
-      const targetY = ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
+      const targetY = inputController.state.ducking ? (playerStandingHeight - 0.5) : playerStandingHeight;
       camera.position.y += (targetY - camera.position.y) * 0.1;
     }
-    const targetFov = zoomed ? 30 : 60;
+    const targetFov = inputController.state.zoomed ? 30 : 60;
     camera.fov += (targetFov - camera.fov) * 0.1;
     camera.updateProjectionMatrix();
 
