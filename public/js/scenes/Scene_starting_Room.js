@@ -431,7 +431,7 @@ position: { x: 4, y: 2.2, z: 18 },
     id: "introDoor_object",
     type: "door",
 	model: "assets/models/props/door1.glb",
-    position: { x: 14, y: 0, z: 18 },
+    position: { x: 14.5, y: 0, z: 18 },
         rotation: {
         x: 0,
         y: 0,
@@ -481,7 +481,7 @@ position: { x: 4, y: 2.2, z: 18 },
         z: 0
     },
     size: {
-        x: 2.2,
+        x: 1.2,
         y: 2.2,
         z: 0.15
     },

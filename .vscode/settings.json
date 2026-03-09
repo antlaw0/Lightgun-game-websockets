@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^node -e \"const fs=require\\('fs'\\);const b=fs\\.readFileSync\\('\\./public/assets/models/props/door1\\.glb'\\);const len=b\\.readUInt32LE\\(8\\);let o=12,j=null;while\\(o<len\\)\\{const l=b\\.readUInt32LE\\(o\\);o\\+=4;const t=b\\.readUInt32LE\\(o\\);o\\+=4;const d=b\\.slice\\(o,o\\+l\\);o\\+=l;if\\(t===0x4E4F534A\\)\\{j=JSON\\.parse\\(d\\.toString\\('utf8'\\)\\);break;\\}\\}const acc=j\\.accessors\\|\\|\\[\\];const meshes=j\\.meshes\\|\\|\\[\\];meshes\\.forEach\\(\\(m,mi\\)=>\\{\\(m\\.primitives\\|\\|\\[\\]\\)\\.forEach\\(\\(p,pi\\)=>\\{const ai=p\\.attributes&&p\\.attributes\\.POSITION;if\\(ai===undefined\\)return;const a=acc\\[ai\\];console\\.log\\('mesh',mi,'prim',pi,'POSITION accessor',ai,'min',JSON\\.stringify\\(a\\.min\\),'max',JSON\\.stringify\\(a\\.max\\),'size',JSON\\.stringify\\(\\[a\\.max\\[0\\]-a\\.min\\[0\\],a\\.max\\[1\\]-a\\.min\\[1\\],a\\.max\\[2\\]-a\\.min\\[2\\]\\]\\)\\);\\}\\);\\}\\);\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

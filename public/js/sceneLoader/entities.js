@@ -155,25 +155,61 @@ export function loadSceneDataEntities(self, sceneDef, isPending) {
 
       self.loadModel(doorModelPath)
         .then((doorMesh) => {
-          if (pdef.modelRotation) {
-            doorMesh.rotation.set(
-              pdef.modelRotation.x ?? 0,
-              pdef.modelRotation.y ?? 0,
-              pdef.modelRotation.z ?? 0
-            );
-          }
+          const authoredRotation = doorMesh.rotation.clone();
+          const modelRotation = pdef.modelRotation;
+          const desiredRotation = new THREE.Euler(
+            modelRotation?.x ?? authoredRotation.x,
+            modelRotation?.y ?? authoredRotation.y,
+            modelRotation?.z ?? authoredRotation.z
+          );
 
+          // Compute fit against the model's native orientation; applying extra rotation
+          // first can skew AABB-based dimensions for assets with offset child meshes.
+          doorMesh.rotation.copy(authoredRotation);
+          doorMesh.updateMatrixWorld(true);
+
+          // Fit the model to authored door size so wall opening math and visuals stay aligned.
+          const extraScale = new THREE.Vector3(1, 1, 1);
           if (pdef.scale) {
             if (typeof pdef.scale === 'number') {
-              doorMesh.scale.set(pdef.scale, pdef.scale, pdef.scale);
+              extraScale.set(pdef.scale, pdef.scale, pdef.scale);
             } else {
-              doorMesh.scale.set(
+              extraScale.set(
                 pdef.scale.x ?? 1,
                 pdef.scale.y ?? 1,
                 pdef.scale.z ?? 1
               );
             }
           }
+
+          const authoredScale = doorMesh.scale.clone();
+          const fitScale = new THREE.Vector3(1, 1, 1);
+          const targetSize = pdef.size;
+          if (targetSize) {
+            const bounds = new THREE.Box3().setFromObject(doorMesh);
+            const nativeSize = new THREE.Vector3();
+            bounds.getSize(nativeSize);
+
+            const calcRatio = (target, native) => {
+              if (!Number.isFinite(target) || target <= 0) return 1;
+              if (!Number.isFinite(native) || native <= 1e-6) return 1;
+              return target / native;
+            };
+
+            fitScale.set(
+              calcRatio(targetSize.x, nativeSize.x),
+              calcRatio(targetSize.y, nativeSize.y),
+              calcRatio(targetSize.z, nativeSize.z)
+            );
+          }
+
+          doorMesh.scale.set(
+            authoredScale.x * fitScale.x * extraScale.x,
+            authoredScale.y * fitScale.y * extraScale.y,
+            authoredScale.z * fitScale.z * extraScale.z
+          );
+
+          doorMesh.rotation.copy(desiredRotation);
 
           if (pdef.modelPivotOffset) {
             doorMesh.position.set(

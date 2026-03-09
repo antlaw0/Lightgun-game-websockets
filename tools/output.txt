@@ -1,3 +1,7 @@
-
-error: ENOENT: no such file or directory, open 'C:\Users\alawl\Desktop\Game Dev Projects\ltg game\backup\Lightgun-game-websockets\tools\fixed_weapon.glb'
-
+﻿meshes: 1
+ mesh[0] name='geometry_0' primitives=1
+  prim[0] mode=4 material=0 attributes=POSITION,TEXCOORD_0
+   >>> MISSING NORMAL attribute
+nodes: 2
+ node[0] name='world'
+ node[1] name='geometry_0' mesh=0   
