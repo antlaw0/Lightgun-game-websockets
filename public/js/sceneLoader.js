@@ -1,253 +1,58 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
-import { buildPrefab } from "./prefabLibrary.js";
 import { ENEMY_INSTANCES } from "./enemy.js";
 window.ENEMY_INSTANCES = ENEMY_INSTANCES;
 
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { EXRLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/EXRLoader.js';
 
-import { Explosion } from './explosion.js';
-
 import { Enemy } from "./enemy.js";
-import { Prop as PropClass } from "./prop.js";
-import { ENEMY_DEFS } from "./listOfEnemies.js";
-import { PROP_DEFS } from "./listOfprops.js";
-import { Projectile } from "./projectile.js";
+import { Door } from "./sceneLoader/door.js";
+import { ensureUv2ForAo, meshHasAoMap } from "./sceneLoader/utils.js";
+import {
+  applyHdriForSceneCache,
+  disposeAllHdriCacheEntries,
+  disposeCachesModule,
+  disposeHdriCacheEntry,
+  getPmremTextureForHdriCache,
+  loadModelCache,
+  preloadHdriCache,
+  releaseModelCacheRefs,
+  resolveHdriConfigCache,
+  trimHdriCache
+} from "./sceneLoader/cache.js";
+import {
+  clearPendingLifecycle,
+  commitPendingSceneLifecycle,
+  hasPendingSceneLifecycle,
+  loadSceneLifecycle,
+  preloadSceneLifecycle,
+  unloadSceneLifecycle
+} from "./sceneLoader/lifecycle.js";
+import { loadSceneDataEntities } from "./sceneLoader/entities.js";
+import {
+  applyDamageToMeshCombat,
+  checkObjectiveAfterHitCombat,
+  getIntersectableMeshesCombat,
+  spawnProjectileCombat,
+  updateCombat
+} from "./sceneLoader/combat.js";
+import {
+  getAudioListenerAudio,
+  playImpactSoundAudio,
+  playPositionalImpactSoundAudio
+} from "./sceneLoader/audio.js";
+import {
+  clearSceneEvents,
+  destroySceneLoaderEvents,
+  notifyLoadedEvents,
+  registerSpawnTestExplosionGlobal
+} from "./sceneLoader/events.js";
 
-const DEFAULT_HDRI_FILE = 'assets/textures/HDRI/IndoorEnvironmentHDRI005_1K_HDR.exr';
 const SHADOW_MAP_MAX_SIZE = 1024;
-const HDRI_CACHE_MAX_ENTRIES = 3;
-
-function ensureUv2ForAo(mesh) {
-  const geometry = mesh?.geometry;
-  if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
-  geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
-}
-
-function meshHasAoMap(material) {
-  if (!material) return false;
-  if (Array.isArray(material)) return material.some(m => !!m?.aoMap);
-  return !!material.aoMap;
-}
-
-/**
- * Door class - handles door opening/closing with animation
- * Properties:
- *   - openDirection: 1 (right hinge) or -1 (left hinge)
- *   - openInOut: 1 (opens away from camera) or -1 (opens toward camera)
- *   - openDuration: milliseconds to open 90 degrees
- *   - openSound: path to sound file in public/assets/sfx/props/
- */
-export class Door {
-  constructor(def) {
-    this.id = def.id || 'door_' + Math.random();
-    this.mesh = def.mesh; // THREE.Group with hinge at origin
-    this.hinge = this.mesh; // same as mesh - the rotating group
-    this.position = def.position || { x: 0, y: 0, z: 0 };
-    this.size = def.size || { x: 1, y: 2, z: 0.15 };
-    this.hp = 9999;
-    this.maxHp = 9999;
-    this.indestructible = true;
-    
-    // Door-specific properties
-    this.openDirection = def.openDirection || 1; // 1=right, -1=left
-    this.openInOut = def.openInOut || 1; // 1=outward, -1=inward
-    this.openDuration = def.openDuration || 800; // milliseconds
-    this.openSound = def.openSound || null;
-    
-    // Door state
-    this.isOpen = false;
-    this.isAnimating = false;
-    this.currentRotation = 0; // in radians, 0 to PI/2
-    this.openedRotation = 0; // stores the final rotation when door is open
-    this.doorMesh = def.doorMesh; // the loaded GLB geometry
-    this.openAngle = Math.PI / 2; // Always swing doors by 90 degrees
-    // Keep a stable closed yaw so animation works for any scene rotation.
-    this.closedRotationY = this.hinge?.rotation?.y ?? 0;
-    // Keep closed/open poses as quaternions so rotation is robust for any orientation.
-    this.closedQuaternion = this.hinge?.quaternion?.clone() ?? new THREE.Quaternion();
-    this.openQuaternion = this.closedQuaternion.clone();
-    
-    // Audio
-    if (this.openSound) {
-      try {
-        this.audioElement = new Audio(this.openSound);
-        this.audioElement.volume = 0.7;
-      } catch (e) {
-        console.warn('Failed to preload door sound:', this.openSound, e);
-        this.audioElement = null;
-      }
-    }
-  }
-  
-  /**
-   * Open the door with animation
-   * @param {Function} onComplete - callback when animation finishes
-   */
-  openDoor(onComplete) {
-    if (this.isAnimating || this.isOpen) {
-      if (onComplete) onComplete();
-      return;
-    }
-    
-    this.isAnimating = true;
-    const startTime = Date.now();
-    const directionSign = (this.openInOut * this.openDirection) >= 0 ? 1 : -1;
-    const targetRotation = this.openAngle; // 90 degrees
-    const signedTarget = targetRotation * directionSign;
-
-    this.closedRotationY = this.hinge?.rotation?.y ?? this.closedRotationY;
-    this.closedQuaternion.copy(this.hinge?.quaternion ?? this.closedQuaternion);
-    const deltaQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), signedTarget);
-    this.openQuaternion.copy(this.closedQuaternion).multiply(deltaQuat);
-    
-    // Calculate final rotation based on door properties
-    this.openedRotation = this.closedRotationY + signedTarget;
-    
-    console.log(`[Door ${this.id}] Opening: targetRotation=${targetRotation}, openInOut=${this.openInOut}, openDirection=${this.openDirection}, will rotate to ${this.openedRotation}`);
-    
-    // Play door sound
-    if (this.audioElement) {
-      try {
-        this.audioElement.currentTime = 0;
-        this.audioElement.play().catch(e => console.warn('Door sound play failed:', e));
-      } catch (e) {
-        console.warn('Door sound play error:', e);
-      }
-    }
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / this.openDuration, 1);
-      
-      // Slerp local hinge orientation so doors open consistently regardless of scene orientation.
-      this.hinge.quaternion.slerpQuaternions(this.closedQuaternion, this.openQuaternion, progress);
-      this.currentRotation = signedTarget * progress;
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        this.isAnimating = false;
-        this.isOpen = true;
-        // Use the pre-calculated final rotation
-        this.currentRotation = signedTarget;
-        this.hinge.quaternion.copy(this.openQuaternion);
-        console.log(`[Door ${this.id}] Opened. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
-        if (onComplete) onComplete();
-      }
-    };
-    
-    animate();
-  }
-  
-  /**
-   * Close the door with animation
-   * @param {Function} onComplete - callback when animation finishes
-   */
-  closeDoor(onComplete) {
-    if (this.isAnimating || !this.isOpen) {
-      if (onComplete) onComplete();
-      return;
-    }
-    
-    this.isAnimating = true;
-    const startTime = Date.now();
-    const directionSign = (this.openInOut * this.openDirection) >= 0 ? 1 : -1;
-    const signedTarget = this.openAngle * directionSign;
-    
-    // Store the starting rotation and explicitly set it to ensure no jump
-    const closedY = this.closedRotationY;
-    const startQuaternion = this.hinge.quaternion.clone();
-    this.openQuaternion.copy(startQuaternion);
-    
-    console.log(`[Door ${this.id}] Closing from rotation ${this.hinge.rotation.y} to ${closedY}.`);
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / this.openDuration, 1);
-      
-      this.hinge.quaternion.slerpQuaternions(startQuaternion, this.closedQuaternion, progress);
-      this.currentRotation = signedTarget * (1 - progress);
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        this.isAnimating = false;
-        this.isOpen = false;
-        this.currentRotation = 0;
-        this.openedRotation = closedY;
-        this.hinge.quaternion.copy(this.closedQuaternion);
-        console.log(`[Door ${this.id}] Closed. currentRotation=${this.currentRotation}, hinge.rotation.y=${this.hinge.rotation.y}`);
-        if (onComplete) onComplete();
-      }
-    };
-    
-    animate();
-  }
-  
-  /**
-   * Instantly toggle door state
-   */
-  toggleDoor() {
-    if (this.isOpen) {
-      this.closeDoor();
-    } else {
-      this.openDoor();
-    }
-  }
-  
-  /**
-   * Get the center position of the door in world space
-   */
-  getDoorCenterPosition() {
-    const worldPos = new THREE.Vector3();
-    if (this.doorMesh) {
-      try {
-        const bounds = new THREE.Box3().setFromObject(this.doorMesh);
-        if (!bounds.isEmpty()) {
-          bounds.getCenter(worldPos);
-          return worldPos;
-        }
-      } catch (e) {}
-    }
-    if (this.hinge) {
-      this.hinge.getWorldPosition(worldPos);
-    }
-    return worldPos;
-  }
-  
-  /**
-   * Check if player is within proximity (in units)
-   */
-  isPlayerNear(playerPos, proximityDistance = 3) {
-    const doorCenter = this.getDoorCenterPosition();
-    const distance = playerPos.distanceTo(doorCenter);
-    return distance <= proximityDistance;
-  }
-  
-  // Compatibility with prop system
-  takeDamage(amount) {
-    return false; // doors are indestructible
-  }
-  
-  dispose() {
-    // Door meshes are cloned from SceneLoader's shared GLTF cache.
-    // Never dispose shared geometry/material/texture resources per instance.
-    try {
-      if (this.audioElement) {
-        this.audioElement.pause();
-        this.audioElement.src = '';
-        this.audioElement = null;
-      }
-    } catch (e) {}
-    try {
-      if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-    } catch (e) {}
-  }
-}
 
 // Make Door class globally accessible
 window.Door = Door;
+export { Door };
 
 export class SceneLoader {
   constructor(scene, camera, player, renderer = null) {
@@ -326,230 +131,43 @@ window.sceneLoader = this;
   }
 
   async loadModel(path) {
-    if (!path) {
-      throw new Error('SceneLoader.loadModel requires a valid path.');
-    }
-
-    const cached = this.modelCache.get(path);
-    if (cached?.scene) {
-      return cached.scene.clone();
-    }
-
-    if (cached?.promise) {
-      const scene = await cached.promise;
-      return scene.clone();
-    }
-
-    const pendingPromise = this._gltfLoader.loadAsync(path)
-      .then((gltf) => {
-        const scene = gltf?.scene;
-        if (!scene) {
-          throw new Error(`GLTF at '${path}' did not contain a scene root.`);
-        }
-        this.modelCache.set(path, { scene });
-        return scene;
-      })
-      .catch((err) => {
-        this.modelCache.delete(path);
-        throw err;
-      });
-
-    this.modelCache.set(path, { scene: null, promise: pendingPromise });
-    const loadedScene = await pendingPromise;
-    return loadedScene.clone();
+    return loadModelCache(this, path);
   }
 
   _resolveHdriConfig(sceneDef) {
-    const env = sceneDef?.environment;
-    const hdriEntry = env?.hdri;
-
-    if (hdriEntry === false) {
-      return null;
-    }
-
-    if (typeof hdriEntry === 'string') {
-      return {
-        file: hdriEntry,
-        background: false,
-        environmentIntensity: 1,
-        backgroundIntensity: 1,
-        backgroundBlurriness: 0
-      };
-    }
-
-    if (hdriEntry && typeof hdriEntry === 'object') {
-      return {
-        file: hdriEntry.file || DEFAULT_HDRI_FILE,
-        background: !!hdriEntry.background,
-        environmentIntensity: typeof hdriEntry.environmentIntensity === 'number' ? hdriEntry.environmentIntensity : 1,
-        backgroundIntensity: typeof hdriEntry.backgroundIntensity === 'number' ? hdriEntry.backgroundIntensity : 1,
-        backgroundBlurriness: typeof hdriEntry.backgroundBlurriness === 'number' ? hdriEntry.backgroundBlurriness : 0
-      };
-    }
-
-    return {
-      file: DEFAULT_HDRI_FILE,
-      background: false,
-      environmentIntensity: 1,
-      backgroundIntensity: 1,
-      backgroundBlurriness: 0
-    };
+    return resolveHdriConfigCache(sceneDef);
   }
 
   async _preloadHdri(sceneDef) {
-    const hdri = this._resolveHdriConfig(sceneDef);
-    if (!hdri?.file) return;
-    try {
-      await this._getPmremTextureForHdri(hdri.file);
-    } catch (err) {
-      console.warn('SceneLoader: failed to preload HDRI', hdri.file, err);
-    }
+    return preloadHdriCache(this, sceneDef);
   }
 
   async _applyHdriForScene(sceneDef) {
-    const hdri = this._resolveHdriConfig(sceneDef);
-    const requestId = ++this._activeHdriRequestId;
-
-    if (!hdri?.file) {
-      this.scene.environment = null;
-      if (this._isHdriBackgroundActive) {
-        this.scene.background = null;
-        this._isHdriBackgroundActive = false;
-      }
-      this._activeHdriPath = null;
-      return;
-    }
-
-    try {
-      const envMap = await this._getPmremTextureForHdri(hdri.file);
-      if (requestId !== this._activeHdriRequestId) return;
-
-      this.scene.environment = envMap;
-      if (typeof hdri.environmentIntensity === 'number') {
-        this.scene.environmentIntensity = hdri.environmentIntensity;
-      }
-
-      if (hdri.background) {
-        this.scene.background = envMap;
-        if (typeof hdri.backgroundIntensity === 'number') {
-          this.scene.backgroundIntensity = hdri.backgroundIntensity;
-        }
-        if (typeof hdri.backgroundBlurriness === 'number') {
-          this.scene.backgroundBlurriness = hdri.backgroundBlurriness;
-        }
-        this._isHdriBackgroundActive = true;
-      } else if (this._isHdriBackgroundActive) {
-        this.scene.background = null;
-        this._isHdriBackgroundActive = false;
-      }
-
-      this._activeHdriPath = hdri.file;
-      console.log(`SceneLoader: HDRI applied (${hdri.file})`);
-    } catch (err) {
-      if (requestId !== this._activeHdriRequestId) return;
-      console.warn('SceneLoader: failed to apply HDRI', hdri.file, err);
-      this.scene.environment = null;
-      if (this._isHdriBackgroundActive) {
-        this.scene.background = null;
-        this._isHdriBackgroundActive = false;
-      }
-      this._activeHdriPath = null;
-    }
+    return applyHdriForSceneCache(this, sceneDef);
   }
 
   _getPmremTextureForHdri(hdriPath) {
-    const cached = this._hdriCache.get(hdriPath);
-    if (cached?.pmremTexture) {
-      // Refresh LRU order on cache hit.
-      this._hdriCache.delete(hdriPath);
-      this._hdriCache.set(hdriPath, cached);
-      return Promise.resolve(cached.pmremTexture);
-    }
-    if (cached?.promise) {
-      return cached.promise;
-    }
-
-    if (!this._pmremGenerator) {
-      return Promise.reject(new Error('PMREMGenerator is unavailable because renderer was not provided.'));
-    }
-
-    const promise = this._exrLoader.loadAsync(hdriPath)
-      .then((exrTexture) => {
-        exrTexture.mapping = THREE.EquirectangularReflectionMapping;
-        const renderTarget = this._pmremGenerator.fromEquirectangular(exrTexture);
-        exrTexture.dispose();
-
-        const entry = {
-          pmremTexture: renderTarget.texture,
-          renderTarget,
-          promise: null
-        };
-        this._hdriCache.set(hdriPath, entry);
-        this._trimHdriCache(hdriPath);
-        return entry.pmremTexture;
-      })
-      .catch((err) => {
-        this._hdriCache.delete(hdriPath);
-        throw err;
-      });
-
-    this._hdriCache.set(hdriPath, { promise, pmremTexture: null, renderTarget: null });
-    return promise;
+    return getPmremTextureForHdriCache(this, hdriPath);
   }
 
   _disposeHdriCacheEntry(path, entry) {
-    if (!entry) return;
-    try {
-      // Never dispose the active scene environment/background texture.
-      if (path && this._activeHdriPath && path === this._activeHdriPath) return;
-      if (this.scene?.environment && entry.pmremTexture && this.scene.environment === entry.pmremTexture) return;
-      if (this.scene?.background && entry.pmremTexture && this.scene.background === entry.pmremTexture) return;
-
-      if (entry.renderTarget?.dispose) {
-        entry.renderTarget.dispose();
-      } else if (entry.pmremTexture?.dispose) {
-        entry.pmremTexture.dispose();
-      }
-    } catch (e) {
-      console.warn('SceneLoader: failed disposing HDRI cache entry', path, e);
-    }
+    return disposeHdriCacheEntry(this, path, entry);
   }
 
   _trimHdriCache(preferredPath = null) {
-    if (this._hdriCache.size <= HDRI_CACHE_MAX_ENTRIES) return;
-
-    const keys = Array.from(this._hdriCache.keys());
-    for (const key of keys) {
-      if (this._hdriCache.size <= HDRI_CACHE_MAX_ENTRIES) break;
-      if (key === preferredPath) continue;
-      if (key === this._activeHdriPath) continue;
-
-      const entry = this._hdriCache.get(key);
-      // Keep in-flight entries until load settles.
-      if (entry?.promise && !entry?.pmremTexture) continue;
-
-      this._disposeHdriCacheEntry(key, entry);
-      this._hdriCache.delete(key);
-    }
+    return trimHdriCache(this, preferredPath);
   }
 
   _disposeAllHdriCacheEntries() {
-    for (const [path, entry] of this._hdriCache.entries()) {
-      this._disposeHdriCacheEntry(path, entry);
-    }
-    this._hdriCache.clear();
+    return disposeAllHdriCacheEntries(this);
   }
 
   releaseModelCache() {
-    // Model cache stores shared GLTF source scenes; clear references only.
-    this.modelCache.clear();
+    return releaseModelCacheRefs(this);
   }
 
   disposeCaches() {
-    this._disposeAllHdriCacheEntries();
-    this.releaseModelCache();
-    try { this._pmremGenerator?.dispose?.(); } catch (e) {}
-    this._pmremGenerator = null;
+    return disposeCachesModule(this);
   }
 
   // -------------------------
@@ -822,533 +440,27 @@ _applyCameraSettings() {
   // Load Scene (adjusted)
   // -----------------------------
   loadScene(sceneDef) {
-    this.unloadScene();
-    this._loadSceneData(sceneDef, false);
-    this._applyHdriForScene(sceneDef);
-    this._applyCameraSettings(sceneDef);
-    this._notifyLoaded();
+    return loadSceneLifecycle(this, sceneDef);
   }
 
   preloadScene(sceneDef) {
-      console.log(`SceneLoader preloading scene: ${sceneDef.name}`);
-      // Clear any previous pending data
-      this._clearPending();
-      this.pendingSceneDef = sceneDef;
-      this._loadSceneData(sceneDef, true);
-      this._preloadHdri(sceneDef);
+      return preloadSceneLifecycle(this, sceneDef);
   }
 
   hasPendingScene() {
-      return !!this.pendingSceneDef;
+      return hasPendingSceneLifecycle(this);
   }
 
   commitPendingScene() {
-      if (!this.pendingSceneDef) return;
-      
-      console.log(`SceneLoader committing pending scene: ${this.pendingSceneDef.name}`);
-      
-      // 1. Unload current scene (removes current props/enemies/lights from scene)
-      this.unloadScene();
-      
-      // 2. Promote pending data to current
-      this.sceneDef = this.pendingSceneDef;
-      this.props = this.pendingProps;
-      this.propsById = this.pendingPropsById;
-      this.enemies = this.pendingEnemies;
-      this.enemiesById = this.pendingEnemiesById;
-      this.sceneLights = this.pendingSceneLights;
-          this.staticObjects = this.pendingStaticObjects; 
-      
-      // 3. Make everything visible and active
-      this.props.forEach(p => {
-          if (p.mesh) {
-              p.mesh.visible = true;
-              p.mesh.traverse(o => { if (o.isMesh) { o.visible = true; this.propMeshes.push(o); } });
-          }
-      });
-      
-      this.enemies.forEach(e => {
-          e.setActive(true); 
-      });
-      
-      this.sceneLights.forEach(l => {
-          l.visible = true;
-      });
-      
-      // 4. Apply camera settings
-      this._applyHdriForScene(this.sceneDef);
-      this._applyCameraSettings(this.sceneDef);
-      
-      // 5. Clear pending
-      this.pendingSceneDef = null;
-      this.pendingProps = [];
-      this.pendingPropsById = {};
-      this.pendingEnemies = [];
-      this.pendingEnemiesById = {};
-      this.pendingSceneLights = [];
-      this.pendingStaticObjects = [];
-      
-      this._notifyLoaded();
+      return commitPendingSceneLifecycle(this);
   }
 
   _clearPending() {
-      // Cleanup any pending objects if we preload again before committing
-      this.pendingProps.forEach(p => {
-          if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
-          try { p.dispose?.(); } catch(e){}
-      });
-      this.pendingEnemies.forEach(e => {
-          if (e.mesh && e.mesh.parent) e.mesh.parent.remove(e.mesh);
-          try { e.dispose?.(); } catch(e){}
-      });
-      this.pendingSceneLights.forEach(l => {
-          if (l.parent) l.parent.remove(l);
-      });
-      
-      this.pendingProps = [];
-      this.pendingPropsById = {};
-      this.pendingEnemies = [];
-      this.pendingEnemiesById = {};
-      this.pendingSceneLights = [];
-      this.pendingStaticObjects = [];
-      this.pendingSceneDef = null;
+      return clearPendingLifecycle(this);
   }
 
   _loadSceneData(sceneDef, isPending) {
-    if (!isPending) {
-        this.sceneDef = sceneDef;
-        console.log(`SceneLoader loading scene: ${sceneDef.name}`);
-    }
-
-    // Props (including full-cover walls)
-    const staticObjects = sceneDef.environment?.staticObjects ?? [];
-    
-    // Track static objects for pending if needed, though mostly used for props list
-    if (isPending) {
-        // We don't have a separate pendingStaticObjects list logic in addProp, 
-        // but we can store the raw defs if needed. 
-        // For now, addProp handles the instances.
-    }
-
-    // Helper: convert edge-based (min-corner) position -> center-based position
-    function _cloneDef(def) {
-      if (!def || typeof def !== 'object') return {};
-      try { return JSON.parse(JSON.stringify(def)); } catch (e) { return { ...def }; }
-    }
-
-    function _ensureCenterPosition(def) {
-      if (!def || !def.position) return;
-      // avoid double conversion
-      if (def._convertedToCenter) return;
-
-      const sx = Number(def.size?.x ?? 1);
-      const sz = Number(def.size?.z ?? 1);
-
-      const cx = (def.position.x ?? 0) + sx / 2;
-      const cz = (def.position.z ?? 0) + sz / 2;
-      const by = def.position.y ?? 0; // keep y as base (bottom)
-
-      def.position = { x: cx, y: by, z: cz };
-      def._convertedToCenter = true;
-    }
-
-    const _toRadiansIfNeeded = (value) => {
-      const n = Number(value ?? 0);
-      return Math.abs(n) > (Math.PI * 2 + 0.0001) ? THREE.MathUtils.degToRad(n) : n;
-    };
-
-    for (let idx = 0; idx < staticObjects.length; idx++) {
-      const authoredDef = staticObjects[idx] || {};
-      let pdef = _cloneDef(authoredDef);
-      const editorDef = _cloneDef(authoredDef);
-
-      if (!pdef.id) pdef.id = `prop_${idx}`;
-      if (!editorDef.id) editorDef.id = pdef.id;
-
-      // Convert edge-based authored maps into center-based positions/sizes
-      // (map export uses min-corner grid coordinates; Three.js expects centered geometry positions)
-      const isDoorDef = !!(pdef && pdef.type === 'door');
-      if (pdef && pdef.position && pdef.size && !isDoorDef) {
-        _ensureCenterPosition(pdef);
-      }
-  
-  // Apply base definition if present
-  if (pdef.def && PROP_DEFS[pdef.def]) {
-    pdef = { ...PROP_DEFS[pdef.def], ...pdef };
-  }
-
-  // =============================
-  // PREFAB PROP
-  // =============================
-// =============================
-// PREFAB PROP (updated for Prop instances)
-// =============================
-// =============================
-// PREFAB PROP
-// =============================
-// =============================
-// PREFAB PROPS (Prop-based)
-// =============================
-if (pdef.type === "prefab" && pdef.prefab) {
-    // Build the Prop instance via prefabLibrary
-    const propInstance = buildPrefab(pdef.prefab, pdef);
-
-    if (!propInstance || !propInstance.mesh) {
-        console.warn("Failed to build prefab:", pdef.prefab, pdef.id);
-        continue;
-    }
-
-    // Override transforms if defined
-    if (pdef.position) {
-        propInstance.mesh.position.set(
-            pdef.position.x ?? 0,
-            pdef.position.y ?? 0,
-            pdef.position.z ?? 0
-        );
-    }
-
-    if (pdef.rotation) {
-        propInstance.mesh.rotation.set(
-            pdef.rotation.x ?? 0,
-            pdef.rotation.y ?? 0,
-            pdef.rotation.z ?? 0
-        );
-    }
-
-    if (pdef.scale) {
-        if (typeof pdef.scale === 'number') {
-            const s = pdef.scale;
-            propInstance.mesh.scale.set(s, s, s);
-            // Update logical size for collision (clone to avoid mutating def)
-            if (propInstance.size) {
-                propInstance.size = { ...propInstance.size };
-                propInstance.size.x *= s;
-                propInstance.size.y *= s;
-                propInstance.size.z *= s;
-            }
-        } else {
-            const sx = pdef.scale.x ?? 1;
-            const sy = pdef.scale.y ?? 1;
-            const sz = pdef.scale.z ?? 1;
-            propInstance.mesh.scale.set(sx, sy, sz);
-            if (propInstance.size) {
-                propInstance.size = { ...propInstance.size };
-                propInstance.size.x *= sx;
-                propInstance.size.y *= sy;
-                propInstance.size.z *= sz;
-            }
-        }
-    }
-    
-    // Traverse the mesh for shadow / hit detection
-    propInstance.mesh.traverse(obj => {
-        if (obj.isMesh) {
-            obj.castShadow = true;
-            obj.receiveShadow = true;
-            Object.assign(obj.userData, {
-                propId: pdef.id,
-                solid: true
-            });
-        }
-    });
-
-    // Add prop to SceneLoader (tracks props + adds mesh to scene)
-    // preserve original scene definition on the runtime instance
-    try { propInstance._sceneDef = _cloneDef(editorDef); } catch(e){}
-    this.addProp(propInstance, isPending);
-
-    console.log(`Prefab prop loaded: ${pdef.id}`, propInstance.mesh.position);
-
-    continue;
-}
-
-  // =============================
-  // DOOR PROP (GLB-based with animation)
-  // =============================
-  if (pdef.type === 'door') {
-    const rx = pdef.rotation?.x ?? pdef.rotationX ?? 0;
-    const ry = pdef.rotation?.y ?? pdef.rotationY ?? 0;
-    const rz = pdef.rotation?.z ?? pdef.rotationZ ?? 0;
-    const hinge = new THREE.Group();
-    hinge.position.set(
-        pdef.position.x ?? 0,
-        pdef.position.y ?? 0,
-        pdef.position.z ?? 0
-    );
-    hinge.rotation.set(
-      _toRadiansIfNeeded(rx),
-      _toRadiansIfNeeded(ry),
-      _toRadiansIfNeeded(rz)
-    );
-    hinge.userData = Object.assign({}, hinge.userData || {}, {
-      isDoor: true,
-      propId: pdef.id,
-      type: 'door'
-    });
-
-    // Create Door instance with properties
-    const door = new Door({
-        id: pdef.id,
-        mesh: hinge,
-        position: pdef.position,
-        size: pdef.size,
-        openDirection: pdef.openDirection ?? 1,
-        openInOut: pdef.openInOut ?? 1,
-        openDuration: pdef.openDuration ?? 800,
-        openSound: pdef.openSound
-    });
-
-    const doorModelPath = pdef.model;
-    if (!doorModelPath) {
-      console.warn(`Door '${pdef.id}' is missing required 'model' path; skipping load.`);
-      continue;
-    }
-
-    this.loadModel(doorModelPath)
-      .then((doorMesh) => {
-        
-        // Apply custom model rotation if specified in scene def (for correcting GLB orientation)
-        if (pdef.modelRotation) {
-            doorMesh.rotation.set(
-                pdef.modelRotation.x ?? 0,
-                pdef.modelRotation.y ?? 0,
-                pdef.modelRotation.z ?? 0
-            );
-        }
-        
-        // Apply scale if specified
-        if (pdef.scale) {
-            if (typeof pdef.scale === 'number') {
-                doorMesh.scale.set(pdef.scale, pdef.scale, pdef.scale);
-            } else {
-                doorMesh.scale.set(
-                    pdef.scale.x ?? 1,
-                    pdef.scale.y ?? 1,
-                    pdef.scale.z ?? 1
-                );
-            }
-        }
-        
-        // Position the door model relative to hinge (pivot point)
-        if (pdef.modelPivotOffset) {
-            doorMesh.position.set(
-                pdef.modelPivotOffset.x ?? 0,
-                pdef.modelPivotOffset.y ?? 0,
-                pdef.modelPivotOffset.z ?? 0
-            );
-        } else {
-            // Default: offset by half width along X-axis
-            const doorWidth = pdef.size?.x ?? 1;
-            doorMesh.position.x = doorWidth / 2;
-        }
-        
-        // Also apply rotation to all child meshes if needed
-        doorMesh.traverse((child) => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-            child.userData = Object.assign({}, child.userData || {}, {
-              isDoor: true,
-              propId: pdef.id,
-              type: 'door'
-            });
-            // Door GLB children are loaded async; register when this door is active in current scene.
-            const isActiveDoor = !!(door.id && this.propsById && this.propsById[door.id] === door);
-            if (isActiveDoor && !this.propMeshes.includes(child)) this.propMeshes.push(child);
-            }
-        });
-        
-        hinge.add(doorMesh);
-        door.doorMesh = doorMesh;
-        
-        console.log('Door loaded:', pdef.id, 'model:', doorModelPath, 'Rotation:', doorMesh.rotation, 'Position:', doorMesh.position);
-      })
-      .catch((err) => {
-        console.warn(`Failed to load door model for '${pdef.id}' from '${doorModelPath}':`, err);
-      });
-
-    try { door._sceneDef = _cloneDef(editorDef); } catch(e){}
-
-    this.addProp(door, isPending);
-    continue;
-}
-  if (pdef.type === "glb" && pdef.file) {
-    this.loadModel(pdef.file)
-      .then((model) => {
-
-      model.position.set(
-        pdef.position?.x ?? 0,
-        pdef.position?.y ?? 0,
-        pdef.position?.z ?? 0
-      );
-
-      if (pdef.scale) {
-        model.scale.set(pdef.scale.x, pdef.scale.y, pdef.scale.z);
-      }
-
-      if (pdef.rotation) {
-        model.rotation.set(
-          pdef.rotation.x,
-          pdef.rotation.y,
-          pdef.rotation.z
-        );
-      }
-
-      model.traverse(obj => {
-        if (obj.isMesh) {
-          obj.castShadow = true;
-          obj.receiveShadow = true;
-          obj.userData = Object.assign({}, obj.userData || {}, {
-            propId: pdef.id,
-            solid: true
-          });
-        }
-      });
-
-      // Create a small prop wrapper that respects hp/indestructible
-      const hpVal = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
-      const ind = !!pdef.indestructible;
-      const hitSounds = Array.isArray(pdef.hitSounds) ? pdef.hitSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
-      const deathSounds = Array.isArray(pdef.deathSounds) ? pdef.deathSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
-
-      const propWrapper = {
-        id: pdef.id,
-        mesh: model,
-        position: pdef.position ?? { x: 0, y: 0, z: 0 },
-        size: pdef.size ?? { x: 1, y: 1, z: 1 },
-        hp: hpVal,
-        maxHp: hpVal,
-        indestructible: ind,
-        hitSounds,
-        deathSounds,
-        explosion: pdef.explosion ?? null,
-        takeDamage(amount) {
-          try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
-          if (this.indestructible) return false;
-          this.hp -= amount;
-          if (this.hp <= 0) {
-            // die
-            try { if (this.deathSounds && this.deathSounds.length) { const s = this.deathSounds[Math.floor(Math.random()*this.deathSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
-            // spawn explosion if defined
-            if (this.explosion && window.spawnTestExplosion) {
-              const worldPos = new THREE.Vector3();
-              this.mesh.getWorldPosition(worldPos);
-              window.spawnTestExplosion({ x: worldPos.x, y: worldPos.y, z: worldPos.z, blastRadius: this.explosion.blastRadius, maxDamage: this.explosion.maxDamage, explosionSounds: this.explosion.explosionSounds });
-            }
-            // remove mesh from scene
-            if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-            return true;
-          }
-          return false;
-        },
-        dispose() {
-          // Cached GLTF instances share geometry/material/texture resources.
-          // Do not dispose those per-instance, only detach the scene node.
-          try { if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh); } catch(e){}
-        }
-      };
-
-      // attach raw definition so the editor can preserve arbitrary keys
-      try { propWrapper._sceneDef = _cloneDef(editorDef); } catch(e){}
-      this.addProp(propWrapper, isPending);
-    })
-    .catch((err) => {
-      console.warn(`Failed to load GLB prop '${pdef.id}' from '${pdef.file}':`, err);
-    });
-
-    continue;
-  }
-  
-  // =============================
-  // DEFAULT PROP (PropClass)
-  // =============================
-  const p = new PropClass({
-    ...pdef,
-    id: pdef.id,
-    coverType: pdef.coverType ?? "none",
-    materialParams: pdef.materialParams ?? {}
-  });
-
-  p.mesh.traverse(obj => {
-    if (obj.isMesh) {
-      obj.userData = {
-        propId: pdef.id,
-        coverType: pdef.coverType ?? "none",
-        solid: true
-      };
-    }
-  });
-
-  try { p._sceneDef = _cloneDef(editorDef); } catch(e){}
-  this.addProp(p, isPending);
-}
-
-// Enemies
-    const enemyDefs = sceneDef.enemies ?? [];
-    enemyDefs.forEach((edef) => {
-      const runtimeEnemyDef = _cloneDef(edef);
-      // Resolve base definition
-      let def = null;
-      if (runtimeEnemyDef.def && ENEMY_DEFS[runtimeEnemyDef.def]) {
-        def = ENEMY_DEFS[runtimeEnemyDef.def];
-      } else if (runtimeEnemyDef.type && ENEMY_DEFS[runtimeEnemyDef.type]) {
-        def = ENEMY_DEFS[runtimeEnemyDef.type];
-      }
-
-      // Diagnostic: log enemy entries and whether a type definition exists
-      try {
-        console.log(`SceneLoader: enemy entry id='${runtimeEnemyDef.id}' type='${runtimeEnemyDef.type}' def='${runtimeEnemyDef.def}' defFound=${!!def} modelUrl='${def && def.modelUrl ? def.modelUrl : "(none)"}'`);
-      } catch (e) { /* ignore logging errors */ }
-      if (!def) { console.warn(`SceneLoader: unknown enemy type/def '${runtimeEnemyDef.type || runtimeEnemyDef.def}' for id='${runtimeEnemyDef.id}'`); return; }
-
-      // Convert enemy instance edge-based positions to center-based (if present)
-      if (runtimeEnemyDef && runtimeEnemyDef.position && !runtimeEnemyDef._convertedToCenter) {
-        const sx = Number(runtimeEnemyDef.size?.x ?? def?.size?.x ?? 1);
-        const sz = Number(runtimeEnemyDef.size?.z ?? def?.size?.z ?? 1);
-        runtimeEnemyDef.position = {
-          x: (runtimeEnemyDef.position.x ?? 0) + sx / 2,
-          y: runtimeEnemyDef.position.y ?? 0,
-          z: (runtimeEnemyDef.position.z ?? 0) + sz / 2
-        };
-        runtimeEnemyDef._convertedToCenter = true;
-      }
-
-      const e = new Enemy(this.scene, def, runtimeEnemyDef, this.player, () => {});
-      e.lastHitFrame = -1;
-
-  // Hook automatic objective check on death
-  e.onDeath = (id) => {
-    this._checkObjectiveAfterHit();
-  };
-      // register via helper
-      this.addEnemy(e, isPending);
-    });
-
-        // Use absolute world positions - no room centering or bounds calculation needed
-        // Scene author defines exact positions. If they want walls/floor, add them as staticObjects.
-
-        // Lights created after props/enemies loaded
-        this._createLights(sceneDef, isPending);
-
-    // Enemy firing callback
-    const fireCallback = (origin, target, speed = 28) => {
-      this.spawnProjectile(
-        new THREE.Vector3(origin.x, origin.y, origin.z),
-        new THREE.Vector3(target.x, target.y, target.z),
-        speed
-      );
-    };
-
-    // assign callbacks to enemies we created
-    // Note: if pending, we assign callback but enemy is inactive so it won't fire yet.
-    const targetEnemies = isPending ? this.pendingEnemies : this.enemies;
-    targetEnemies.forEach((e) => {
-      if (e) e.fireCallback = fireCallback;
-    });
-
-    if (!isPending) {
-        this.objective = sceneDef.objective ?? null;
-    }
+    return loadSceneDataEntities(this, sceneDef, isPending);
   }
 
   // Legacy room methods removed - scenes now use absolute world positions
@@ -1363,306 +475,38 @@ if (pdef.type === "prefab" && pdef.prefab) {
   // Projectiles (unchanged)
   // -----------------------------
   spawnProjectile(startPos, targetPos, opts = {}) {
-    // opts may be a number (speed) for backward compatibility, or an object
-    let speed = 1;
-    let projectileType = "bullet";
-    let lifetime = undefined;
-    if (typeof opts === 'number') speed = opts;
-    else {
-      speed = opts.speed ?? 1;
-      projectileType = opts.projectileType ?? "bullet";
-      lifetime = opts.lifetime;
-    }
-
-    const id = "proj_" + (this.nextProjectileId++);
-    const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
-
-    const p = new Projectile({
-      id,
-      scene: this.scene,
-      startPos: startPos.clone(),
-      direction: dir,
-      speed,
-      lifetime,
-      projectileType
-    });
-
-    this.projectiles[id] = p;
-    return p;
+    return spawnProjectileCombat(this, startPos, targetPos, opts);
   }
 
   // -----------------------------
   // Unload Scene (adjusted to arrays)
   // -----------------------------
   unloadScene() {
-    // Clear room
-    this.roomMeshes.forEach((m) => {
-      this.scene.remove(m);
-      if (m.geometry) m.geometry.dispose();
-      if (m.material) m.material.dispose();
-    });
-    this.roomMeshes = [];
-
-    // Clear lights
-    this.sceneLights.forEach(light => this.scene.remove(light));
-    this.sceneLights = [];
-
-    // Projectiles
-    Object.values(this.projectiles).forEach((p) => { try { p.dispose(); } catch {} });
-    this.projectiles = {};
-    this.projectileMeshes = [];
-
-    // Enemies
-    this.enemies.forEach((en) => { try { en.dispose(); } catch {} });
-    this.enemies = [];
-    this.enemiesById = {};
-    this.enemyMeshes = [];
-
-    // Props — remove meshes from scene and dispose
-    this.props.forEach((pr) => {
-      try { if (pr.mesh && pr.mesh.parent) pr.mesh.parent.remove(pr.mesh); } catch (e) {}
-      try { if (typeof pr.dispose === 'function') pr.dispose(); } catch (e) {}
-    });
-    this.props = [];
-    this.propsById = {};
-    this.propMeshes = [];
-    this.staticObjects = [];
-
-    // Explosions
-    this.explosions.forEach((ex) => { try { if (typeof ex.destroy === 'function') ex.destroy(); if (typeof ex.dispose === 'function') ex.dispose(); } catch {} });
-    this.explosions = [];
-
-    // Scene-level environment state
-    this._activeHdriRequestId++;
-    this.scene.environment = null;
-    this.scene.environmentIntensity = 1;
-    if (this._isHdriBackgroundActive) {
-      this.scene.background = null;
-      this._isHdriBackgroundActive = false;
-    }
-    this._activeHdriPath = null;
+    return unloadSceneLifecycle(this);
   }
-
-_createPrefabProp(pdef, prefab) {
-  const hpVal = (typeof pdef.hp === 'number') ? pdef.hp : (pdef.hp ? Number(pdef.hp) : 1);
-  const ind = !!pdef.indestructible;
-  const hitSounds = Array.isArray(pdef.hitSounds) ? pdef.hitSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
-  const deathSounds = Array.isArray(pdef.deathSounds) ? pdef.deathSounds.map(path => { const a = new Audio(path); a.load(); return a; }) : [];
-
-  return {
-    id: pdef.id,
-    mesh: prefab,
-    size: pdef.size ?? { x: 1, y: 1, z: 1 },
-    position: pdef.position ?? { x: 0, y: 0, z: 0 },
-    hp: hpVal,
-    maxHp: hpVal,
-    indestructible: ind,
-    hitSounds,
-    deathSounds,
-    takeDamage(amount) {
-      try { if (this.hitSounds && this.hitSounds.length) { const s = this.hitSounds[Math.floor(Math.random()*this.hitSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
-      if (this.indestructible) return false;
-      this.hp -= amount;
-      if (this.hp <= 0) {
-        try { if (this.deathSounds && this.deathSounds.length) { const s = this.deathSounds[Math.floor(Math.random()*this.deathSounds.length)]; s.currentTime = 0; s.play().catch(()=>{}); } } catch(e){}
-        if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-        return true;
-      }
-      return false;
-    },
-    dispose() {
-      prefab.traverse(obj => {
-        if (obj.isMesh) {
-          obj.geometry?.dispose();
-          if (obj.material?.map) obj.material.map.dispose();
-          obj.material?.dispose();
-        }
-      });
-    }
-  };
-}
 
 
   // -----------------------------
   // Update (enemies, projectiles, explosions)
   // -----------------------------
   update(deltaMs, nowMs) {
-    this.frameCount++;
-
-Object.entries(this.projectiles).forEach(([id, proj]) => {
-  proj.update(deltaMs);
-
-const hit = proj.checkCollision(this.getIntersectableMeshes());
-if (hit) {
-  const hitObj = hit.object;
-  const hitPoint = hit.point ?? proj.position;
-
-  // Play bullet ricochet as positional audio only for room surfaces.
-  // Do NOT play ricochet when hitting props or enemies (handled elsewhere).
-  if (proj.projectileType === "bullet") {
-    // climb to find a parent that identifies as room/prop/enemy
-    let obj = hitObj;
-    while (obj && obj.userData && !obj.userData.enemyId && !obj.userData.propId && obj.userData.type !== "room") {
-      obj = obj.parent;
-    }
-    if (obj && obj.userData && obj.userData.type === "room") {
-      const paths = [
-        "assets/sfx/ric1.ogg",
-        "assets/sfx/ric2.ogg",
-        "assets/sfx/ric3.ogg",
-        "assets/sfx/ric4.ogg",
-        "assets/sfx/ric5.ogg"
-      ];
-      this.playPositionalImpactSound(paths, hitPoint, 0.9, 6);
-    }
-  } else {
-    // Non-bullet projectiles: keep existing mesh-defined hit sound behavior
-    const sounds = hitObj.userData?.hitSounds;
-    if (Array.isArray(sounds) && sounds.length > 0) {
-      const sound = sounds[Math.floor(Math.random() * sounds.length)];
-      this.playImpactSound(sound, hitPoint);
-    }
-  }
-
-  // Apply damage to enemy or prop (room surfaces usually ignore damage)
-  this.applyDamageToMesh(hitObj, proj.damage, { suppressRoomSound: proj.projectileType === "bullet" });
-
-  proj.dispose();
-  delete this.projectiles[id];
-  return;
-}
-});
-// SceneLoader.update(deltaMs)
-    // Enemies (iterate array)
-    this.enemies.forEach((en) => {
-      try { en.update(deltaMs, nowMs, this.player); } catch (e) { console.warn("Enemy update error", e); }
-    });
-
-    
-    // Explosions: call update on each; remove and cleanup when finished.
-    for (let i = this.explosions.length - 1; i >= 0; i--) {
-      const ex = this.explosions[i];
-      try {
-        if (typeof ex.update === "function") {
-          ex.update(deltaMs / 1000);
-        }
-        // Remove if the explosion exposes an isExpired/isDone function
-        let expired = false;
-        if (typeof ex.isExpired === "function") expired = ex.isExpired();
-        else if (typeof ex.isDone === "boolean") expired = ex.isDone;
-        else if (typeof ex.age === "number" && typeof ex.lifespan === "number") {
-          if (ex.age >= ex.lifespan) expired = true;
-        }
-
-        if (expired) {
-          if (typeof ex.destroy === "function") ex.destroy();
-          if (typeof ex.dispose === "function") ex.dispose();
-          // remove from scene if it has a mesh/points
-          if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
-          this.explosions.splice(i, 1);
-        }
-      } catch (e) {
-        console.warn("Explosion update error", e);
-        // best-effort remove if it throws repeatedly
-        try {
-          if (typeof ex.destroy === "function") ex.destroy();
-          if (typeof ex.dispose === "function") ex.dispose();
-          if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
-        } catch (e2) {}
-        this.explosions.splice(i, 1);
-      }
-    }
+    return updateCombat(this, deltaMs, nowMs);
   }
 
 playImpactSound(soundPath, position, volume = 0.7) {
-  if (!soundPath) return;
-
-  const audio = new Audio(soundPath);
-  audio.volume = volume;
-  audio.play().catch(() => {});
-
-  // Optional: if you later switch to THREE.PositionalAudio,
-  // this function becomes the single upgrade point.
+  return playImpactSoundAudio(this, soundPath, position, volume);
 }
 
 
 // Find an AudioListener attached to the camera (or fallback to window.audioListener)
 _getAudioListener() {
-  try {
-    if (this.camera && this.camera.children && this.camera.children.length) {
-      for (const c of this.camera.children) {
-        if (!c) continue;
-        if (c.isAudioListener || c.type === 'AudioListener') return c;
-      }
-    }
-  } catch (e) {}
-  if (window.audioListener) return window.audioListener;
-  return null;
+  return getAudioListenerAudio(this);
 }
 
 // Play a positional impact sound at the given world `position` (THREE.Vector3).
 // Falls back to non-positional Audio if no AudioListener / WebAudio is available.
 playPositionalImpactSound(soundPathOrArray, position, volume = 0.8, refDistance = 6) {
-  if (!soundPathOrArray || !position) return;
-
-  // Allow passing an array of candidate paths; pick one randomly here so
-  // callers can simply provide multiple options and we ensure a single
-  // randomly chosen positional sound plays at the impact point.
-  let soundPath = soundPathOrArray;
-  if (Array.isArray(soundPathOrArray) && soundPathOrArray.length) {
-    soundPath = soundPathOrArray[Math.floor(Math.random() * soundPathOrArray.length)];
-  }
-
-  const listener = this._getAudioListener();
-  if (!listener) {
-    // fallback to non-positional playback
-    this.playImpactSound(soundPath, position, volume);
-    return;
-  }
-
-  const loader = this._audioLoader;
-  const cache = this._audioBufferCache;
-  const scene = this.scene;
-
-  const playBuffer = (buffer) => {
-    try {
-      const sound = new THREE.PositionalAudio(listener);
-      sound.setBuffer(buffer);
-      sound.setRefDistance(refDistance);
-      sound.setVolume(volume);
-
-      const holder = new THREE.Object3D();
-      holder.position.copy(position);
-      holder.add(sound);
-      scene.add(holder);
-
-      // cleanup when ended (and guard with timeout in case onEnded isn't reliable)
-      sound.onEnded = () => { try { scene.remove(holder); } catch (e) {} };
-      try { sound.play(); } catch (e) { console.warn('Positional play failed', e); }
-
-      const maxMs = Math.max(4000, Math.round((buffer.duration || 1) * 1000) + 2000);
-      setTimeout(() => { try { if (scene && holder && holder.parent) scene.remove(holder); } catch (e) {} }, maxMs);
-    } catch (e) {
-      console.warn('playBuffer failed', e);
-    }
-  };
-
-  if (cache[soundPath]) {
-    playBuffer(cache[soundPath]);
-    return;
-  }
-
-  loader.load(soundPath,
-    (buffer) => {
-      cache[soundPath] = buffer;
-      playBuffer(buffer);
-    },
-    undefined,
-    (err) => {
-      console.warn('Positional audio load failed', soundPath, err);
-      this.playImpactSound(soundPath, position, volume);
-    }
-  );
+  return playPositionalImpactSoundAudio(this, soundPathOrArray, position, volume, refDistance);
 }
 
 
@@ -1670,189 +514,39 @@ playPositionalImpactSound(soundPathOrArray, position, volume = 0.8, refDistance 
   // Damage Handling (adapted to arrays/maps)
   // -----------------------------
 applyDamageToMesh(mesh, damage = 1, opts = {}) {
-  if (!mesh) return false;
-
-  let obj = mesh;
-
-  // climb until we find something with enemyId, propId, or type=room
-  while (obj && obj.userData &&
-        !obj.userData.enemyId &&
-        !obj.userData.propId &&
-        obj.userData.type !== "room") {
-    obj = obj.parent;
-  }
-
-  if (!obj || !obj.userData) return false;
-
-  // Enemy
-  if (obj.userData.enemyId) {
-    const en = this.enemiesById[obj.userData.enemyId];
-    if (!en) return false;
-    if (en.lastHitFrame === this.frameCount) return true;
-    en.lastHitFrame = this.frameCount;
-    en.takeDamage(damage);
-    this._checkObjectiveAfterHit();
-    return true;
-  }
-
-  // Prop
-  if (obj.userData.propId) {
-    const pr = this.propsById[obj.userData.propId];
-    if (pr) {
-      const died = pr.takeDamage(damage);
-      if (died) {
-        const idx = this.props.indexOf(pr);
-        if (idx >= 0) this.props.splice(idx, 1);
-        delete this.propsById[obj.userData.propId];
-        const pmIdx = this.propMeshes.findIndex(m => m.userData && m.userData.propId === obj.userData.propId);
-        if (pmIdx >= 0) this.propMeshes.splice(pmIdx, 1);
-      }
-    }
-    return true;
-  }
-
-  // Room surfaces
-  if (obj.userData.type === "room") {
-    // Allow caller to suppress the default (non-positional) room hit sound
-    if (!(opts && opts.suppressRoomSound)) {
-      const sounds = obj.userData.hitSounds;
-      if (Array.isArray(sounds) && sounds.length > 0) {
-        const sound = sounds[Math.floor(Math.random() * sounds.length)];
-        this.playImpactSound(sound, mesh.position);
-      }
-    }
-    return true;
-  }
-
-  return false;
+  return applyDamageToMeshCombat(this, mesh, damage, opts);
 }
 
   // -----------------------------
   // Objective Check
   // -----------------------------
   _checkObjectiveAfterHit() {
-    if (!this.objective) return;
-
-    if (this.objective.type === "eliminateAllEnemies") {
-      // Treat enemies that are dying as effectively removed for objective checks.
-      const remaining = this.enemies.filter(e => !(e._isDead || e._isDying));
-      console.log("Enemies still alive:", remaining.length);
-
-      if (remaining.length === 0) {
-            console.log("All enemies defeated!");
-
-            // Optional: remove dead enemies from array now
-            this.enemies = [];
-            this.enemiesById = {};
-            this.enemyMeshes = [];
-
-            if (typeof window.onSceneComplete === "function") {
-                window.onSceneComplete(this.sceneDef);
-            } else {
-                window.dispatchEvent(new CustomEvent("sceneComplete", {
-                    detail: { scene: this.sceneDef }
-                }));
-            }
-        }
-    }
+    return checkObjectiveAfterHitCombat(this);
 }
 
 // -----------------------------
   // Raycasting Mesh List
   // -----------------------------
 getIntersectableMeshes() {
-  return [
-    ...this.enemyMeshes,
-    ...this.propMeshes,
-    ...this.roomMeshes
-  ];
+  return getIntersectableMeshesCombat(this);
 }
 
   // -----------------------------
   // -----------------------------
   _notifyLoaded() {
-    if (typeof window.onSceneLoaded === "function") {
-      window.onSceneLoaded(this.sceneDef);
-    }
-    window.dispatchEvent(new CustomEvent("sceneLoaded", {
-      detail: { scene: this.sceneDef }
-    }));
+    return notifyLoadedEvents(this);
   }
 
   // -----------------------------
   // Scene / resource cleanup helper
   // -----------------------------
   clearScene() {
-    // Remove props
-    for (const p of this.props) {
-      if (p.mesh && p.mesh.parent) p.mesh.parent.remove(p.mesh);
-      try { p.dispose?.(); } catch {}
-    }
-    this.props.length = 0;
-    this.propsById = {};
-    this.propMeshes = [];
-this.staticObjects = [];
-
-    // Remove enemies
-    for (const e of this.enemies) {
-      if (e.mesh && e.mesh.parent) e.mesh.parent.remove(e.mesh);
-      try { e.dispose?.(); } catch {}
-    }
-    this.enemies.length = 0;
-    this.enemiesById = {};
-    this.enemyMeshes = [];
-
-    // Explosions
-    for (const ex of this.explosions) {
-      try {
-        if (typeof ex.destroy === "function") ex.destroy();
-        if (typeof ex.dispose === "function") ex.dispose();
-      } catch {}
-      if (ex.mesh && ex.mesh.parent) ex.mesh.parent.remove(ex.mesh);
-    }
-    this.explosions.length = 0;
+    return clearSceneEvents(this);
   }
 
   destroy() {
-    try { this.clearScene(); } catch (e) {}
-    this._activeHdriRequestId++;
-    try { this.scene.environment = null; } catch (e) {}
-    if (this._isHdriBackgroundActive) {
-      try { this.scene.background = null; } catch (e) {}
-      this._isHdriBackgroundActive = false;
-    }
-    this._activeHdriPath = null;
-    this.disposeCaches();
+    return destroySceneLoaderEvents(this);
   }
 }
 
-window.spawnTestExplosion = function({
-  x = 0,
-  y = 1,
-  z = 0,
-  blastRadius = 4,
-  maxDamage = 10,
-  explosionSounds = []  // array of audio file paths
-} = {}) {
-  if (!window.sceneLoader) {
-    console.warn("sceneLoader not found!");
-    return;
-  }
-
-  const pos = new THREE.Vector3(x, y, z);
-
-  const explosion = new Explosion(
-    window.sceneLoader.scene,
-    pos,
-    {
-      blastRadius,
-      maxDamage,
-      explosionSounds,
-      floorY: y - 0.1  // catwalk-safe
-    }
-  );
-
-  window.sceneLoader.addExplosion(explosion);
-
-  console.log(`Spawned explosion at (${x}, ${y}, ${z}), radius ${blastRadius}, damage ${maxDamage}`);
-};
+registerSpawnTestExplosionGlobal();
