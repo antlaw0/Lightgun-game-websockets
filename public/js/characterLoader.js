@@ -1,8 +1,10 @@
 // js/characterLoader.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 
 const gltfLoader = new GLTFLoader();
+configureGltfLoaderForKtx2(gltfLoader);
 
 // Standard camera/eye height used as the reference for humanoid scaling
 export const CAMERA_HEIGHT = 1.7;

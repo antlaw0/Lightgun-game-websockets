@@ -1,6 +1,7 @@
 // js/player.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 
 import { WEAPON_DEFS, MELEE_DEFS } from "./weapons.js";
 import { AMMO_DEFS } from "./ammo.js";
@@ -100,7 +101,7 @@ this.meleeCooldownMs = _meleeDef.attackSpeed || 600;
 
         ammoInClip,
         totalAmmo: 0, // now handled by ammoPools
-        lastShotTime: 0,
+      lastShotTime: 0,
         isReloading: false
       };
     });
@@ -312,7 +313,7 @@ meleeAttack() {
 
     console.log('Loading melee weapon GLB:', path, 'token=', loadToken);
 
-    const loader = new GLTFLoader();
+    const loader = configureGltfLoaderForKtx2(new GLTFLoader());
     const onLoad = (gltf) => {
       if (loadToken !== this._meleeLoadToken) { console.log('Stale melee GLB load ignored:', path, 'token=', loadToken); return; }
       console.log('melee GLB loaded, scene children:', (gltf && gltf.scene && gltf.scene.children ? gltf.scene.children.length : 0), 'token=', loadToken);

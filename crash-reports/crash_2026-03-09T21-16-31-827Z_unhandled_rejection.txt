@@ -1,0 +1,203 @@
+Lightgun Crash Report
+=====================
+GeneratedAt: 2026-03-09T21:16:31.827Z
+RemoteIP: ::ffff:192.168.12.239
+UserAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+
+=== Event ===
+{
+  "eventType": "unhandled_rejection",
+  "createdAt": "2026-03-09T21:16:31.675Z",
+  "reportVersion": 1,
+  "message": "Cannot set properties of undefined (setting 'wrapS')"
+}
+
+=== Error ===
+{
+  "name": "TypeError",
+  "message": "Cannot set properties of undefined (setting 'wrapS')",
+  "stack": "TypeError: Cannot set properties of undefined (setting 'wrapS')\n    at loadTex (https://192.168.12.239:8080/js/prop.js:225:19)\n    at loadColorTex (https://192.168.12.239:8080/js/prop.js:233:19)\n    at Prop._createMesh (https://192.168.12.239:8080/js/prop.js:254:40)\n    at new Prop (https://192.168.12.239:8080/js/prop.js:83:22)\n    at loadSceneDataEntities (https://192.168.12.239:8080/js/sceneLoader/entities.js:330:15)\n    at SceneLoader._loadSceneData (https://192.168.12.239:8080/js/sceneLoader.js:465:12)\n    at loadSceneLifecycle (https://192.168.12.239:8080/js/sceneLoader/lifecycle.js:3:8)\n    at SceneLoader.loadScene (https://192.168.12.239:8080/js/sceneLoader.js:445:12)\n    at SceneManager.loadScene (https://192.168.12.239:8080/js/sceneManager.js:121:30)\n    at loadSceneIndex (https://192.168.12.239:8080/js/game/sceneRuntime.js:177:31)"
+}
+
+=== Context ===
+{
+  "renderer": {
+    "render": {
+      "calls": 1,
+      "triangles": 1,
+      "points": 0,
+      "lines": 0,
+      "frame": 15
+    },
+    "memory": {
+      "geometries": 4,
+      "textures": 12
+    },
+    "capabilities": {
+      "isWebGL2": true,
+      "maxTextures": 16,
+      "maxTextureSize": 16384,
+      "maxCubemapSize": 16384,
+      "maxVertexTextures": 16,
+      "maxAnisotropy": null,
+      "precision": "highp",
+      "logarithmicDepthBuffer": false
+    }
+  },
+  "camera": {
+    "position": {
+      "x": 0,
+      "y": 1.7,
+      "z": 5
+    },
+    "rotation": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "fov": 60
+  },
+  "player": {
+    "hp": 10000,
+    "maxHp": 10000,
+    "isReloading": false,
+    "currentWeapon": {
+      "id": "pistol",
+      "name": "Pistol",
+      "ammoInClip": 12,
+      "clipSize": 12,
+      "totalAmmo": 0,
+      "fireMode": "semi-auto",
+      "accuracy": 0.1
+    }
+  },
+  "gameplay": {
+    "isFPSMode": false,
+    "enemyCount": 0,
+    "sceneChildren": 9,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "reticle": {
+      "x": 1720,
+      "y": 652.5
+    },
+    "editorGrid": {
+      "isEditorMode": false,
+      "size": 0,
+      "world": 200,
+      "divisions": 0,
+      "helperCount": 0,
+      "estimatedLinesPerHelper": 0,
+      "estimatedLinesTotal": 0
+    }
+  }
+}
+
+=== WebGL ===
+{
+  "available": true,
+  "vendor": "Google Inc. (NVIDIA)",
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+  "shadingLanguageVersion": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+  "maxTextureSize": 16384,
+  "maxRenderbufferSize": 16384,
+  "maxCombinedTextureImageUnits": 32,
+  "maxVertexUniformVectors": 4095,
+  "maxFragmentUniformVectors": 1024
+}
+
+=== Renderer ===
+{
+  "render": {
+    "calls": 1,
+    "triangles": 1,
+    "points": 0,
+    "lines": 0,
+    "frame": 15
+  },
+  "memory": {
+    "geometries": 4,
+    "textures": 12
+  },
+  "capabilities": {
+    "isWebGL2": true,
+    "maxTextures": 16,
+    "maxTextureSize": 16384,
+    "maxCubemapSize": 16384,
+    "maxVertexTextures": 16,
+    "maxAnisotropy": null,
+    "precision": "highp",
+    "logarithmicDepthBuffer": false
+  }
+}
+
+=== Browser ===
+{
+  "url": "https://192.168.12.239:8080/game.html",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  "platform": "Win32",
+  "language": "en-US",
+  "hardwareConcurrency": 32,
+  "deviceMemoryGb": 8,
+  "viewport": {
+    "width": 3440,
+    "height": 1305
+  },
+  "screen": {
+    "width": 3440,
+    "height": 1440
+  },
+  "devicePixelRatio": 1
+}
+
+=== Performance ===
+{
+  "nowMs": 821,
+  "timeOrigin": 1773090990854.2,
+  "memory": {
+    "jsHeapSizeLimit": 4294967296,
+    "totalJSHeapSize": 13966791,
+    "usedJSHeapSize": 9539755
+  }
+}
+
+=== Frames ===
+[
+  {
+    "nowMs": 722.464,
+    "deltaMs": 0.964,
+    "sceneChildren": 9,
+    "frameSpikeCount": 0,
+    "enemyCount": 0,
+    "playerProjectiles": 0,
+    "enemyProjectiles": 0,
+    "renderCalls": 1,
+    "renderTriangles": 1,
+    "renderPoints": 0,
+    "renderLines": 0,
+    "geometries": 4,
+    "textures": 12,
+    "cameraPos": {
+      "x": 0,
+      "y": 1.7,
+      "z": 5
+    }
+  }
+]
+
+=== Extra ===
+{
+  "reason": {}
+}
+
+=== Breadcrumbs ===
+[
+  {
+    "t": "2026-03-09T21:16:31.674Z",
+    "type": "window.unhandledrejection",
+    "data": {
+      "reason": null
+    }
+  }
+]

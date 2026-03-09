@@ -240,9 +240,9 @@ scale:  {  x:  1, y:  1, z:  1 }
 		material: {
   horizontalRepeat:  1,
   verticalRepeat:  2,
-  baseColorMap: "assets/textures/metal01/basecolor.png",
-  normalMap: "assets/textures/metal01/normal.png",
-  ormMap: "assets/textures/metal01/orm.png",
+  baseColorMap: "assets/textures/metal01/basecolor.ktx2",
+  normalMap: "assets/textures/metal01/normal.ktx2",
+  ormMap: "assets/textures/metal01/orm.ktx2",
   roughness: 0.0,       // base roughness, multiplied by roughnessMap
   metalness: 1.0,       
   color: 0xffffff,      // optional tint

@@ -4,6 +4,7 @@ window.ENEMY_INSTANCES = ENEMY_INSTANCES;
 
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { EXRLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/EXRLoader.js';
+import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 
 import { Enemy } from "./enemy.js";
 import { Door } from "./sceneLoader/door.js";
@@ -101,6 +102,7 @@ window.sceneLoader = this;
     // GLTF cache (keyed by model path). We cache the loaded source scene once,
     // then return clones so geometry/material/texture GPU assets are shared.
     this._gltfLoader = new GLTFLoader();
+    configureGltfLoaderForKtx2(this._gltfLoader, this.renderer);
     this.modelCache = new Map();
 
     // HDRI/PMREM state and cache (keyed by exr file path)

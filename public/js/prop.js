@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { loadTextureWithSupport } from './textureSupport.js';
 
 function ensureGeometryUv2(geometry) {
   if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
@@ -205,7 +206,6 @@ console.log("indestructible?", this.indestructible);
   //
   _createMesh() {
     const geo = new THREE.BoxGeometry(this.size.x, this.size.y, this.size.z);
-    const texLoader = new THREE.TextureLoader();
 
     const matParams = {
       color: this.materialDef.color ?? 0x8b5a2b,
@@ -220,7 +220,8 @@ console.log("indestructible?", this.indestructible);
     const repeatY = this.materialDef.verticalRepeat ?? 1;
 
     const loadTex = (path) => {
-      const tex = texLoader.load(path);
+      const tex = loadTextureWithSupport(path);
+      if (!tex) return null;
       if (repeatX !== 1 || repeatY !== 1) {
         tex.wrapS = THREE.RepeatWrapping;
         tex.wrapT = THREE.RepeatWrapping;

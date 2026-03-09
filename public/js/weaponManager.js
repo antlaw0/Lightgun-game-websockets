@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { WEAPON_DEFS } from './weapons.js';
+import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 // Do not import normalize/ground utilities for weapon rigs; keep original bind/scale
 
 export class WeaponManager {
@@ -8,6 +9,7 @@ export class WeaponManager {
         this.scene = scene;
         this.camera = camera;
         this.loader = new GLTFLoader();
+        configureGltfLoaderForKtx2(this.loader);
         // muzzle flash texture and active emitter list
         try {
             // correct path where the texture lives: public/assets/muzzleFlash.png

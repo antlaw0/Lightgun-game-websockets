@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 import { getWeapon } from "./weapons.js";
 import { createMannequin } from './humanoid.js';
 import { createWalkRunAnimations } from './animations.js';
@@ -643,7 +644,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
         const shouldLoadAk = rifleKeywords.some(k => weaponName.includes(k));
         const akPath = 'assets/models/ak47.glb';
         if (shouldLoadAk) {
-          const loader = new GLTFLoader();
+          const loader = configureGltfLoaderForKtx2(new GLTFLoader());
           loader.load(akPath,
             (gltf) => {
               try {

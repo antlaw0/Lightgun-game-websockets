@@ -1,6 +1,7 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js";
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { Prop } from "./prop.js";
+import { configureGltfLoaderForKtx2, loadTextureWithSupport } from './textureSupport.js';
 
 /*
 =====================================================
@@ -16,8 +17,6 @@ const DEBUG_MATERIALS = false;
 =====================================================
 */
 
-const textureLoader = new THREE.TextureLoader();
-
 function ensureUv2OnMesh(mesh) {
   const geometry = mesh?.geometry;
   if (!geometry || !geometry.attributes || geometry.attributes.uv2 || !geometry.attributes.uv) return;
@@ -27,12 +26,14 @@ function ensureUv2OnMesh(mesh) {
 function loadTexture(path, repeatX = 1, repeatY = 1, colorSpace = null) {
   if (!path) return null;
 
-  const tex = textureLoader.load(
+  const tex = loadTextureWithSupport(
     path,
     () => console.log("Texture loaded"),
     undefined,
     () => console.error("Texture failed")
   );
+
+  if (!tex) return null;
 
   if (colorSpace) tex.colorSpace = colorSpace;
   tex.wrapS = THREE.RepeatWrapping;
@@ -280,6 +281,7 @@ function buildCrate(data) {
 */
 
 const gltfLoader = new GLTFLoader();
+configureGltfLoaderForKtx2(gltfLoader);
 
 function buildGLBPrefab(url, type, data) {
   const prop = new Prop({

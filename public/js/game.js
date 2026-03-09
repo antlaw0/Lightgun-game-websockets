@@ -6,6 +6,7 @@ import { EnemyVoiceManager } from "./EnemyVoiceManager.js";
 import { AudioManager } from "./audio/AudioManager.js";
 import { AUDIO_MANIFEST } from "./audio/audioManifest.js";
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
+import { configureGltfLoaderForKtx2, configureKtx2ForRenderer } from './textureSupport.js';
 import { createRenderPipeline } from './game/renderPipeline.js';
 import { attachInputController } from './game/inputController.js';
 import { attachEditorInputController } from './game/editorInputController.js';
@@ -401,7 +402,7 @@ weaponManager
 
 // Load rocket projectile model
 let rocketModel = null;
-new GLTFLoader().load('assets/models/weapons/rocket.glb', (gltf) => {
+configureGltfLoaderForKtx2(new GLTFLoader()).load('assets/models/weapons/rocket.glb', (gltf) => {
     rocketModel = gltf.scene;
     rocketModel.traverse(c => {
         if (c.isMesh) {
@@ -1260,6 +1261,10 @@ const {
   width: cw,
   height: ch
 });
+
+window.engine = window.engine || {};
+window.engine.renderer = renderer;
+configureKtx2ForRenderer(renderer);
 
 window.setRenderQuality = function(quality = 'medium') {
   applyRenderQualityProfile(quality);
