@@ -304,6 +304,15 @@ function buildGLBPrefab(url, type, data) {
 
   gltfLoader.load(url, (gltf) => {
     const model = gltf.scene;
+
+    if (data.alignToFloor === true) {
+      model.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(model);
+      if (!bounds.isEmpty() && Number.isFinite(bounds.min.y)) {
+        model.position.y -= bounds.min.y;
+      }
+    }
+
     model.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;

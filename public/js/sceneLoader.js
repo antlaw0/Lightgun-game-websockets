@@ -48,6 +48,7 @@ import {
   notifyLoadedEvents,
   registerSpawnTestExplosionGlobal
 } from "./sceneLoader/events.js";
+import { buildMergedStaticShell, setStaticShellMerged } from "./sceneLoader/staticBatching.js";
 
 const SHADOW_MAP_MAX_SIZE = 1024;
 
@@ -463,6 +464,14 @@ _applyCameraSettings() {
 
   _loadSceneData(sceneDef, isPending) {
     return loadSceneDataEntities(this, sceneDef, isPending);
+  }
+
+  _buildMergedStaticShell() {
+    return buildMergedStaticShell(this);
+  }
+
+  setStaticShellMerged(shouldMerge) {
+    return setStaticShellMerged(this, !!shouldMerge);
   }
 
   // Legacy room methods removed - scenes now use absolute world positions

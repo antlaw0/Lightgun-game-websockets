@@ -75,8 +75,9 @@ export const Scene_starting_Room = {
         
       },
 	  	{
-	type:  "lookAt",
+        type: "prefab",
 position:  {  x:  28, y:  1.8, z:  4.31 },
+        alignToFloor: true,
 duration:  1000,
 	triggerNextScene: true
 	}
@@ -270,19 +271,20 @@ intensity: 1.2,
       },
 
 	
-	{
+{
     id: "walkway",
     type: "prefab",
     prefab: "metalwalkway.glb",
+  alignToFloor: true,
     position: {
-        x: 15,
+        x: 10,
         y: 0,
-        z: 3
+        z: 1
     },
     scale: {
-        x: 8,
-        y: 3,
-        z: 1
+        x: 0.5,
+        y: 6,
+        z: 12
     },
     hp: 9999,
     maxHp: 9999,
@@ -296,22 +298,21 @@ intensity: 1.2,
     ],
     rotation: {
         x: 0,
-        y: 0,
+        y: 1.5707963267948966,
         z: 0
     },
     coverType: "none",
-    _convertedToCenter: true,
     size: {
         x: 8,
-        y: 10,
-        z: 8
+        y: 3,
+        z: 1
     }
-},
-  {
+}, 
+ {
 id:  "forklift",
 type:  "prefab",
 prefab:  "forklift.glb",
-position:  {  x:  3, y:  0, z:  12 },
+position:  {  x:  5, y:  0, z:  12 },
 scale:  {  x:  2, y:  2, z:  2  },
 hp:  9999,
 maxHp: 9999,

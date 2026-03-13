@@ -86,6 +86,7 @@ let applyEditorRenderPerformanceMode = () => {};
 function setEditorMode(enabled) {
   window.engine.isEditorMode = !!enabled;
   const g = window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
+  const sl = window.sceneLoader;
 
   if (window.engine.isEditorMode) {
     // disable enemy AI and combat, enable free FPS movement
@@ -95,6 +96,7 @@ function setEditorMode(enabled) {
     // Restore last active grid size, if any, when re-entering editor mode.
     if (!g.size && g.lastEditorSize) g.size = g.lastEditorSize;
     applyEditorRenderPerformanceMode(true);
+    try { sl?.setStaticShellMerged?.(false); } catch (e) { console.warn('Editor mode unmerge failed', e); }
     console.log('[EDITOR] Editor mode ENABLED');
     try { if (window.speak) window.speak('Editor mode on', { interrupt: true }); } catch(e){}
     toggleLightHelpers(true);
@@ -105,6 +107,7 @@ function setEditorMode(enabled) {
     if (g.size > 0) g.lastEditorSize = g.size;
     g.size = 0;
     applyEditorRenderPerformanceMode(false);
+    try { sl?.setStaticShellMerged?.(true); } catch (e) { console.warn('Editor mode merge failed', e); }
     console.log('[EDITOR] Editor mode DISABLED');
     try { if (window.speak) window.speak('Editor mode off', { interrupt: true }); } catch(e){}
     toggleLightHelpers(false);

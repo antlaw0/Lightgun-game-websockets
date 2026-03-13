@@ -1,6 +1,7 @@
 export function loadSceneLifecycle(self, sceneDef) {
   self.unloadScene();
   self._loadSceneData(sceneDef, false);
+  self._buildMergedStaticShell?.();
   self._applyHdriForScene(sceneDef);
   self._applyCameraSettings(sceneDef);
   self._notifyLoaded();
@@ -52,6 +53,8 @@ export function commitPendingSceneLifecycle(self) {
   self.sceneLights.forEach((l) => {
     l.visible = true;
   });
+
+  self._buildMergedStaticShell?.();
 
   self._applyHdriForScene(self.sceneDef);
   self._applyCameraSettings(self.sceneDef);

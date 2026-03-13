@@ -66,6 +66,14 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
+
+	{
+	id:  "hallway",
+type: "prefab",
+prefab:  "hallway.glb",
+position:  {  x:  20, y:  0, z:  0  },
+scale:  {  x:  5, y:  5, z:  5 }	
+	},
 {
     id: "walkway",
     type: "prefab",
