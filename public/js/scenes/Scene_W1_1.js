@@ -17,21 +17,15 @@ export const Scene_W1_1 = {
     depth: 30
   },
 
-  cameraRails: {
-    intro: [],
-
-    exit: [
-      {
-        type: "moveTo",
-        position: { x: 8.0, y: 1.7, z: -8.0 },
-        duration: 7000
-        
-      },
-	    
-			{ type: 'rotate', rotation:  -90, duration:  1000},
-	  {  type:  'pause', duration:  1000, triggerNextScene:  true}
-    ]
-  },
+  cameraRails: [
+    {
+      type: "moveTo",
+      position: { x: 8.0, y: 1.7, z: -8.0 },
+      duration: 7000
+    },
+    { type: 'rotate', rotation: -90, duration: 1000 },
+    { type: 'pause', duration: 1000, triggerNextScene: true }
+  ],
 
   camera: {
     position: { x: 0, y: 1.7, z: 0 },

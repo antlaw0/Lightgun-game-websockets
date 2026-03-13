@@ -8,6 +8,7 @@ export class SceneManager {
         this.sceneLoader = sceneLoader;
         this.currentScene = null;
         this.previousScene = null;
+        this._cameraRailsToken = null;
 
         this.manualDoorAnimations = [];
 
@@ -112,6 +113,7 @@ export class SceneManager {
     }
 
     async loadScene(sceneDef) {
+        this._cancelActiveCameraRails();
         this.currentScene = sceneDef;
 
         if (this.sceneLoader.hasPendingScene() &&
@@ -120,15 +122,87 @@ export class SceneManager {
         } else {
             this.sceneLoader.loadScene(sceneDef);
         }
+
+        this._startSceneCameraRails(sceneDef);
     }
 
     async onSceneCompleted(scene) {
         if (scene !== this.currentScene) return;
 
+        // If this scene uses camera rails, scene progression is expected to be
+        // controlled by rails steps (typically a step with triggerNextScene).
+        const hasRails = this._getCameraRailsSteps(scene).length > 0;
+        if (hasRails) {
+            return;
+        }
+
+        await this._loadNextScene(scene);
+    }
+
+    async _loadNextScene(scene) {
+
         if (scene.nextScene) {
             this.sceneLoader.preloadScene(scene.nextScene);
             await this.loadScene(scene.nextScene);
         }
+    }
+
+    _startSceneCameraRails(sceneDef) {
+        const steps = this._getCameraRailsSteps(sceneDef);
+        if (!steps.length) return;
+
+        const token = { cancelled: false };
+        this._cameraRailsToken = token;
+
+        runCameraRails(this.camera, steps, {
+            cancelToken: token,
+            sceneLoader: this.sceneLoader,
+            defaultContinueCondition: () => this._countAliveEnemies() === 0,
+            onTriggerNextScene: async () => {
+                if (token.cancelled) return;
+                await this._loadNextScene(sceneDef);
+            }
+        }).catch((err) => {
+            if (token.cancelled) return;
+            console.warn('[SceneManager] camera rails failed:', err);
+        });
+    }
+
+    _cancelActiveCameraRails() {
+        if (this._cameraRailsToken) {
+            this._cameraRailsToken.cancelled = true;
+            this._cameraRailsToken = null;
+        }
+    }
+
+    _countAliveEnemies() {
+        const enemies = Array.isArray(this.sceneLoader?.enemies) ? this.sceneLoader.enemies : [];
+        let alive = 0;
+        for (const enemy of enemies) {
+            if (!enemy) continue;
+            if (enemy._isDead || enemy._isDying) continue;
+            if (enemy._isActive === false) continue;
+            alive++;
+        }
+        return alive;
+    }
+
+    _getCameraRailsSteps(sceneDef) {
+        if (!sceneDef || !sceneDef.cameraRails) return [];
+
+        const rails = sceneDef.cameraRails;
+        if (Array.isArray(rails)) return rails;
+        if (Array.isArray(rails.steps)) return rails.steps;
+
+        // Backward compatibility for older schema: { intro: [], exit: [] }
+        if (Array.isArray(rails.intro) || Array.isArray(rails.exit)) {
+            return [
+                ...(Array.isArray(rails.intro) ? rails.intro : []),
+                ...(Array.isArray(rails.exit) ? rails.exit : [])
+            ];
+        }
+
+        return [];
     }
 
     update(dt) {
@@ -147,6 +221,7 @@ export class SceneManager {
     }
 
     destroy() {
+        this._cancelActiveCameraRails();
         try { window.removeEventListener('keydown', this._onKeyDown); } catch (e) {}
         try { window.removeEventListener('sceneComplete', this._onSceneComplete); } catch (e) {}
         this.manualDoorAnimations = [];

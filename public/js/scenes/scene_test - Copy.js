@@ -17,10 +17,7 @@ export const scene_test = {
     depth: 50
   },
 
-  cameraRails: {
-    intro: [],
-    exit: []
-  },
+  cameraRails: [],
 
   camera: {
     position: { x: 0, y: 1.7, z: 0 },

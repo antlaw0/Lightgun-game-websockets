@@ -4,11 +4,18 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.m
  * Run camera rails steps.
  * @param {THREE.Camera} camera 
  * @param {Array} steps - Array of step objects
- * @param {Function} onTriggerNextScene - optional callback if a step has triggerNextScene: true
+ * @param {Function|Object} onTriggerNextSceneOrOptions - legacy callback or options object
+ * @param {Object} cancelTokenArg - legacy cancellation token (used when arg3 is callback)
  */
-export async function runCameraRails(camera, steps, onTriggerNextScene, cancelToken) {
-  for (const step of steps) {
-    if (cancelToken && cancelToken.cancelled) {
+export async function runCameraRails(camera, steps, onTriggerNextSceneOrOptions, cancelTokenArg) {
+  const options = normalizeOptions(onTriggerNextSceneOrOptions, cancelTokenArg);
+  const onTriggerNextScene = options.onTriggerNextScene;
+  const cancelToken = options.cancelToken;
+  const defaultContinueCondition = options.defaultContinueCondition;
+  const pollIntervalMs = Math.max(16, options.pollIntervalMs || 100);
+
+  for (const step of steps || []) {
+    if (isCancelled(cancelToken)) {
       // caller requested cancellation; stop processing further steps
       break;
     }
@@ -20,19 +27,48 @@ export async function runCameraRails(camera, steps, onTriggerNextScene, cancelTo
 
     switch (step.type) {
       case 'moveTo':
-        await moveTo(camera, step.position, step.duration);
+        await moveTo(camera, step.position, step.duration, cancelToken);
         break;
 
       case 'lookAt':
-          await lookAt(camera, step.target || step.position, step.duration);
+        await lookAt(camera, step.target || step.position, step.duration, cancelToken);
         break;
 
       case 'rotate':
-        await rotate(camera, step.rotation, step.duration);
+        await rotate(camera, step.rotation, step.duration, cancelToken);
         break;
 
       case 'pause':
-        await pause(step.duration);
+        await pause(step.duration, cancelToken);
+        break;
+
+      case 'prefab':
+        // Compatibility: some authored rails used type "prefab" as a timed
+        // transition marker. If a position exists, treat it as a move.
+        if (step.position) {
+          await moveTo(camera, step.position, step.duration, cancelToken);
+        } else {
+          await pause(step.duration, cancelToken);
+        }
+        break;
+
+      case 'stop':
+        // Stop markers are where gameplay happens. We invoke onReach first so
+        // steps can spawn enemies/sequences, then we wait until continue condition passes.
+        if (typeof step.onReach === 'function') {
+          await step.onReach();
+        }
+        await waitOnStop(step, {
+          camera,
+          sceneLoader: options.sceneLoader,
+          cancelToken,
+          defaultContinueCondition,
+          pollIntervalMs
+        });
+        break;
+
+      case 'openDoor':
+        await openDoorStep(step, options.sceneLoader, cancelToken);
         break;
 
       default:
@@ -40,12 +76,12 @@ export async function runCameraRails(camera, steps, onTriggerNextScene, cancelTo
     }
 
     // Trigger optional step callback
-    if (typeof step.onReach === 'function') {
+    if (step.type !== 'stop' && typeof step.onReach === 'function') {
       await step.onReach();
     }
 
     // Trigger scene transition if flag is set
-    if (step.triggerNextScene && typeof onTriggerNextScene === 'function') {
+    if (!isCancelled(cancelToken) && step.triggerNextScene && typeof onTriggerNextScene === 'function') {
       await onTriggerNextScene();
       // if the callback started a transition it may want to stop the rest of
       // the rails; callback can set cancelToken.cancelled on the object it was
@@ -56,11 +92,142 @@ export async function runCameraRails(camera, steps, onTriggerNextScene, cancelTo
 
 // --- helpers ---
 
-function pause(duration) {
-  return new Promise(resolve => setTimeout(resolve, duration));
+function normalizeOptions(onTriggerNextSceneOrOptions, cancelTokenArg) {
+  if (typeof onTriggerNextSceneOrOptions === 'function') {
+    return {
+      onTriggerNextScene: onTriggerNextSceneOrOptions,
+      cancelToken: cancelTokenArg || null,
+      defaultContinueCondition: null,
+      pollIntervalMs: 100
+    };
+  }
+
+  const opts = onTriggerNextSceneOrOptions && typeof onTriggerNextSceneOrOptions === 'object'
+    ? onTriggerNextSceneOrOptions
+    : {};
+
+  return {
+    onTriggerNextScene: opts.onTriggerNextScene,
+    cancelToken: opts.cancelToken || null,
+    sceneLoader: opts.sceneLoader || null,
+    defaultContinueCondition: opts.defaultContinueCondition || null,
+    pollIntervalMs: opts.pollIntervalMs || 100
+  };
 }
 
-function moveTo(camera, position, duration) {
+function isCancelled(cancelToken) {
+  return !!(cancelToken && cancelToken.cancelled);
+}
+
+function pause(duration, cancelToken) {
+  const ms = Math.max(0, Number(duration) || 0);
+  if (ms <= 0 || isCancelled(cancelToken)) return Promise.resolve();
+
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms);
+    const checker = setInterval(() => {
+      if (!isCancelled(cancelToken)) return;
+      clearTimeout(timer);
+      clearInterval(checker);
+      resolve();
+    }, 30);
+
+    setTimeout(() => clearInterval(checker), ms + 100);
+  });
+}
+
+async function waitOnStop(step, context) {
+  if (typeof step.duration === 'number' && step.duration > 0) {
+    await pause(step.duration, context.cancelToken);
+  }
+
+  if (isCancelled(context.cancelToken)) return;
+
+  const condition = step.continueWhen || step.continueCondition || context.defaultContinueCondition;
+  if (!condition) return;
+
+  await waitForCondition(() => evaluateCondition(condition, context), context.cancelToken, context.pollIntervalMs);
+}
+
+async function evaluateCondition(condition, context) {
+  if (typeof condition === 'function') {
+    return !!(await condition({ camera: context.camera, sceneLoader: context.sceneLoader }));
+  }
+  if (typeof condition === 'string') {
+    const token = condition.trim().toLowerCase();
+    if (token === 'always') return true;
+    if (token === 'allenemiesdead') {
+      const enemies = Array.isArray(context.sceneLoader?.enemies) ? context.sceneLoader.enemies : [];
+      return enemies.every((enemy) => {
+        if (!enemy) return true;
+        if (enemy._isActive === false) return true;
+        return !!(enemy._isDead || enemy._isDying);
+      });
+    }
+  }
+  return !!condition;
+}
+
+function openDoorStep(step, sceneLoader, cancelToken) {
+  return new Promise((resolve) => {
+    if (isCancelled(cancelToken)) {
+      resolve();
+      return;
+    }
+
+    const doorId = step.doorId || step.id;
+    if (!doorId) {
+      console.warn('openDoor step missing doorId:', step);
+      resolve();
+      return;
+    }
+
+    const door = sceneLoader?.propsById?.[doorId] || null;
+    if (!door) {
+      console.warn('openDoor step could not find door:', doorId);
+      resolve();
+      return;
+    }
+
+    if (typeof door.openDoor === 'function') {
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+
+      try {
+        door.openDoor(done);
+      } catch (e) {
+        console.warn('openDoor step failed:', doorId, e);
+        done();
+        return;
+      }
+
+      if (step.waitForComplete === false) {
+        done();
+      }
+
+      return;
+    }
+
+    resolve();
+  });
+}
+
+async function waitForCondition(checkFn, cancelToken, pollIntervalMs) {
+  while (!isCancelled(cancelToken)) {
+    try {
+      if (await checkFn()) return;
+    } catch (e) {
+      console.warn('Camera rails continue condition failed:', e);
+    }
+    await pause(pollIntervalMs, cancelToken);
+  }
+}
+
+function moveTo(camera, position, duration, cancelToken) {
   return new Promise(resolve => {
     const start = camera.position.clone();
     const end = new THREE.Vector3(position.x, position.y, position.z);
@@ -74,7 +241,7 @@ function moveTo(camera, position, duration) {
       // Cancel any remaining scheduled footsteps when move completes
       footstepController.cancel();
       resolve();
-    });
+    }, cancelToken);
   });
 }
 
@@ -132,7 +299,7 @@ function scheduleFootstepsDuringMove(startVec, endVec, durationMs) {
   };
 }
 
-function lookAt(camera, target, duration) {
+function lookAt(camera, target, duration, cancelToken) {
 
   if (!target || typeof target.x !== "number") {
     console.error("Invalid lookAt target:", target);
@@ -148,10 +315,10 @@ function lookAt(camera, target, duration) {
 
     animateLerp(duration, t => {
       camera.quaternion.slerp(endQuat, t);
-    }, resolve);
+    }, resolve, cancelToken);
   });
 }
-function rotate(camera, rotation, duration) {
+function rotate(camera, rotation, duration, cancelToken) {
   return new Promise(resolve => {
     const startQuat = camera.quaternion.clone();
     // Accept numeric rotation as shorthand (degrees around Y), or an object {x,y,z}
@@ -166,16 +333,28 @@ function rotate(camera, rotation, duration) {
 
     animateLerp(duration, t => {
       camera.quaternion.slerp(endQuat, t);
-    }, resolve);
+    }, resolve, cancelToken);
   });
 }
 
-function animateLerp(duration, update, done) {
+function animateLerp(duration, update, done, cancelToken) {
+  const ms = Math.max(0, Number(duration) || 0);
+  if (ms <= 0 || isCancelled(cancelToken)) {
+    update(1);
+    done();
+    return;
+  }
+
   let startTime = null;
 
   function frame(time) {
+    if (isCancelled(cancelToken)) {
+      done();
+      return;
+    }
+
     if (!startTime) startTime = time;
-    const t = Math.min((time - startTime) / duration, 1);
+    const t = Math.min((time - startTime) / ms, 1);
     update(t);
 
     if (t < 1) {

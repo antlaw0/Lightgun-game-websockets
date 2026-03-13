@@ -61,34 +61,76 @@ export const Scene_starting_Room = {
   // when facing it (outward). -1 would reverse the rotation.
   doorOpenDirection: -1,
 
-  cameraRails: {
-    intro: [],
-
-    exit: [
-	  
-	  // move close to the door; the automated system will handle
-      // the final alignment, opening, and walk‑through.
-      {
-        type: "moveTo",
-        position: { x: 26.17, y: 1.7, z: 4.31 },
-        duration: 4000
-        
-      },
-	  	{
-        type: "prefab",
-position:  {  x:  28, y:  1.8, z:  4.31 },
-        alignToFloor: true,
-duration:  1000,
-	triggerNextScene: true
-	}
-
-    ]
+  cameraRails: [
+  {
+	type:  "pause",
+duration:  1000	
   },
+    {
+      type: "moveTo",
+      position: { x: 14.53, y: 1.70, z: 18.94 },
+      duration: 1200
+    },
+    {
+      type: "openDoor",
+      doorId: "door1"
+    },
+    {
+      type: "moveTo",
+      position: { x: 14.80, y: 1.70, z: 14.17 },
+      duration: 2000
+    },
+    {
+      type: "stop",
+      continueWhen: "allEnemiesDead"
+    },
+	    {
+      type: "lookAt",
+position: { x: 26.52, y: 1.70, z: 2.64 },
+      duration: 200
+    },
+
+    {
+      type: "moveTo",
+      position: { x: 26.52, y: 1.70, z: 2.64 },
+      duration: 3600
+    },
+	{
+type:  "lookAt",
+position:  {  x: 28, y: 1.7, z: 2.02 },
+duration:  500
+},
+    {
+      type: "openDoor",
+      doorId: "door2"
+    },
+    {
+      type: "moveTo",
+      position: { x: 35.51, y: 1.70, z: 2.57 },
+      duration: 2600
+    },
+	    {
+      type: "lookAt",
+      position: { x: 36.09, y: 1.70, z: -4.94 },
+      duration: 800
+    },
+
+    {
+      type: "moveTo",
+      position: { x: 36.09, y: 1.70, z: -4.94 },
+      duration: 2400
+    },
+    {
+      type: "pause",
+      duration: 200,
+      triggerNextScene: true
+    }
+  ],
 
   
   camera: {
     position: { x: 15.3, y: 1.7, z: 21.68 },
-    lookAt: { x: 17.3, y: 3.5, z: 20 },
+    lookAt: { x: 15.3, y: 1.7, z: 20 },
     fov: 60,
     near: 0.1,
     far: 200
@@ -429,7 +471,7 @@ position: { x: 4, y: 2.2, z: 18 },
 	  },
 	  
 	  	  {
-    id: "introDoor_object",
+    id: "door1",
     type: "door",
 	model: "assets/models/props/door1.glb",
     position: { x: 14.5, y: 0, z: 18 },
@@ -468,7 +510,7 @@ position: { x: 4, y: 2.2, z: 18 },
 
 
 	  {
-    id: "exitDoor",
+    id: "door2",
     type: "door",
     model: "assets/models/props/door1.glb",
     position: {

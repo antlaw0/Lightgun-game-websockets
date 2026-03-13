@@ -5,10 +5,7 @@ import sounds from "../listOfSounds.js";
 export const scene_test = {
   name: "Weapon Test Range",
 
-  cameraRails: {
-    intro: [],
-    exit: []
-  },
+  cameraRails: [],
 
   camera: {
     position: { x: 8, y: 1.7, z: 12 },
