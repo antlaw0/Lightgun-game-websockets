@@ -327,9 +327,9 @@ intensity: 1.2,
         z: 1
     },
     scale: {
-        x: 0.5,
-        y: 6,
-        z: 12
+        x: 4,
+        y: 3,
+        z: 4
     },
     hp: 9999,
     maxHp: 9999,
@@ -343,7 +343,7 @@ intensity: 1.2,
     ],
     rotation: {
         x: 0,
-        y: 1.5707963267948966,
+        y: 90,
         z: 0
     },
     coverType: "none",
@@ -833,6 +833,7 @@ position: { x: 4, y: 2.2, z: 18 },
 	id:  "grunt_on_walkway",
   def:  "grunt_pistol",
 	position:  {  x:  13,  y:  3.9,  z:  1 },
+  usePositionYAsGround: true,
 	groupId:  1,
 	active:  false,
   behavior: {

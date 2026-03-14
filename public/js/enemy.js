@@ -368,12 +368,16 @@ this._nextTauntTime = null;
     );
 
     // Single source-of-truth for ground height used by all enemies.
-    // Priority: explicit instanceConfig.groundY -> sceneLoader.groundY -> 0
+    // Priority: explicit groundY -> (optional) authored position.y -> scene ground -> 0
+    const usePositionYAsGround = !!(instanceConfig && (instanceConfig.usePositionYAsGround === true || instanceConfig.lockPositionY === true));
+    const hasAuthoredPositionY = !!(instanceConfig && instanceConfig.position && typeof instanceConfig.position.y === 'number');
     this._groundY = (typeof instanceConfig.groundY === 'number')
       ? instanceConfig.groundY
-      : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
-        ? window.sceneLoader.groundY
-        : 0;
+      : (usePositionYAsGround && hasAuthoredPositionY)
+        ? instanceConfig.position.y
+        : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+          ? window.sceneLoader.groundY
+          : 0;
     // Visual Y offset from ground plane (used by fallback mannequin/sprite meshes
     // whose origins are not at the feet). 0 means mesh origin is already ground-aligned.
     this._groundVisualOffsetY = 0;
@@ -384,11 +388,15 @@ this._nextTauntTime = null;
       if (!mesh) return;
       try {
         // Determine groundY from instance config, scene loader, or default to 0
+        const cfgUsePositionYAsGround = !!(instanceCfg && (instanceCfg.usePositionYAsGround === true || instanceCfg.lockPositionY === true));
+        const cfgHasAuthoredPositionY = !!(instanceCfg && instanceCfg.position && typeof instanceCfg.position.y === 'number');
         const groundY = (typeof (instanceCfg && instanceCfg.groundY) === 'number')
           ? instanceCfg.groundY
-          : ((window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
-            ? window.sceneLoader.groundY
-            : 0);
+          : (cfgUsePositionYAsGround && cfgHasAuthoredPositionY)
+            ? instanceCfg.position.y
+            : ((window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+              ? window.sceneLoader.groundY
+              : 0);
 
         // Get target height (defaults to camera height)
         const targetHeight = (defObj && (defObj.desiredHeight || defObj.modelDesiredHeight))

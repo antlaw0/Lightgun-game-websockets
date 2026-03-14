@@ -2,6 +2,8 @@
 // Centralized reusable enemy base definitions
 // Scene instances should reference these via { def: "name", ...overrides }
 
+import voices from "./listOfVoices.js";
+
 const grunt_pistol_def = {
   type: "Grunt",
   displayName: "Grunt",
@@ -23,32 +25,15 @@ const grunt_pistol_def = {
   sprite: "assets/sprites/grunt.png",
 
   voice: {
-    pain: [
-      "assets/sfx/grunt/pain1.ogg",
-      "assets/sfx/grunt/pain2.ogg"
-    ],
-    death: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ],
-    taunt: [
-      "assets/sfx/grunt/taunt1.ogg",
-      "assets/sfx/grunt/taunt2.ogg"
-    ],
-    engage: [
-      "assets/sfx/grunt/engage1.ogg"
-    ]
+    pain: voices.grunt.pain,
+    death: voices.grunt.death,
+    taunt: voices.grunt.taunt,
+    engage: voices.grunt.engage
   }, // end voice
 
-  hitSounds: [
-    "assets/sfx/grunt/hit1.ogg",
-    "assets/sfx/grunt/hit2.ogg"
-  ],
+  hitSounds: voices.grunt.hitSounds,
 
-  deathSounds: [
-    "assets/sfx/grunt/death1.ogg",
-    "assets/sfx/grunt/death2.ogg"
-  ]
+  deathSounds: voices.grunt.deathSounds
 };
 
 export const ENEMY_DEFS = {
@@ -161,6 +146,36 @@ export const ENEMY_DEFS = {
       "assets/sfx/drone/drone_die2.ogg"
     ]
 
-  } // end drone_basic
+  }, // end drone_basic
+
+  swat_rifle_standing_open: {
+    type: "Grunt",
+    displayName: "Grunt Soldier",
+    hp: 40,
+    // Use your provided SWAT model and shooting + dying animations
+    modelUrl: "assets/models/swatguy.glb",
+    animationUrls: {
+      shoot: "assets/animations/swatguy_firing_rifle.glb",
+      dying_rifle: "assets/animations/swatguy_dying.glb",
+      dying: "assets/animations/swatguy_dying.glb"
+    },
+	  voice: {
+    pain: voices.soldier.pain,
+    death: voices.soldier.death,
+    taunt: voices.soldier.taunt,
+    engage: voices.soldier.engage
+  }, // end voice
+
+  hitSounds: voices.soldier.hitSounds,
+
+  deathSounds: voices.soldier.deathSounds,
+    
+    // set an explicit groundY so the loader aligns the model's feet to this height
+    groundY: 0.85,
+    facing: 0,
+    behavior: { pattern: "standInOpen", params: { fireIntervalMs: 900 } 
+	}
+  } // end swat_rifle_standing_open
+
 
 }; // end ENEMY_DEFS
