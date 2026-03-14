@@ -5,6 +5,8 @@
 const grunt_pistol_def = {
   type: "Grunt",
   displayName: "Grunt",
+  aimYawOffset: -Math.PI / 2,
+      
   hp: 40,
 
   modelUrl: "assets/models/exo_red.glb",

@@ -1,6 +1,5 @@
 import sounds from "../listOfSounds.js";
 import { l_shaped_hallway } from "./l_shaped_hallway.js";
-
 // =====================================================
 // OUTER WALL MATERIAL (module scope)
 // =====================================================
@@ -358,7 +357,7 @@ intensity: 1.2,
 id:  "forklift",
 type:  "prefab",
 prefab:  "forklift.glb",
-position:  {  x:  5, y:  0, z:  12 },
+position:  {  x:  7, y:  0, z:  12 },
 scale:  {  x:  2, y:  2, z:  2  },
 hp:  9999,
 maxHp: 9999,
@@ -831,6 +830,20 @@ position: { x: 4, y: 2.2, z: 18 },
 
   enemies: [
   {
+	id:  "grunt_on_walkway",
+  def:  "grunt_pistol",
+	position:  {  x:  13,  y:  3.9,  z:  1 },
+	groupId:  1,
+	active:  false,
+  behavior: {
+    pattern: "standInOpen",
+    params: {
+    fireIntervalMs: 900
+    },
+    stance: "wideGun"
+  },
+  },
+  {
       id: "grunt_1",
   	  active:  false,
   	  groupId: 1,
@@ -846,7 +859,7 @@ position: { x: 4, y: 2.2, z: 18 },
         walk: "assets/animations/walk_pistol.glb",
         shoot: "assets/animations/stand_pistol.glb"
       },
-      position: { x: 4, y: 0.9, z: 3 },
+      position: { x: 10, y: 0.9, z: 3 },
       behavior: {
         pattern: "path",
         params: {
