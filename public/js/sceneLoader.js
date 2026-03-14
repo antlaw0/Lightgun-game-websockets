@@ -259,6 +259,41 @@ window.sceneLoader = this;
     }
   }
 
+  activateEnemyGroup(groupId) {
+    const parsedGroupId = Number(groupId);
+    if (!Number.isFinite(parsedGroupId)) {
+      console.warn('SceneLoader.activateEnemyGroup received non-numeric group id:', groupId);
+      return { activated: 0, totalInGroup: 0 };
+    }
+
+    const enemies = Array.isArray(this.enemies) ? this.enemies : [];
+    let totalInGroup = 0;
+    let activated = 0;
+
+    for (const enemy of enemies) {
+      if (!enemy) continue;
+      const enemyGroupId = Number(enemy.groupId ?? 1);
+      if (!Number.isFinite(enemyGroupId) || enemyGroupId !== parsedGroupId) continue;
+
+      totalInGroup++;
+
+      if (enemy._isDead || enemy._isDying) {
+        continue;
+      }
+
+      const wasActive = !!enemy._isActive;
+      if (typeof enemy.setActive === 'function') {
+        enemy.setActive(true);
+      } else {
+        enemy._isActive = true;
+      }
+      if (!wasActive && enemy._isActive) activated++;
+    }
+
+    console.log(`[SceneLoader] activateEnemyGroup(${parsedGroupId}) activated=${activated} totalInGroup=${totalInGroup}`);
+    return { activated, totalInGroup };
+  }
+
   addExplosion(explosionInstance) {
     if (!explosionInstance) return;
     this.explosions.push(explosionInstance);

@@ -212,9 +212,10 @@ this._hasEngagedPlayer=false
 
 	
 	this.maxHp = this.hp;
-    // Active state: if `active` is explicitly false in the instance config
-    // the enemy is loaded but stays invisible / AI-disabled until activated.
-    this._isActive = (typeof mergedDef.active === 'undefined') ? true : !!mergedDef.active;
+    this.groupId = Number.isFinite(Number(mergedDef.groupId)) ? Number(mergedDef.groupId) : 1;
+    // Active state defaults to false so enemies remain hidden/AI-disabled
+    // until an enemy group activation step enables them.
+    this._isActive = !!mergedDef.active;
     let weaponDef = null;
 
 if (typeof mergedDef.weapon === "string") {
@@ -283,6 +284,9 @@ this._nextTauntTime = null;
     this.setActive = (active) => {
       const now = !!active;
       const was = !!this._isActive;
+      if (now && (this._isDead || this._isDying)) {
+        return;
+      }
       this._isActive = now;
       if (!this.mesh) return;
       try {
@@ -325,15 +329,21 @@ this._nextTauntTime = null;
       const _hidePoll = setInterval(() => {
         try {
           if (this.mesh) {
-            this.mesh.traverse(o => {
-              if (o.isMesh) {
-                o.visible = false;
-                if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
-                  const idx = window.sceneLoader.enemyMeshes.indexOf(o);
-                  if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+            if (this._isActive) {
+              // Enemy may have been activated before async mesh creation completed.
+              // Re-apply current active state now that mesh exists.
+              this.setActive(true);
+            } else {
+              this.mesh.traverse(o => {
+                if (o.isMesh) {
+                  o.visible = false;
+                  if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+                    const idx = window.sceneLoader.enemyMeshes.indexOf(o);
+                    if (idx >= 0) window.sceneLoader.enemyMeshes.splice(idx, 1);
+                  }
                 }
-              }
-            });
+              });
+            }
             clearInterval(_hidePoll);
           }
         } catch (e) {
@@ -355,6 +365,9 @@ this._nextTauntTime = null;
       : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
         ? window.sceneLoader.groundY
         : 0;
+    // Visual Y offset from ground plane (used by fallback mannequin/sprite meshes
+    // whose origins are not at the feet). 0 means mesh origin is already ground-aligned.
+    this._groundVisualOffsetY = 0;
 
     // Helper to consistently scale and ground loaded models so feet sit at groundY
     // Uses the centralized normalizeAndGroundModel utility for consistent behavior
@@ -544,9 +557,23 @@ this.coverObjectId = instanceConfig.coverObject || null;
     if (mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt") {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
-      // place mesh at given position (but snap Y to global ground)
+      // Place at scene position, then align mesh bottom to ground so feet are not submerged.
       this.mesh.position.copy(this.position);
-      try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
+      try {
+        const groundY = (typeof this._groundY === 'number') ? this._groundY : this.mesh.position.y;
+        this.mesh.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(this.mesh);
+        if (bb && isFinite(bb.min.y)) {
+          this.mesh.position.y += (groundY - bb.min.y);
+        } else {
+          this.mesh.position.y = groundY;
+        }
+        this.mesh.updateMatrixWorld(true);
+        this._groundVisualOffsetY = this.mesh.position.y - groundY;
+      } catch (e) {
+        try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (_) {}
+        this._groundVisualOffsetY = 0;
+      }
       this.basePosition = this.mesh.position.clone();
       this.baseRotationY = this.facing;
       this._lastBasePosition = this.basePosition.clone();
@@ -764,6 +791,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
           try { this.sceneGroup.remove(this.mesh); } catch(_){}
           const old = this.mesh;
           this.mesh = res.model;
+          // Attach immediately so later diagnostics/processing don't run on a detached model.
+          try {
+            if (!this.mesh.parent && this.sceneGroup && typeof this.sceneGroup.add === 'function') {
+              this.sceneGroup.add(this.mesh);
+            }
+          } catch (_) {}
           // Immediately ensure SkinnedMesh parts are bound and materials support skinning
           try {
             this.mesh.traverse(o => {
@@ -863,7 +896,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
             // 8) Confirm the animated object is attached to the scene
             try {
               console.log(`[DIAG Enemy ${this.id}] mesh.parent =`, this.mesh.parent ? (this.mesh.parent.name || this.mesh.parent.type) : null);
-              if (!this.mesh.parent) { console.error(`[DIAG Enemy ${this.id}] mesh.parent is null; model is not attached to scene`); /* do not throw */ }
+              if (!this.mesh.parent) {
+                try {
+                  if (this.sceneGroup && typeof this.sceneGroup.add === 'function') this.sceneGroup.add(this.mesh);
+                } catch (_) {}
+                console.warn(`[DIAG Enemy ${this.id}] mesh.parent was null; attempted auto-attach to sceneGroup`);
+              }
             } catch (e) { console.error(e); }
 
             // Diagnostic block complete
@@ -923,49 +961,25 @@ this.coverObjectId = instanceConfig.coverObject || null;
             this.mesh.position.copy(preservePos);
           } catch(_){}
           try { this.mesh.rotation.y = this.baseRotationY; } catch(_){ }
-          // Apply model scaling: prefer explicit `modelScale` on the enemy definition,
-          // otherwise auto-scale the glTF to a reasonable target height so it matches
-          // the previous procedural mannequin size and doesn't appear gigantic.
+          // `loadCharacter` already normalizes GLB scale/grounding.
+          // Only apply explicit authored overrides here; do not auto-rescale again.
           try {
-            const desiredHeight = 1.7; // target height in world units
-            // allow scene author to override with either an exact scalar or percent
+            // Allow scene author to override with either an exact scalar or percent.
             const explicitScale = mergedDef.modelScale || instanceConfig.modelScale || null;
             const explicitPercent = mergedDef.modelScalePercent ?? instanceConfig.modelScalePercent ?? null;
 
-            // Robust auto-scaling behavior:
-            // - If `modelScale` is provided, use it directly (explicit override).
-            // - Otherwise compute an auto-scale so model height == `desiredHeight`.
-            // - If `modelScalePercent` is provided, interpret it as a multiplier of the auto-scale
-            //   (e.g., 50 -> half the auto-scale, 100 -> auto-scale, 200 -> double the auto-scale).
             try {
-              // measure native bounds at scale 1 to compute auto-scale
-              this.mesh.scale.setScalar(1);
-              this.mesh.updateMatrixWorld(true);
-              const box = new THREE.Box3().setFromObject(this.mesh);
-              const size = new THREE.Vector3();
-              box.getSize(size);
-              const height = size.y || 1.0;
-
-              const autoScale = (height > 0.001) ? (desiredHeight / height) : 0.02;
-
-              let finalScale = autoScale;
               if (explicitScale !== null && explicitScale !== undefined) {
-                finalScale = Number(explicitScale) || autoScale;
+                const s = Number(explicitScale);
+                if (isFinite(s) && s > 0) this.mesh.scale.setScalar(s);
               } else if (explicitPercent !== null && explicitPercent !== undefined) {
                 const p = Number(explicitPercent) || 0;
                 const percentScalar = p / 100;
-                finalScale = autoScale * percentScalar;
+                if (isFinite(percentScalar) && percentScalar > 0) this.mesh.scale.multiplyScalar(percentScalar);
               }
-
-              // Guard against extreme or non-finite values from malformed FBX/GLB assets
-              if (!isFinite(finalScale) || Number.isNaN(finalScale)) finalScale = autoScale;
-              // clamp to a sensible range so models don't become microscopic or gigantic
-              finalScale = THREE.MathUtils.clamp(finalScale, 0.02, 5);
-
-              this.mesh.scale.setScalar(finalScale);
               this.mesh.updateMatrixWorld(true);
             } catch (e) {
-              // if scaling computation fails, leave mesh scale unchanged
+              // If override scaling fails, leave mesh scale unchanged.
             }
 
             // after scaling, align feet to basePosition.y so model sits on the floor
@@ -1722,16 +1736,44 @@ this.coverObjectId = instanceConfig.coverObject || null;
             const handBone = (this.mesh.skeleton && this.mesh.skeleton.bones) ? this.mesh.skeleton.bones.find(b => b.name === 'hand_r') : this.mesh.getObjectByName('hand_r');
             if (handBone) handBone.add(this.weaponMesh); else this.mesh.add(this.weaponMesh);
           }
-          // Ensure the loaded model is grounded to the enemy base position to avoid floating/T-poses
+          // Ensure loaded model feet are grounded and preserve visual ground offset.
           try {
-            const groundY = (typeof this._groundY === 'number') ? this._groundY : ((this.basePosition && typeof this.basePosition.y === 'number') ? this.basePosition.y : 0);
-            // Force mesh world Y to equal groundY (preserve x/z)
+            const groundY = (typeof this._groundY === 'number')
+              ? this._groundY
+              : ((this.basePosition && typeof this.basePosition.y === 'number') ? this.basePosition.y : 0);
             if (this.mesh) {
-              this.mesh.position.y = groundY;
               this.mesh.updateMatrixWorld(true);
+
+              // Prefer foot-bone grounding, then skinned-vertex sample, then bbox min.
+              let minY = null;
+              try {
+                const footY = findFootBonesMinY(this.mesh);
+                if (isFinite(footY)) minY = footY;
+              } catch (_) {}
+
+              if (!isFinite(minY)) {
+                try {
+                  const sk = computeSkinnedMeshesMinMaxY(this.mesh, 800);
+                  if (sk && isFinite(sk.minY)) minY = sk.minY;
+                } catch (_) {}
+              }
+
+              if (!isFinite(minY)) {
+                try {
+                  const bb = new THREE.Box3().setFromObject(this.mesh);
+                  if (bb && isFinite(bb.min.y)) minY = bb.min.y;
+                } catch (_) {}
+              }
+
+              if (isFinite(minY)) {
+                this.mesh.position.y += (groundY - minY);
+              }
+              this.mesh.updateMatrixWorld(true);
+              this._groundVisualOffsetY = this.mesh.position.y - groundY;
             }
-            // ensure basePosition reflects groundY
-            try { if (!this.basePosition) this.basePosition = this.mesh.position.clone(); this.basePosition.y = groundY; } catch(_){}
+
+            // basePosition remains logical ground anchor for behavior movement.
+            try { if (!this.basePosition) this.basePosition = this.mesh.position.clone(); this.basePosition.y = groundY; } catch(_){ }
           } catch (e) { }
           // Ensure basePosition and related targets are initialized for loaded models
           try {
@@ -1751,9 +1793,16 @@ this.coverObjectId = instanceConfig.coverObject || null;
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
       this.mesh = new THREE.Mesh(plane, mat);
 
-      // place mesh at given position
+      // Place at scene position, then align sprite bottom edge to ground.
       this.mesh.position.copy(this.position);
-      try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (e) {}
+      try {
+        const groundY = (typeof this._groundY === 'number') ? this._groundY : this.mesh.position.y;
+        this.mesh.position.y = groundY + (plane.parameters.height * 0.5);
+        this._groundVisualOffsetY = this.mesh.position.y - groundY;
+      } catch (e) {
+        try { if (typeof this._groundY === 'number') this.mesh.position.y = this._groundY; } catch (_) {}
+        this._groundVisualOffsetY = 0;
+      }
       this.basePosition = this.mesh.position.clone(); // used for lerping back
       this.baseRotationY = this.facing;
       this._lastBasePosition = this.basePosition.clone();
@@ -2036,6 +2085,78 @@ player._playRandomTaunt();
 update(deltaMs, nowMs, player) {
   if (this._isDead) return;
   if (!this._isActive) return; // inactive enemies do not run AI or interact
+
+  // Runtime self-heal: active enemies must be attached and visible.
+  // This protects against async load races and accidental hidden state.
+  try {
+    if (this.mesh) {
+      if (!this.mesh.parent && this.sceneGroup && typeof this.sceneGroup.add === 'function') {
+        this.sceneGroup.add(this.mesh);
+      }
+
+      this.mesh.visible = true;
+      this.mesh.traverse((o) => {
+        if (!o.isMesh) return;
+        o.visible = true;
+        o.frustumCulled = false;
+        o.userData = Object.assign({}, o.userData || {}, { enemyId: this.id });
+        if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes) && !window.sceneLoader.enemyMeshes.includes(o)) {
+          window.sceneLoader.enemyMeshes.push(o);
+        }
+      });
+
+      // One-time scale sanity check for models that imported with extreme bounds.
+      if (!this._validatedVisualScale) {
+        this._validatedVisualScale = true;
+        const box = new THREE.Box3().setFromObject(this.mesh);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const h = Number(size.y) || 0;
+        if (h > 0 && h < 0.25) {
+          const factor = THREE.MathUtils.clamp(1.7 / h, 1, 20000);
+          this.mesh.scale.multiplyScalar(factor);
+          this.mesh.updateMatrixWorld(true);
+          // Keep smoothing targets aligned with corrected visual scale,
+          // otherwise _applyAnimationSmoothing can lerp the model back to tiny.
+          try {
+            this.baseScale = this.mesh.scale.clone();
+            this._targetScale = this.mesh.scale.clone();
+          } catch (_) {}
+          try {
+            const groundY = (typeof this._groundY === 'number') ? this._groundY : 0;
+            let minY = null;
+
+            try {
+              const footY = findFootBonesMinY(this.mesh);
+              if (isFinite(footY)) minY = footY;
+            } catch (_) {}
+
+            if (!isFinite(minY)) {
+              try {
+                const sk = computeSkinnedMeshesMinMaxY(this.mesh, 800);
+                if (sk && isFinite(sk.minY)) minY = sk.minY;
+              } catch (_) {}
+            }
+
+            if (!isFinite(minY)) {
+              try {
+                const reb = new THREE.Box3().setFromObject(this.mesh);
+                if (reb && isFinite(reb.min.y)) minY = reb.min.y;
+              } catch (_) {}
+            }
+
+            if (isFinite(minY)) {
+              this.mesh.position.y += (groundY - minY);
+              this.mesh.updateMatrixWorld(true);
+              this._groundVisualOffsetY = this.mesh.position.y - groundY;
+            }
+          } catch (_) {}
+          console.warn(`[Enemy ${this.id}] auto-corrected tiny model height ${h.toFixed(4)} with x${factor.toFixed(3)} scale boost`);
+        }
+      }
+    }
+  } catch (_) {}
+
   if (!ENEMY_AI_ENABLED) return; // GLOBAL STOP
   this._postSpawnInit();
 	const pattern = this.behavior.pattern;
@@ -2754,7 +2875,9 @@ if (this._isFullyPoppedTarget &&
     let finalY = this._targetPosition.y;
     try {
       if (!this._path || !this._path.allowVertical) {
-        finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y;
+        finalY = (typeof this._groundY === 'number')
+          ? (this._groundY + (this._groundVisualOffsetY || 0))
+          : this._targetPosition.y;
       }
     } catch (e) { finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y; }
     desiredPos.y = finalY + (this._targetOffset?.y || 0);

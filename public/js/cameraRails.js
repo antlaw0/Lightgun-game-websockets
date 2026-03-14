@@ -71,6 +71,10 @@ export async function runCameraRails(camera, steps, onTriggerNextSceneOrOptions,
         await openDoorStep(step, options.sceneLoader, cancelToken);
         break;
 
+      case 'activateEnemyGroup':
+        activateEnemyGroupStep(step, options.sceneLoader);
+        break;
+
       default:
         console.warn("Unknown camera rail step:", step);
     }
@@ -214,6 +218,26 @@ function openDoorStep(step, sceneLoader, cancelToken) {
 
     resolve();
   });
+}
+
+function activateEnemyGroupStep(step, sceneLoader) {
+  if (!sceneLoader || typeof sceneLoader.activateEnemyGroup !== 'function') {
+    console.warn('activateEnemyGroup step requires sceneLoader.activateEnemyGroup');
+    return;
+  }
+
+  const rawGroupId = step.groupId ?? step.enemyGroup ?? step.id;
+  const groupId = Number(rawGroupId);
+  if (!Number.isFinite(groupId)) {
+    console.warn('activateEnemyGroup step missing numeric groupId:', step);
+    return;
+  }
+
+  try {
+    sceneLoader.activateEnemyGroup(groupId);
+  } catch (e) {
+    console.warn('activateEnemyGroup step failed for group:', groupId, e);
+  }
 }
 
 async function waitForCondition(checkFn, cancelToken, pollIntervalMs) {

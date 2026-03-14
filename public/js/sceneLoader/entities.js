@@ -389,6 +389,8 @@ export function loadSceneDataEntities(self, sceneDef, isPending) {
   const enemyDefs = sceneDef.enemies ?? [];
   enemyDefs.forEach((edef) => {
     const runtimeEnemyDef = cloneDef(edef);
+    runtimeEnemyDef.groupId = Number.isFinite(Number(runtimeEnemyDef.groupId)) ? Number(runtimeEnemyDef.groupId) : 1;
+    runtimeEnemyDef.active = false;
     let def = null;
     if (runtimeEnemyDef.def && ENEMY_DEFS[runtimeEnemyDef.def]) {
       def = ENEMY_DEFS[runtimeEnemyDef.def];

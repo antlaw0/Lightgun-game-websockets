@@ -76,6 +76,10 @@ duration:  1000
       doorId: "door1"
     },
     {
+      type: "activateEnemyGroup",
+      groupId: 1
+    },
+    {
       type: "moveTo",
       position: { x: 14.80, y: 1.70, z: 14.17 },
       duration: 2000
@@ -828,6 +832,8 @@ position: { x: 4, y: 2.2, z: 18 },
   enemies: [
   {
       id: "grunt_1",
+  	  active:  false,
+  	  groupId: 1,
       type: "Grunt",
       hp: 40,
       // Use a GLB humanoid base mesh instead of FBX
@@ -839,7 +845,69 @@ position: { x: 4, y: 2.2, z: 18 },
         walk: "assets/animations/walk_pistol.glb",
         shoot: "assets/animations/stand_pistol.glb"
       },
-      position: { x: -3, y: 0.9, z: -6 },
+      position: { x: 4, y: 0.9, z: 3 },
+      behavior: {
+        pattern: "path",
+        params: {
+          loop: true,
+          steps: [
+            { type: "move", axis: "x", distance: 6, durationMs: 3000 },
+            { type: "pause", durationMs: 800 },
+            { type: "move", axis: "x", distance: -6, durationMs: 3000 },
+            { type: "pause", durationMs: 800 }
+          ]
+        }
+      },
+      firePauseMs: 800,
+      weapon: "pistol",
+      sprite: "assets/sprites/grunt.png",
+      voice: {
+        pain: [
+          "assets/sfx/grunt/pain1.ogg",
+          "assets/sfx/grunt/pain2.ogg"
+        ],
+        death: [
+          "assets/sfx/grunt/death1.ogg",
+          "assets/sfx/grunt/death2.ogg"
+        ],
+        taunt: [
+          "assets/sfx/grunt/taunt1.ogg",
+          "assets/sfx/grunt/taunt2.ogg"
+        ],
+        engage: [
+          "assets/sfx/grunt/engage1.ogg"
+        ]
+      },
+      hitSounds: [
+        "assets/sfx/grunt/hit1.ogg",
+        "assets/sfx/grunt/hit2.ogg"
+      ],
+      deathSounds: [
+        "assets/sfx/grunt/death1.ogg",
+        "assets/sfx/grunt/death2.ogg"
+      ]
+      ,
+      // apparel temporarily disabled (using colorization instead)
+      // apparel: ["pants","tshirt"]
+    }, // end of grunt 1
+	
+    
+  {
+      id: "grunt_2",
+	  active: false,
+  	  groupId: 1,
+      type: "Grunt",
+      hp: 40,
+      // Use a GLB humanoid base mesh instead of FBX
+      modelUrl: "assets/models/exo_red.glb",
+      // allow automatic auto-scaling based on the GLTF bounding box
+      modelScale: null,
+      // provide common pistol animations as GLB clips
+      animationUrls: {
+        walk: "assets/animations/walk_pistol.glb",
+        shoot: "assets/animations/stand_pistol.glb"
+      },
+      position: { x: 15, y: 0.9, z: 5 },
       behavior: {
         pattern: "path",
         params: {
@@ -884,9 +952,8 @@ position: { x: 4, y: 2.2, z: 18 },
       // apparel temporarily disabled (using colorization instead)
       // apparel: ["pants","tshirt"]
     }
-    
   
-  ],
+  ], //end of enemies
   objective: {
     type: "eliminateAllEnemies",
     description: "Eliminate all enemies to complete this scene."
