@@ -212,6 +212,15 @@ this._hasEngagedPlayer=false
 
 	
 	this.maxHp = this.hp;
+    const rawAimYawOffset = (instanceConfig.aimYawOffset ?? mergedDef.aimYawOffset);
+    if (Number.isFinite(Number(rawAimYawOffset))) {
+      this._aimYawOffset = Number(rawAimYawOffset);
+    } else if (typeof mergedDef.modelUrl === 'string' && /exo_red\.glb$/i.test(mergedDef.modelUrl)) {
+      // exo_red forward axis is offset from gameplay-forward by ~90 degrees
+      this._aimYawOffset = Math.PI / 2;
+    } else {
+      this._aimYawOffset = 0;
+    }
     this.groupId = Number.isFinite(Number(mergedDef.groupId)) ? Number(mergedDef.groupId) : 1;
     // Active state defaults to false so enemies remain hidden/AI-disabled
     // until an enemy group activation step enables them.
@@ -1940,6 +1949,47 @@ _randomTauntDelay() {
   return 4000 + Math.random() * 8000; // 4–12 seconds
 } // end _randomTauntDelay
 
+  _resolveAimTargetPosition(candidatePlayer = null) {
+    const p = candidatePlayer || this.player || null;
+    if (!p) return null;
+    if (p.camera && p.camera.position) return p.camera.position;
+    if (p.mesh && p.mesh.position) return p.mesh.position;
+    if (p.position) return p.position;
+    return null;
+  }
+
+  _computeAimYaw(targetPos) {
+    if (!targetPos || !this.mesh || !this.mesh.position) return null;
+
+    const toX = targetPos.x - this.mesh.position.x;
+    const toZ = targetPos.z - this.mesh.position.z;
+    const d2 = (toX * toX) + (toZ * toZ);
+    if (d2 <= 1e-8) return null;
+
+    const targetYaw = Math.atan2(toX, toZ);
+
+    // If a weapon mesh exists, infer its local yaw offset from the enemy root and
+    // solve the exact root yaw needed so weapon forward points at the target.
+    try {
+      if (this.weaponMesh && this.mesh && typeof this.weaponMesh.getWorldQuaternion === 'function') {
+        const q = new THREE.Quaternion();
+        this.weaponMesh.getWorldQuaternion(q);
+        const weaponFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+        const f2 = (weaponFwd.x * weaponFwd.x) + (weaponFwd.z * weaponFwd.z);
+        if (f2 > 1e-8) {
+          const weaponYaw = Math.atan2(weaponFwd.x, weaponFwd.z);
+          const meshYaw = this.mesh.rotation?.y || 0;
+          let localOffset = weaponYaw - meshYaw;
+          while (localOffset > Math.PI) localOffset -= Math.PI * 2;
+          while (localOffset < -Math.PI) localOffset += Math.PI * 2;
+          return targetYaw - localOffset;
+        }
+      }
+    } catch (_) {}
+
+    return targetYaw + (this._aimYawOffset || 0);
+  }
+
   
   //
   // Generic damage entrypoint (used by projectiles, bullets, explosions)
@@ -2207,7 +2257,8 @@ if (
           if (moved) {
         const moveVec = this.mesh.position.clone().sub(lastMesh);
         try {
-          const toPlayer = (player && player.position) ? player.position.clone().sub(this.mesh.position) : null;
+          const aimTargetPos = this._resolveAimTargetPosition(player);
+          const toPlayer = aimTargetPos ? aimTargetPos.clone().sub(this.mesh.position) : null;
           // If lateral motion dominates and strafe actions are present, let the animation drive pose
           const isLateral = Math.abs(moveVec.x) > Math.abs(moveVec.z);
           const hasStrafe = !!(this._actions && (this._actions.strafe_left || this._actions.strafe_right || this._actions.strafe));
@@ -2216,13 +2267,14 @@ if (
           } else {
             // Face the player when moving primarily forward/back, or when no strafe clips available
             if (toPlayer && toPlayer.lengthSq() > 1e-6) {
-              this._targetRotationY = Math.atan2(toPlayer.x, toPlayer.z);
+              const yaw = this._computeAimYaw(aimTargetPos);
+              if (yaw !== null) this._targetRotationY = yaw;
             } else if (moveVec.lengthSq() > 1e-6) {
-              this._targetRotationY = Math.atan2(moveVec.x, moveVec.z);
+              this._targetRotationY = Math.atan2(moveVec.x, moveVec.z) + (this._aimYawOffset || 0);
             }
           }
         } catch (e) {
-          if (moveVec.lengthSq() > 1e-6) this._targetRotationY = Math.atan2(moveVec.x, moveVec.z);
+          if (moveVec.lengthSq() > 1e-6) this._targetRotationY = Math.atan2(moveVec.x, moveVec.z) + (this._aimYawOffset || 0);
         }
       }
 
@@ -2292,8 +2344,32 @@ if (
       this._lastBasePosition = this.basePosition.clone();
     } catch (e) {}
 
+    // Always face/aim toward the player camera position.
+    try {
+      const aimTargetPos = this._resolveAimTargetPosition(player);
+      if (aimTargetPos && this.mesh && this.mesh.position) {
+        const toPlayerX = aimTargetPos.x - this.mesh.position.x;
+        const toPlayerZ = aimTargetPos.z - this.mesh.position.z;
+        const d2 = (toPlayerX * toPlayerX) + (toPlayerZ * toPlayerZ);
+        if (d2 > 1e-8) {
+          const yaw = this._computeAimYaw(aimTargetPos);
+          if (yaw !== null) this._targetRotationY = yaw;
+        }
+      }
+    } catch (e) {}
+
     // always apply smoothing interpolation to the mesh transform toward target offset/rotation/scale
     this._applyAnimationSmoothing(deltaMs);
+
+    // Final yaw lock: ensure visual facing is toward player after all other updates.
+    try {
+      const aimTargetPos = this._resolveAimTargetPosition(player);
+      const yaw = this._computeAimYaw(aimTargetPos);
+      if (yaw !== null && this.mesh) {
+        this._targetRotationY = yaw;
+        this.mesh.rotation.y = yaw;
+      }
+    } catch (e) {}
   }
 _updatePath(deltaMs) {
   if (!this._path || !this._path.active) return;
@@ -2593,15 +2669,15 @@ const dir = targetPos.clone().sub(origin).normalize();
     muzzle.y += 0.9;
   }
 
-  const targetPos =
-    this.player.mesh?.position.clone() || new THREE.Vector3(0, 1.7, 0);
+  const resolvedAimTarget = this._resolveAimTargetPosition(this.player);
+  const targetPos = resolvedAimTarget
+    ? resolvedAimTarget.clone()
+    : new THREE.Vector3(0, 1.7, 0);
 
   // Ensure the enemy is facing the target when firing (standInOpen should look at player)
   try {
-    const toPlayer = targetPos.clone().sub(this.mesh.position || new THREE.Vector3());
-    if (toPlayer.lengthSq() > 1e-6) {
-      this._targetRotationY = Math.atan2(toPlayer.x, toPlayer.z);
-    }
+    const yaw = this._computeAimYaw(targetPos);
+    if (yaw !== null) this._targetRotationY = yaw;
   } catch (e) {}
 
   // HARD BLOCK: do not fire if wall is between muzzle and player

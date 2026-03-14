@@ -838,6 +838,7 @@ position: { x: 4, y: 2.2, z: 18 },
       hp: 40,
       // Use a GLB humanoid base mesh instead of FBX
       modelUrl: "assets/models/exo_red.glb",
+      aimYawOffset: -Math.PI / 2,
       // allow automatic auto-scaling based on the GLTF bounding box
       modelScale: null,
       // provide common pistol animations as GLB clips
@@ -900,6 +901,7 @@ position: { x: 4, y: 2.2, z: 18 },
       hp: 40,
       // Use a GLB humanoid base mesh instead of FBX
       modelUrl: "assets/models/exo_red.glb",
+      aimYawOffset: -Math.PI / 2,
       // allow automatic auto-scaling based on the GLTF bounding box
       modelScale: null,
       // provide common pistol animations as GLB clips
