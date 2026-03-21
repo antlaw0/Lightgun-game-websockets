@@ -100,18 +100,28 @@ position: { x: 26.52, y: 1.70, z: 2.64 },
     },
 	{
 type:  "lookAt",
-position:  {  x: 28, y: 1.7, z: 2.02 },
+position:  {  x: 28, y: 1.7, z: 2.64 },
 duration:  500
 },
     {
       type: "openDoor",
       doorId: "door2"
     },
+	    {
+      type: "activateEnemyGroup",
+      groupId: 2
+    },
+
     {
       type: "moveTo",
-      position: { x: 35.51, y: 1.70, z: 2.57 },
-      duration: 2600
+      position: { x: 28, y: 1.70, z: 2.57 },
+      duration: 360
     },
+	    {
+      type: "stop",
+      continueWhen: "allEnemiesDead"
+    },
+
 	    {
       type: "lookAt",
       position: { x: 36.09, y: 1.70, z: -4.94 },
@@ -845,7 +855,8 @@ position: { x: 4, y: 2.2, z: 18 },
   },
   },
   {
-      id: "grunt_1",
+      def:  "grunt_pistol",
+	  id: "grunt_1",
   	  active:  false,
   	  groupId: 1,
       type: "Grunt",
@@ -875,39 +886,12 @@ position: { x: 4, y: 2.2, z: 18 },
       },
       firePauseMs: 800,
       weapon: "pistol",
-      sprite: "assets/sprites/grunt.png",
-      voice: {
-        pain: [
-          "assets/sfx/grunt/pain1.ogg",
-          "assets/sfx/grunt/pain2.ogg"
-        ],
-        death: [
-          "assets/sfx/grunt/death1.ogg",
-          "assets/sfx/grunt/death2.ogg"
-        ],
-        taunt: [
-          "assets/sfx/grunt/taunt1.ogg",
-          "assets/sfx/grunt/taunt2.ogg"
-        ],
-        engage: [
-          "assets/sfx/grunt/engage1.ogg"
-        ]
-      },
-      hitSounds: [
-        "assets/sfx/grunt/hit1.ogg",
-        "assets/sfx/grunt/hit2.ogg"
-      ],
-      deathSounds: [
-        "assets/sfx/grunt/death1.ogg",
-        "assets/sfx/grunt/death2.ogg"
-      ]
-      ,
-      // apparel temporarily disabled (using colorization instead)
-      // apparel: ["pants","tshirt"]
-    }, // end of grunt 1
+      sprite: "assets/sprites/grunt.png"
+  }, // end of grunt 1
 	
     
   {
+def:  "grunt_pistol",
       id: "grunt_2",
 	  active: false,
   	  groupId: 1,
@@ -938,37 +922,16 @@ position: { x: 4, y: 2.2, z: 18 },
       },
       firePauseMs: 800,
       weapon: "pistol",
-      sprite: "assets/sprites/grunt.png",
-      voice: {
-        pain: [
-          "assets/sfx/grunt/pain1.ogg",
-          "assets/sfx/grunt/pain2.ogg"
-        ],
-        death: [
-          "assets/sfx/grunt/death1.ogg",
-          "assets/sfx/grunt/death2.ogg"
-        ],
-        taunt: [
-          "assets/sfx/grunt/taunt1.ogg",
-          "assets/sfx/grunt/taunt2.ogg"
-        ],
-        engage: [
-          "assets/sfx/grunt/engage1.ogg"
-        ]
-      },
-      hitSounds: [
-        "assets/sfx/grunt/hit1.ogg",
-        "assets/sfx/grunt/hit2.ogg"
-      ],
-      deathSounds: [
-        "assets/sfx/grunt/death1.ogg",
-        "assets/sfx/grunt/death2.ogg"
-      ]
-      ,
-      // apparel temporarily disabled (using colorization instead)
-      // apparel: ["pants","tshirt"]
-    }
-  
+      sprite: "assets/sprites/grunt.png"
+    },//end of grunt 2
+    {
+	def:  "autoturret_tripod",
+id:  "autoturret_1",
+active:  false,
+groupId:  2,
+position:  { x:  35, y:  0.1,  z:  1.85  },
+  }
+
   ], //end of enemies
   objective: {
     type: "eliminateAllEnemies",

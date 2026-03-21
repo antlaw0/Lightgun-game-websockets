@@ -8,7 +8,7 @@ import { configureGltfLoaderForKtx2 } from './textureSupport.js';
 
 import { Enemy } from "./enemy.js";
 import { Door } from "./sceneLoader/door.js";
-import { ensureUv2ForAo, meshHasAoMap } from "./sceneLoader/utils.js";
+import { ensureUv2ForAo, isReferenceNodeObject, meshHasAoMap } from "./sceneLoader/utils.js";
 import {
   applyHdriForSceneCache,
   disposeAllHdriCacheEntries,
@@ -66,6 +66,7 @@ export class SceneLoader {
     // Arrays are authoritative for iteration; maps exist for O(1) lookup by id.
     this.enemies = [];         // array of Enemy instances
     this.enemiesById = {};     // map id -> Enemy
+    this.currentActiveEnemyGroupId = null;
 
     this.props = [];           // array of Prop instances
     this.propsById = {};       // map id -> Prop
@@ -213,6 +214,15 @@ window.sceneLoader = this;
         this.scene.add(propInstance.mesh);
         propInstance.mesh.traverse(obj => {
           if (obj.isMesh) {
+            if (isReferenceNodeObject(obj)) {
+              try {
+                obj.userData = Object.assign({}, obj.userData || {}, { isReferenceNode: true });
+                obj.visible = false;
+                obj.castShadow = false;
+                obj.receiveShadow = false;
+              } catch (e) {}
+              return;
+            }
             // Keep mesh identity tags in sync for editor selection and scene export.
             try {
               obj.userData = Object.assign({}, obj.userData || {}, {
@@ -243,6 +253,16 @@ window.sceneLoader = this;
         this.scene.add(enemyInstance.mesh);
         enemyInstance.mesh.traverse(obj => {
           if (!obj.isMesh) return;
+          if (isReferenceNodeObject(obj)) {
+            try {
+              obj.userData = Object.assign({}, obj.userData || {}, { isReferenceNode: true });
+              obj.visible = false;
+              obj.castShadow = false;
+              obj.receiveShadow = false;
+              obj.frustumCulled = true;
+            } catch (e) {}
+            return;
+          }
           try {
             // Shadow setup
             obj.castShadow = true;
@@ -265,6 +285,7 @@ window.sceneLoader = this;
       console.warn('SceneLoader.activateEnemyGroup received non-numeric group id:', groupId);
       return { activated: 0, totalInGroup: 0 };
     }
+    this.currentActiveEnemyGroupId = parsedGroupId;
 
     const enemies = Array.isArray(this.enemies) ? this.enemies : [];
     let totalInGroup = 0;
@@ -478,6 +499,7 @@ _applyCameraSettings() {
   // Load Scene (adjusted)
   // -----------------------------
   loadScene(sceneDef) {
+    this.currentActiveEnemyGroupId = null;
     return loadSceneLifecycle(this, sceneDef);
   }
 
@@ -528,6 +550,7 @@ _applyCameraSettings() {
   // Unload Scene (adjusted to arrays)
   // -----------------------------
   unloadScene() {
+    this.currentActiveEnemyGroupId = null;
     return unloadSceneLifecycle(this);
   }
 
@@ -587,6 +610,7 @@ getIntersectableMeshes() {
   // Scene / resource cleanup helper
   // -----------------------------
   clearScene() {
+    this.currentActiveEnemyGroupId = null;
     return clearSceneEvents(this);
   }
 

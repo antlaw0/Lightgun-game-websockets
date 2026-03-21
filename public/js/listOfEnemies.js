@@ -10,7 +10,7 @@ const grunt_pistol_def = {
   aimYawOffset: -Math.PI / 2,
       
   hp: 40,
-
+//modelScalePercent:  150,
   modelUrl: "assets/models/exo_red.glb",
   modelScale: null,
 
@@ -147,6 +147,52 @@ export const ENEMY_DEFS = {
     ]
 
   }, // end drone_basic
+
+  // -------------------------------------------------
+  // Stationary auto-turret enemy
+  // -------------------------------------------------
+  autoturret_tripod: {
+    type: "AutoTurret",
+    displayName: "Auto Turret",
+    hp: 80,
+
+    active: true,
+	
+	 explodeOnDeath: true,
+ explosionRadius: 5,
+ explosionDamage: 80,
+ explosionSounds: [ "assets/sfx/explosions/explosion_1A.ogg" ],
+	
+
+
+    compositeModel: {
+      baseUrl: "assets/models/tripod.glb",
+      topUrl: "assets/models/turret.glb",
+      topScalePercent: 30,   // controls turret-top size
+      bottomScalePercent: 70 // controls tripod/base size
+                             // values are percentages of the auto-normalised camera height
+    },
+
+    weapon: "assaultRifle",
+    firePauseMs: 0,
+    accuracy: 0.85,
+
+    behavior: {
+      pattern: "standInOpen",
+      params: {
+        burstCount: 3,
+        burstShotIntervalMs: 100,
+        burstCooldownMs: 1000
+      }
+    },
+
+    voice: {
+      loop: [
+        "assets/sfx/turret/active.ogg"
+      ]
+    }
+
+  }, // end autoturret_tripod
 
   swat_rifle_standing_open: {
     type: "Grunt",

@@ -5,7 +5,12 @@ import sounds from "../listOfSounds.js";
 export const scene_test = {
   name: "Weapon Test Range",
 
-  cameraRails: [],
+  cameraRails: [
+    {
+      type: "activateEnemyGroup",
+      groupId: 2
+    }
+  ],
 
   camera: {
     position: { x: 8, y: 1.7, z: 12 },
@@ -64,13 +69,7 @@ export const scene_test = {
   environment: {
     staticObjects: [
 
-	{
-	id:  "hallway",
-type: "prefab",
-prefab:  "hallway.glb",
-position:  {  x:  20, y:  0, z:  0  },
-scale:  {  x:  5, y:  5, z:  5 }	
-	},
+
 {
     id: "walkway",
     type: "prefab",
@@ -263,6 +262,14 @@ scale:  {  x:  1, y:  1, z:  1 }
   },
 
   enemies: [
+  
+  {
+	def:  "autoturret_tripod",
+id:  "autoturret_1",
+
+groupId:  2,
+position:  { x:  5, y:  0,  z:  4  },
+  },
   {
 	def:  "grunt_pistol",
 id: "grunt_testing_defs",

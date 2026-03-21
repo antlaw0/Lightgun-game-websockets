@@ -1,3 +1,5 @@
+import { isReferenceNodeObject } from './utils.js';
+
 export function loadSceneLifecycle(self, sceneDef) {
   self.unloadScene();
   self._loadSceneData(sceneDef, false);
@@ -39,6 +41,10 @@ export function commitPendingSceneLifecycle(self) {
       p.mesh.visible = true;
       p.mesh.traverse((o) => {
         if (o.isMesh) {
+          if (isReferenceNodeObject(o)) {
+            o.visible = false;
+            return;
+          }
           o.visible = true;
           self.propMeshes.push(o);
         }

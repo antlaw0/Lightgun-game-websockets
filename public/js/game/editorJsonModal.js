@@ -232,6 +232,16 @@ export function setupEditorJsonModal({
 
     try {
       if (sel.mesh) {
+        let preScaleMinY = null;
+        const hasScaleEdit = !!(parsed.size || parsed.scale);
+        if (hasScaleEdit) {
+          try {
+            sel.mesh.updateMatrixWorld(true);
+            const beforeBox = new THREE.Box3().setFromObject(sel.mesh);
+            if (beforeBox && isFinite(beforeBox.min.y)) preScaleMinY = beforeBox.min.y;
+          } catch (_) {}
+        }
+
         if (parsed.position) {
           const runtimePos = authoredToRuntimePosition(sel, parsed.position, parsed) || parsed.position;
           sel.mesh.position.set(runtimePos.x, runtimePos.y, runtimePos.z);
@@ -252,6 +262,21 @@ export function setupEditorJsonModal({
           sel.size = parsed.size;
         }
         if (parsed.scale) sel.mesh.scale.set(parsed.scale.x, parsed.scale.y, parsed.scale.z);
+
+        // Preserve floor contact when resizing so a rebuild doesn't leave the mesh floating/sunk.
+        if (hasScaleEdit && preScaleMinY !== null) {
+          try {
+            sel.mesh.updateMatrixWorld(true);
+            const afterBox = new THREE.Box3().setFromObject(sel.mesh);
+            if (afterBox && isFinite(afterBox.min.y)) {
+              const dy = preScaleMinY - afterBox.min.y;
+              if (Math.abs(dy) > 1e-6) {
+                sel.mesh.position.y += dy;
+                sel.mesh.updateMatrixWorld(true);
+              }
+            }
+          } catch (_) {}
+        }
 
         syncWrapperAuthoredPositionFromMesh(sel);
         sel.rotation = { x: sel.mesh.rotation.x, y: sel.mesh.rotation.y, z: sel.mesh.rotation.z };

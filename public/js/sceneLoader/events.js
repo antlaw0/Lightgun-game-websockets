@@ -67,8 +67,20 @@ export function registerSpawnTestExplosionGlobal() {
     z = 0,
     blastRadius = 4,
     maxDamage = 10,
+    explosionRadius,
+    explosionDamage,
+    explosive = true,
     explosionSounds = []
   } = {}) {
+    if (explosive === false) return;
+
+    const finalBlastRadius = Number.isFinite(Number(explosionRadius))
+      ? Number(explosionRadius)
+      : Number(blastRadius);
+    const finalMaxDamage = Number.isFinite(Number(explosionDamage))
+      ? Number(explosionDamage)
+      : Number(maxDamage);
+
     if (!window.sceneLoader) {
       console.warn('sceneLoader not found!');
       return;
@@ -80,8 +92,8 @@ export function registerSpawnTestExplosionGlobal() {
       window.sceneLoader.scene,
       pos,
       {
-        blastRadius,
-        maxDamage,
+        blastRadius: finalBlastRadius,
+        maxDamage: finalMaxDamage,
         explosionSounds,
         floorY: y - 0.1
       }
@@ -89,6 +101,6 @@ export function registerSpawnTestExplosionGlobal() {
 
     window.sceneLoader.addExplosion(explosion);
 
-    console.log(`Spawned explosion at (${x}, ${y}, ${z}), radius ${blastRadius}, damage ${maxDamage}`);
+    console.log(`Spawned explosion at (${x}, ${y}, ${z}), radius ${finalBlastRadius}, damage ${finalMaxDamage}`);
   };
 }

@@ -119,6 +119,116 @@ export class Weapon {
   }, this.reloadTimeMs);
 }
 }
+
+function _toFiniteNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _isReferenceNodeName(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return false;
+  return n.includes('node_marker') || n.includes('__node_marker__');
+}
+
+function _isReferenceNodeMesh(obj) {
+  if (!obj || !obj.isMesh) return false;
+  if (obj.userData && obj.userData.isReferenceNode === true) return true;
+  return _isReferenceNodeName(obj.name);
+}
+
+function _applyReferenceNodeMeshPolicy(obj) {
+  if (!_isReferenceNodeMesh(obj)) return false;
+  try {
+    obj.userData = Object.assign({}, obj.userData || {}, { isReferenceNode: true });
+    obj.visible = false;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.frustumCulled = true;
+    obj.raycast = () => {};
+  } catch (e) {}
+  return true;
+}
+
+// Debug function to find all sphere geometries in a model
+function _debugLogAllSpheres(root, modelName = 'model') {
+  if (!root) return;
+  const spheres = [];
+  root.traverse(obj => {
+    if (obj.isMesh && obj.geometry && obj.geometry.type === 'SphereGeometry') {
+      spheres.push({
+        name: obj.name,
+        position: obj.position.clone(),
+        scale: obj.scale.clone(),
+        visible: obj.visible,
+        geometry: obj.geometry,
+        material: obj.material,
+        uuid: obj.uuid,
+        parent: obj.parent?.name || 'root',
+        isReferenceNode: !!(obj.userData && obj.userData.isReferenceNode)
+      });
+    }
+  });
+  if (spheres.length > 0) {
+    console.warn(`[TURRET DEBUG ${modelName}] Found ${spheres.length} SphereGeometry objects:`);
+    spheres.forEach((s, idx) => {
+      console.warn(`  [${idx}] name='${s.name}' parent='${s.parent}' visible=${s.visible} isRefNode=${s.isReferenceNode}`, {
+        position: `(${s.position.x.toFixed(3)}, ${s.position.y.toFixed(3)}, ${s.position.z.toFixed(3)})`,
+        scale: `(${s.scale.x.toFixed(3)}, ${s.scale.y.toFixed(3)}, ${s.scale.z.toFixed(3)})`,
+        geometryParams: s.geometry.parameters
+      });
+    });
+  }
+}
+
+function _normalizeEnemyDeathExplosionConfig(rawExplodeOnDeath, mergedDef, weaponDef) {
+  const isConfigObject = !!rawExplodeOnDeath && typeof rawExplodeOnDeath === "object" && !Array.isArray(rawExplodeOnDeath);
+  const enabledByFlag = rawExplodeOnDeath === true || isConfigObject;
+  if (!enabledByFlag) {
+    return { enabled: false, config: null };
+  }
+
+  const cfg = isConfigObject ? rawExplodeOnDeath : {};
+  const explosionRadius = _toFiniteNumber(
+    cfg.explosionRadius,
+    _toFiniteNumber(
+      cfg.blastRadius,
+      _toFiniteNumber(
+        mergedDef?.explosionRadius,
+        _toFiniteNumber(weaponDef?.explosionRadius, 4)
+      )
+    )
+  );
+
+  const explosionDamage = _toFiniteNumber(
+    cfg.explosionDamage,
+    _toFiniteNumber(
+      cfg.maxDamage,
+      _toFiniteNumber(
+        mergedDef?.explosionDamage,
+        _toFiniteNumber(weaponDef?.explosionDamage, 10)
+      )
+    )
+  );
+
+  const explosionSounds = Array.isArray(cfg.explosionSounds)
+    ? cfg.explosionSounds.slice()
+    : (Array.isArray(mergedDef?.explosionSounds)
+      ? mergedDef.explosionSounds.slice()
+      : (Array.isArray(weaponDef?.explosionSounds) ? weaponDef.explosionSounds.slice() : []));
+
+  const explicitExplosive = (typeof cfg.explosive === "boolean") ? cfg.explosive : true;
+
+  return {
+    enabled: explicitExplosive !== false,
+    config: {
+      explosive: explicitExplosive,
+      explosionRadius,
+      explosionDamage,
+      explosionSounds
+    }
+  };
+}
 //
 // Enemy class
 //
@@ -193,6 +303,183 @@ _snapBasePositionToCoverEdge() {
   return window.sceneLoader.staticObjects.find(o => o.id === this.coverObjectId) || null;
 }
 
+  _isAutoTurretDef(mergedDef, instanceConfig) {
+    const instanceType = String(instanceConfig?.type || '').toLowerCase();
+    const defType = String(mergedDef?.type || '').toLowerCase();
+    const behaviorType = String(mergedDef?.behavior?.pattern || '').toLowerCase();
+    if (instanceType === 'autoturret' || instanceType === 'turret') return true;
+    if (defType === 'autoturret' || defType === 'turret') return true;
+    if (mergedDef?.compositeModel && mergedDef.compositeModel.baseUrl && mergedDef.compositeModel.topUrl) return true;
+    return behaviorType === 'turret';
+  }
+
+  _loadAutoTurretComposite(mergedDef, instanceConfig) {
+    const baseUrl = mergedDef?.compositeModel?.baseUrl;
+    const topUrl = mergedDef?.compositeModel?.topUrl;
+    if (!baseUrl || !topUrl) return;
+
+    const findNamedNode = (root, nodeName) => {
+      if (!root || !nodeName) return null;
+      let match = root.getObjectByName(nodeName);
+      if (match) return match;
+      const targetName = String(nodeName).toLowerCase();
+      root.traverse((node) => {
+        if (match) return;
+        const candidate = String(node?.name || '').toLowerCase();
+        if (candidate === targetName || candidate.includes(targetName)) match = node;
+      });
+      return match;
+    };
+
+    // Optional per-part scale overrides defined in compositeModel.
+    // topScalePercent and bottomScalePercent/baseScalePercent are passed to
+    // loadCharacter as scalePercent,
+    // which resolves to that percentage of the auto-normalised camera height.
+    // This is the correct way to control composite part sizes because loadCharacter's
+    // normalizeAndGroundModel resets the GLB scene-node scale to 1 before measuring,
+    // so any scale baked in the editor is discarded unless an explicit override is used.
+    const topScalePct  = mergedDef?.compositeModel?.topScalePercent  ?? null;
+    const bottomScalePct = mergedDef?.compositeModel?.bottomScalePercent ?? mergedDef?.compositeModel?.baseScalePercent ?? null;
+
+    Promise.all([
+      loadCharacter({ url: baseUrl, autoPlay: false, ...(bottomScalePct !== null ? { scalePercent: Number(bottomScalePct) } : {}) }),
+      loadCharacter({ url: topUrl,  autoPlay: false, ...(topScalePct  !== null ? { scalePercent: Number(topScalePct)  } : {}) })
+    ]).then(([baseRes, topRes]) => {
+      if (!baseRes?.model || !topRes?.model) return;
+
+      const root = new THREE.Group();
+      const base = baseRes.model;
+      const turretTop = topRes.model;
+
+      base.name = `${this.id}_tripod`;
+      turretTop.name = `${this.id}_turret_top`;
+
+      root.add(base);
+      root.add(turretTop);
+
+      // Keep turret composite scaling behavior consistent with other enemies.
+      // Apply before grounding/mount alignment so all subsequent offsets are correct.
+      const explicitTurretScale = (mergedDef && mergedDef.modelScale !== undefined && mergedDef.modelScale !== null)
+        ? Number(mergedDef.modelScale)
+        : (instanceConfig && instanceConfig.modelScale !== undefined && instanceConfig.modelScale !== null
+          ? Number(instanceConfig.modelScale)
+          : null);
+      if (Number.isFinite(explicitTurretScale) && explicitTurretScale > 0) {
+        root.scale.setScalar(explicitTurretScale);
+      }
+
+      root.position.copy(this.position || new THREE.Vector3());
+      if (typeof this._groundY === 'number') root.position.y = this._groundY;
+
+      root.updateMatrixWorld(true);
+
+      // Ground the tripod base on the configured ground plane.
+      try {
+        const baseBox = new THREE.Box3().setFromObject(base);
+        if (isFinite(baseBox.min.y)) {
+          const groundY = (typeof this._groundY === 'number') ? this._groundY : 0;
+          root.position.y += (groundY - baseBox.min.y);
+          root.updateMatrixWorld(true);
+        }
+      } catch (_) {}
+
+      // Snap turret.glb's turretBase node to tripod.glb's authored turretMount node.
+      try {
+        const baseBox = new THREE.Box3().setFromObject(base);
+        const turretBaseNode = findNamedNode(turretTop, 'turretBase');
+        const tripodMountNode = findNamedNode(base, 'turretMount');
+        if (turretBaseNode && tripodMountNode) {
+          const targetMountWorld = new THREE.Vector3();
+          tripodMountNode.getWorldPosition(targetMountWorld);
+          const currentMountWorld = new THREE.Vector3();
+          turretBaseNode.getWorldPosition(currentMountWorld);
+          turretTop.position.add(targetMountWorld.sub(currentMountWorld));
+          root.updateMatrixWorld(true);
+        } else if (turretBaseNode && isFinite(baseBox.max.y)) {
+          // Fallback for older tripod assets without turretMount.
+          const targetMountWorld = new THREE.Vector3(
+            (baseBox.min.x + baseBox.max.x) * 0.5,
+            baseBox.max.y,
+            (baseBox.min.z + baseBox.max.z) * 0.5
+          );
+          const currentMountWorld = new THREE.Vector3();
+          turretBaseNode.getWorldPosition(currentMountWorld);
+          turretTop.position.add(targetMountWorld.sub(currentMountWorld));
+          root.updateMatrixWorld(true);
+        } else if (isFinite(baseBox.max.y)) {
+          const topBox = new THREE.Box3().setFromObject(turretTop);
+          if (isFinite(topBox.min.y)) {
+            turretTop.position.y += (baseBox.max.y - topBox.min.y);
+            root.updateMatrixWorld(true);
+          }
+        }
+      } catch (_) {}
+
+      // Use the authored muzzleFlash node on turret.glb as the firing origin.
+      this.weaponMuzzleNode = null;
+      this.weaponMuzzle = null;
+      try {
+        const muzzleNode = findNamedNode(turretTop, 'muzzleFlash');
+
+        if (muzzleNode) {
+          this.weaponMuzzleNode = muzzleNode;
+
+          // Lightweight muzzle-flash visual anchored to muzzleFlash node.
+          const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.95 });
+          const flashGeo = new THREE.SphereGeometry(0.045, 8, 6);
+          const flashFx = new THREE.Mesh(flashGeo, flashMat);
+          flashFx.name = 'auto_turret_muzzle_flash_fx';
+          flashFx.visible = false;
+          flashFx.position.set(0, 0, 0);
+          muzzleNode.add(flashFx);
+          this.weaponMuzzle = flashFx;
+        }
+      } catch (_) {}
+
+      try {
+        root.traverse((o) => {
+          if (!o.isMesh) return;
+          if (_applyReferenceNodeMeshPolicy(o)) return;
+          o.castShadow = true;
+          o.receiveShadow = true;
+          o.frustumCulled = false;
+          o.visible = !!this._isActive;
+          o.userData = Object.assign({}, o.userData || {}, { enemyId: this.id });
+        });
+      } catch (_) {}
+
+      try { this.sceneGroup.remove(this.mesh); } catch (_) {}
+      this.mesh = root;
+      this.weaponMesh = turretTop;
+      this.mesh.userData.enemyId = this.id;
+      this.mesh.name = `enemy_${this.id}`;
+      this.basePosition = this.mesh.position.clone();
+      if (typeof this._groundY === 'number') this.basePosition.y = this._groundY;
+      this._targetPosition = this.basePosition.clone();
+      this._lastMeshPosition = this.mesh.position.clone();
+      
+      // DEBUG: Log all spheres in the turret to identify the "huge sphere"
+      _debugLogAllSpheres(this.mesh, `Turret ${this.id} after loading`);
+      
+      this.baseScale = this.mesh.scale.clone();
+
+      try { this.sceneGroup.add(this.mesh); } catch (_) {}
+
+      try {
+        if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
+          this.mesh.traverse(o => {
+            if (!o.isMesh) return;
+            if (this._isActive && !window.sceneLoader.enemyMeshes.includes(o)) {
+              window.sceneLoader.enemyMeshes.push(o);
+            }
+          });
+        }
+      } catch (_) {}
+    }).catch((err) => {
+      console.warn(`[Enemy ${this.id}] AutoTurret composite load failed`, err);
+    });
+  }
+
   
   constructor(sceneGroup, def, instanceConfig, player, fireCallback) {
         // Merge base enemy def with instance config
@@ -209,6 +496,12 @@ this._nextAllowedFireMs = 0;
 this.type = mergedDef.displayName || "Enemy";
 this.hp = mergedDef.hp || 1;
 this._hasEngagedPlayer=false
+
+this._hasExplicitModelScale =
+  (mergedDef.modelScale !== undefined && mergedDef.modelScale !== null) ||
+  (instanceConfig.modelScale !== undefined && instanceConfig.modelScale !== null) ||
+  (mergedDef.modelScalePercent !== undefined && mergedDef.modelScalePercent !== null) ||
+  (instanceConfig.modelScalePercent !== undefined && instanceConfig.modelScalePercent !== null);
 
 	
 	this.maxHp = this.hp;
@@ -247,6 +540,14 @@ console.warn(`Enemy ${instanceConfig.id} has invalid weapon`, mergedDef.weapon);
 //console.log("Weapon resolved:", weaponDef);
 // Finally construct the Weapon instance
 this.weapon = new Weapon(weaponDef);
+const deathExplosionDef = _normalizeEnemyDeathExplosionConfig(
+  mergedDef.explodeOnDeath,
+  mergedDef,
+  weaponDef
+);
+this.explodeOnDeath = deathExplosionDef.enabled;
+this.deathExplosion = deathExplosionDef.config;
+this._deathExplosionTriggered = false;
     // Improved logging
 const rawWeaponStr =
   (typeof mergedDef.weapon === "string")
@@ -304,9 +605,16 @@ this._nextTauntTime = null;
           try { this.mesh.visible = true; } catch(e) {}
           this.mesh.traverse(o => {
             if (o.isMesh) {
+              if (_applyReferenceNodeMeshPolicy(o)) return;
               o.visible = true;
               o.frustumCulled = false;
               o.userData.enemyId = this.id;
+              
+              // DEBUG: Log any sphere geometries being made visible
+              if (o.geometry && o.geometry.type === 'SphereGeometry') {
+                console.warn(`[TURRET DEBUG ${this.id}] Setting SphereGeometry VISIBLE: name='${o.name}' scale=(${o.scale.x.toFixed(3)}, ${o.scale.y.toFixed(3)}, ${o.scale.z.toFixed(3)})`, o.geometry.parameters);
+              }
+              
               if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes) && !window.sceneLoader.enemyMeshes.includes(o)) {
                 window.sceneLoader.enemyMeshes.push(o);
               }
@@ -406,11 +714,15 @@ this._nextTauntTime = null;
         // Get explicit scale settings from def or instance config
         const explicitScale = (defObj && defObj.modelScale !== undefined && defObj.modelScale !== null)
           ? Number(defObj.modelScale)
-          : (instanceCfg && instanceCfg.modelScale !== undefined ? Number(instanceCfg.modelScale) : null);
+          : (instanceCfg && instanceCfg.modelScale !== undefined && instanceCfg.modelScale !== null
+            ? Number(instanceCfg.modelScale)
+            : null);
 
         const scalePercent = (defObj && defObj.modelScalePercent !== undefined && defObj.modelScalePercent !== null)
           ? Number(defObj.modelScalePercent)
-          : (instanceCfg && instanceCfg.modelScalePercent !== undefined ? Number(instanceCfg.modelScalePercent) : null);
+          : (instanceCfg && instanceCfg.modelScalePercent !== undefined && instanceCfg.modelScalePercent !== null
+            ? Number(instanceCfg.modelScalePercent)
+            : null);
 
         // Store original position X/Z to restore after normalization (which resets position)
         const origX = mesh.position.x;
@@ -442,6 +754,7 @@ this._nextTauntTime = null;
         try {
           mesh.traverse(o => {
             if (o.isMesh) {
+              if (_applyReferenceNodeMeshPolicy(o)) return;
               o.frustumCulled = false;
               o.castShadow = true;
               o.receiveShadow = true;
@@ -471,6 +784,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
 
     // Behavior: default to standing, or use provided behavior
     this.behavior = instanceConfig.behavior || (mergedDef.behavior ? mergedDef.behavior : { pattern: "standInOpen", params: {} });
+    this._isAutoTurret = this._isAutoTurretDef(mergedDef, instanceConfig);
 
     // Allow explicit coverType via instanceConfig or behavior.params
     this.coverType = instanceConfig.coverType || (this.behavior.params && this.behavior.params.coverType) || mergedDef.coverType || null;
@@ -515,13 +829,23 @@ this.coverObjectId = instanceConfig.coverObject || null;
           } catch (e) {}
 
           // make sure frustum culling / shadow flags are set. Visibility depends on active state.
-          try { this.mesh.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; o.visible = !!this._isActive; } }); } catch(e) {}
+          try {
+            this.mesh.traverse(o => {
+              if (!o.isMesh) return;
+              if (_applyReferenceNodeMeshPolicy(o)) return;
+              o.frustumCulled = false;
+              o.castShadow = true;
+              o.receiveShadow = true;
+              o.visible = !!this._isActive;
+            });
+          } catch(e) {}
           try { this.sceneGroup.add(this.mesh); } catch(e) {}
           // register meshes for hit tests AFTER scaling so raycasts/bboxes reflect final size
           try {
             if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
               this.mesh.traverse(o => {
                 if (o.isMesh) {
+                  if (_applyReferenceNodeMeshPolicy(o)) return;
                   if (this._isActive) {
                     if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
                   }
@@ -571,7 +895,21 @@ this.coverObjectId = instanceConfig.coverObject || null;
       }
     }
 
-    if (mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt") {
+    if (this._isAutoTurret) {
+      // Create a placeholder Group immediately so this.mesh is always valid.
+      // _loadAutoTurretComposite will replace it asynchronously once the GLBs load.
+      const placeholder = new THREE.Group();
+      placeholder.name = `enemy_${this.id}_placeholder`;
+      placeholder.position.copy(this.position || new THREE.Vector3());
+      if (typeof this._groundY === 'number') placeholder.position.y = this._groundY;
+      this.mesh = placeholder;
+      this.basePosition = placeholder.position.clone();
+      this.baseRotationY = this.facing;
+      this._lastBasePosition = this.basePosition.clone();
+      this._loadAutoTurretComposite(mergedDef, instanceConfig);
+    }
+
+    if (!this._isAutoTurret && (mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt")) {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
       // Place at scene position, then align mesh bottom to ground so feet are not submerged.
@@ -979,27 +1317,10 @@ this.coverObjectId = instanceConfig.coverObject || null;
           } catch(_){}
           try { this.mesh.rotation.y = this.baseRotationY; } catch(_){ }
           // `loadCharacter` already normalizes GLB scale/grounding.
-          // Only apply explicit authored overrides here; do not auto-rescale again.
+          // Defer authored scale overrides until after the head-height pass below,
+          // otherwise the head pass can cancel modelScale/modelScalePercent.
           try {
-            // Allow scene author to override with either an exact scalar or percent.
-            const explicitScale = mergedDef.modelScale || instanceConfig.modelScale || null;
-            const explicitPercent = mergedDef.modelScalePercent ?? instanceConfig.modelScalePercent ?? null;
-
-            try {
-              if (explicitScale !== null && explicitScale !== undefined) {
-                const s = Number(explicitScale);
-                if (isFinite(s) && s > 0) this.mesh.scale.setScalar(s);
-              } else if (explicitPercent !== null && explicitPercent !== undefined) {
-                const p = Number(explicitPercent) || 0;
-                const percentScalar = p / 100;
-                if (isFinite(percentScalar) && percentScalar > 0) this.mesh.scale.multiplyScalar(percentScalar);
-              }
-              this.mesh.updateMatrixWorld(true);
-            } catch (e) {
-              // If override scaling fails, leave mesh scale unchanged.
-            }
-
-            // after scaling, align feet to basePosition.y so model sits on the floor
+            // Align feet to basePosition.y so model sits on the floor
             try {
                 // compute bounding box robustly (fall back to per-geometry boxes if needed)
                 let box2 = new THREE.Box3().setFromObject(this.mesh);
@@ -1229,6 +1550,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
             if (window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes)) {
               this.mesh.traverse(o => {
                 if (o.isMesh) {
+                  if (_applyReferenceNodeMeshPolicy(o)) return;
                   if (this._isActive) {
                     if (!window.sceneLoader.enemyMeshes.includes(o)) window.sceneLoader.enemyMeshes.push(o);
                     o.visible = true;
@@ -1261,6 +1583,24 @@ this.coverObjectId = instanceConfig.coverObject || null;
                   this.mesh.updateMatrixWorld(true);
                 }
               }
+            }
+
+            // Apply explicit authored overrides after eye-height normalization.
+            // This keeps per-enemy scale tweaks like modelScalePercent intact.
+            try {
+              const explicitScale = mergedDef.modelScale ?? instanceConfig.modelScale ?? null;
+              const explicitPercent = mergedDef.modelScalePercent ?? instanceConfig.modelScalePercent ?? null;
+              if (explicitScale !== null && explicitScale !== undefined) {
+                const s = Number(explicitScale);
+                if (isFinite(s) && s > 0) this.mesh.scale.setScalar(s);
+              } else if (explicitPercent !== null && explicitPercent !== undefined) {
+                const p = Number(explicitPercent) || 0;
+                const percentScalar = p / 100;
+                if (isFinite(percentScalar) && percentScalar > 0) this.mesh.scale.multiplyScalar(percentScalar);
+              }
+              this.mesh.updateMatrixWorld(true);
+            } catch (e) {
+              // If override scaling fails, leave mesh scale unchanged.
             }
 
             // Ground feet: shift mesh so its bbox.min.y equals desired basePosition.y
@@ -1803,7 +2143,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
         }).catch(e => { console.warn('Failed to load character glTF', e); });
       }
 
-    } else {
+    } else if (!this._isAutoTurret) {
       // fallback sprite
       const plane = new THREE.PlaneGeometry(1.2, 1.8);
       const tex = new THREE.TextureLoader().load(mergedDef.sprite);
@@ -1841,6 +2181,7 @@ if (this.behavior.pattern === "path") {
       this.mesh.visible = !!this._isActive;
       this.mesh.traverse(o => {
         if (o.isMesh) {
+          if (_applyReferenceNodeMeshPolicy(o)) return;
           o.frustumCulled = false;
           if (this._isActive && window.sceneLoader && Array.isArray(window.sceneLoader.enemyMeshes) && !window.sceneLoader.enemyMeshes.includes(o)) {
             window.sceneLoader.enemyMeshes.push(o);
@@ -2044,11 +2385,36 @@ _randomTauntDelay() {
     }
   }
 
+  _spawnDeathExplosion() {
+    if (!this.explodeOnDeath || this._deathExplosionTriggered) return;
+    this._deathExplosionTriggered = true;
+    if (!window.spawnTestExplosion || !this.deathExplosion) return;
+
+    const pos = (this.mesh && this.mesh.position)
+      ? this.mesh.position
+      : (this.position || new THREE.Vector3());
+
+    try {
+      window.spawnTestExplosion({
+        x: pos.x,
+        y: pos.y,
+        z: pos.z,
+        explosive: this.deathExplosion.explosive,
+        explosionRadius: this.deathExplosion.explosionRadius,
+        explosionDamage: this.deathExplosion.explosionDamage,
+        explosionSounds: this.deathExplosion.explosionSounds
+      });
+    } catch (e) {
+      console.warn(`[Enemy ${this.id}] Failed to spawn death explosion`, e);
+    }
+  }
+
   die() {
     if (this._isDead || this._isDying) return;  // prevent double death
 
     // mark as dying so AI/firing stops and future damage is ignored
     this._isDying = true;
+    this._spawnDeathExplosion();
     this._playRandom(this.deathSounds);
 player._playRandomTaunt();
     // Remove from enemyMeshes so raycasting no longer hits it
@@ -2155,6 +2521,7 @@ update(deltaMs, nowMs, player) {
       this.mesh.visible = true;
       this.mesh.traverse((o) => {
         if (!o.isMesh) return;
+        if (_applyReferenceNodeMeshPolicy(o)) return;
         o.visible = true;
         o.frustumCulled = false;
         o.userData = Object.assign({}, o.userData || {}, { enemyId: this.id });
@@ -2164,7 +2531,7 @@ update(deltaMs, nowMs, player) {
       });
 
       // One-time scale sanity check for models that imported with extreme bounds.
-      if (!this._validatedVisualScale) {
+      if (!this._validatedVisualScale && !this._hasExplicitModelScale && !this._isAutoTurret) {
         this._validatedVisualScale = true;
         const box = new THREE.Box3().setFromObject(this.mesh);
         const size = new THREE.Vector3();
@@ -2662,7 +3029,18 @@ const dir = targetPos.clone().sub(origin).normalize();
 
   // Compute muzzle from weapon mesh if available so projectiles originate from barrel
   let muzzle = this.mesh.position.clone();
-  if (this.weaponMesh) {
+  if (this.weaponMuzzleNode) {
+    try {
+      muzzle = new THREE.Vector3();
+      this.weaponMuzzleNode.getWorldPosition(muzzle);
+      const forward = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(this.weaponMuzzleNode.getWorldQuaternion(new THREE.Quaternion()));
+      muzzle.add(forward.multiplyScalar(0.02));
+    } catch (e) {
+      muzzle = this.mesh.position.clone();
+      muzzle.y += 0.9;
+    }
+  } else if (this.weaponMesh) {
     try {
       muzzle = new THREE.Vector3();
       this.weaponMesh.getWorldPosition(muzzle);
@@ -2768,11 +3146,55 @@ const dir = targetPos.clone().sub(origin).normalize();
   //
   _updateStand(deltaMs, nowMs, params) {
 	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
-    const interval = params.fireIntervalMs || 1200;
-    if (!this._lastStandFire) this._lastStandFire = 0;
-    if (nowMs - this._lastStandFire > interval) {
-      this._attemptFire(nowMs);
-      this._lastStandFire = nowMs;
+    const burstCount = Math.max(1, Number(params?.burstCount || 1));
+
+    if (burstCount <= 1) {
+      const interval = params.fireIntervalMs || 1200;
+      if (!this._lastStandFire) this._lastStandFire = 0;
+      if (nowMs - this._lastStandFire > interval) {
+        this._attemptFire(nowMs);
+        this._lastStandFire = nowMs;
+      }
+      return;
+    }
+
+    if (!this._burstState) {
+      this._burstState = {
+        active: false,
+        shotsRemaining: 0,
+        nextShotAtMs: 0,
+        cooldownUntilMs: 0
+      };
+    }
+
+    const burstShotIntervalMs = Math.max(30, Number(params?.burstShotIntervalMs ?? this.weapon?.fireRateMs ?? 120));
+    const burstCooldownMs = Math.max(0, Number(params?.burstCooldownMs ?? 1000));
+
+    if (!this._burstState.active) {
+      if (nowMs < this._burstState.cooldownUntilMs) return;
+      this._burstState.active = true;
+      this._burstState.shotsRemaining = burstCount;
+      this._burstState.nextShotAtMs = nowMs;
+    }
+
+    if (nowMs < this._burstState.nextShotAtMs) return;
+
+    const before = this.weapon?.lastFireTimestamp;
+    this._attemptFire(nowMs);
+    const fired = (this.weapon?.lastFireTimestamp !== before);
+
+    this._burstState.nextShotAtMs = nowMs + burstShotIntervalMs;
+
+    if (fired) {
+      this._burstState.shotsRemaining -= 1;
+    } else {
+      // If no shot could be fired this tick (e.g., blocked LOS), end burst and wait cooldown.
+      this._burstState.shotsRemaining = 0;
+    }
+
+    if (this._burstState.shotsRemaining <= 0) {
+      this._burstState.active = false;
+      this._burstState.cooldownUntilMs = nowMs + burstCooldownMs;
     }
   }
 
@@ -3047,7 +3469,19 @@ if (this._isFullyPoppedTarget &&
   }
 }
 export function killAllEnemies() {
+  const activeGroupId = Number(window.sceneLoader?.currentActiveEnemyGroupId);
+  const hasActiveGroup = Number.isFinite(activeGroupId);
+
   ENEMY_INSTANCES.forEach(enemy => {
-    if (!enemy._isDead) enemy.die();
+    if (!enemy || enemy._isDead || enemy._isDying) return;
+
+    if (hasActiveGroup) {
+      const enemyGroupId = Number(enemy.groupId ?? 1);
+      if (!Number.isFinite(enemyGroupId) || enemyGroupId !== activeGroupId) return;
+    } else if (!enemy._isActive) {
+      return;
+    }
+
+    enemy.die();
   });
 }

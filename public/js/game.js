@@ -20,6 +20,7 @@ import { attachDesktopSimulation } from './game/input/desktopSimulation.js';
 import { createBallistics } from './game/combat/ballistics.js';
 import { createDoorRuntime } from './game/doorRuntime.js';
 import { setupEditorJsonModal } from './game/editorJsonModal.js';
+import { setupTurretDebugTools } from './debugTurretTools.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
@@ -1795,5 +1796,8 @@ function animate(nowMs) {
 
 // Start the first level immediately
 loadLevel(Level_Warehouse);
+
+// Initialize turret debug tools
+setupTurretDebugTools();
 
 requestAnimationFrame(animate); 

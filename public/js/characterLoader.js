@@ -9,6 +9,18 @@ configureGltfLoaderForKtx2(gltfLoader);
 // Standard camera/eye height used as the reference for humanoid scaling
 export const CAMERA_HEIGHT = 1.7;
 
+function isReferenceNodeName(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return false;
+  return n.includes('node_marker') || n.includes('__node_marker__');
+}
+
+function isReferenceNodeObject(obj) {
+  if (!obj) return false;
+  if (obj.userData && obj.userData.isReferenceNode === true) return true;
+  return isReferenceNodeName(obj.name);
+}
+
 /**
  * Compute a mesh-only bounding box (ignores bones/helpers).
  * @param {THREE.Object3D} root - The model root to measure
@@ -22,6 +34,7 @@ export function computeMeshBoundingBox(root) {
   root.updateMatrixWorld(true);
   root.traverse(o => {
     if (o.isMesh || o.isSkinnedMesh) {
+      if (isReferenceNodeObject(o)) return;
       if (!o.geometry) return;
       try {
         if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
@@ -297,6 +310,7 @@ export function normalizeAndGroundModel(model, options = {}) {
       console.log('[normalizeAndGroundModel] Post-scale bounding box:', box.min.toArray(), box.max.toArray(), 'size=', scaledSize.toArray());
       model.traverse(o => {
         if (o.isMesh || o.isSkinnedMesh) {
+          if (isReferenceNodeObject(o)) return;
           try {
             const b = new THREE.Box3().setFromObject(o);
             const s = new THREE.Vector3(); b.getSize(s);
@@ -351,6 +365,7 @@ export function normalizeAndGroundModel(model, options = {}) {
       const meshMinYs = [];
       model.traverse(o => {
         if (o.isMesh || o.isSkinnedMesh) {
+          if (isReferenceNodeObject(o)) return;
           try {
             const b = new THREE.Box3().setFromObject(o);
             if (!isFinite(b.min.y)) return;
@@ -468,6 +483,17 @@ export async function loadCharacter(opts) {
           if (o.isBone) bones[o.name] = o;
 
           if (o.isMesh || o.isSkinnedMesh) {
+            if (isReferenceNodeObject(o)) {
+              try {
+                o.userData = Object.assign({}, o.userData || {}, { isReferenceNode: true });
+                o.visible = false;
+                o.castShadow = false;
+                o.receiveShadow = false;
+                o.frustumCulled = true;
+                o.raycast = () => {};
+              } catch (e) {}
+              return;
+            }
             const handleMaterial = mat => {
               if (!mat) return;
               if (mat.isMaterial && !mat._clonedForCharacterLoader) {
@@ -679,6 +705,28 @@ export async function loadCharacter(opts) {
         };
 
         const update = delta => { try { mixer.update(delta); } catch (e) {} };
+
+        // DEBUG: Check for any unexpected sphere geometries in the model
+        try {
+          const spheres = [];
+          model.traverse(obj => {
+            if (obj.isMesh && obj.geometry && obj.geometry.type === 'SphereGeometry') {
+              spheres.push({
+                name: obj.name,
+                visible: obj.visible,
+                scale: obj.scale.clone(),
+                position: obj.position.clone(),
+                params: obj.geometry.parameters
+              });
+            }
+          });
+          if (spheres.length > 0) {
+            console.warn(`[characterLoader] Found ${spheres.length} SphereGeometry in loaded model: ${url}`);
+            spheres.forEach((s, idx) => {
+              console.warn(`  [${idx}] name='${s.name}' visible=${s.visible} scale=(${s.scale.x.toFixed(3)}, ${s.scale.y.toFixed(3)}, ${s.scale.z.toFixed(3)})`, s.params);
+            });
+          }
+        } catch (e) {}
 
         resolve({ model, clips, bones, mixer, actions, playClip, playAllSequential, stopAll, update });
       } catch (e) { reject(e); }

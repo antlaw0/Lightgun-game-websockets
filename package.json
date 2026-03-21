@@ -4,7 +4,9 @@
     "description": "Prototype lightgun game using iPhone DeviceOrientation + HTTPS WebSocket",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "sanitize:markers": "node tools/sanitize_marker_nodes.js",
+        "sanitize:markers:models": "node tools/sanitize_marker_nodes.js public/assets/models --in-place"
     },
     "dependencies": {
         "@gltf-transform/core": "^4.3.0",

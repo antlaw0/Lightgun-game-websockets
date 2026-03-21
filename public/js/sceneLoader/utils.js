@@ -27,3 +27,15 @@ export function toRadiansIfNeeded(value) {
   const n = Number(value ?? 0);
   return Math.abs(n) > (Math.PI * 2 + 0.0001) ? THREE.MathUtils.degToRad(n) : n;
 }
+
+export function isReferenceNodeName(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return false;
+  return n.includes('node_marker') || n.includes('__node_marker__');
+}
+
+export function isReferenceNodeObject(obj) {
+  if (!obj) return false;
+  if (obj.userData && obj.userData.isReferenceNode === true) return true;
+  return isReferenceNodeName(obj.name);
+}
