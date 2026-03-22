@@ -1129,6 +1129,14 @@ position: { x: 4, y: 2.2, z: 18 },
   }, // closes environment
 
   enemies: [
+  
+  {
+	def:  "melee_brute",
+id:  "brute_1",
+active:  false,
+groupId:  1,
+position:  {  x:  17, y:  0, z:  9 }	
+  }, //end of melee brute 1
   {
 	id:  "grunt_on_walkway",
   def:  "grunt_pistol",

@@ -909,7 +909,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
       this._loadAutoTurretComposite(mergedDef, instanceConfig);
     }
 
-    if (!this._isAutoTurret && (mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt")) {
+    if (!this._isAutoTurret && (mergedDef.type === "Grunt" || mergedDef.displayName === "Grunt Soldier" || mergedDef.displayName === "Grunt")) {
       const { skinnedMesh, skeleton, bones } = createMannequin();
       this.mesh = skinnedMesh;
       // Place at scene position, then align mesh bottom to ground so feet are not submerged.
@@ -2893,7 +2893,8 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
   // -------------------------------------------------
   if (this._isDead) return; // correct death flag
   if (!this.mesh || !this.mesh.position) return;
-  if (!player || !player.position) return;
+  const playerTargetPos = this._resolveAimTargetPosition(player);
+  if (!playerTargetPos) return;
 
   // Ensure rush target vector exists
   if (!this._rushTarget) {
@@ -2924,11 +2925,13 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
     attackCooldownMs: 700,
     ...params
   };
+  this._meleeRushMeleeRange = Number.isFinite(Number(p.meleeRange)) ? Number(p.meleeRange) : 1.5;
+  this._meleeRushAttackCooldownMs = Number.isFinite(Number(p.attackCooldownMs)) ? Number(p.attackCooldownMs) : 700;
 
   const deltaSeconds = deltaMs / 1000;
 
   // Direction to player (use flattened player Y to ground to avoid vertical offsets)
-  const playerFlat = player.position.clone();
+  const playerFlat = playerTargetPos.clone();
   if (typeof this._groundY === 'number') playerFlat.y = this._groundY;
   const dirToPlayer = this._rushTarget.copy(playerFlat).sub(this.basePosition);
 
@@ -2965,33 +2968,45 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
   // ATTACK
   // -------------------------------------------------
   if (distanceToPlayer <= p.meleeRange) {
-    this.meleeAttack(player);
+    this.meleeAttack(player, {
+      meleeRange: p.meleeRange,
+      attackCooldownMs: p.attackCooldownMs
+    });
   }
 }
 
-  meleeAttack(player) {
+  meleeAttack(player, opts = {}) {
   if (!this.mesh || this._isDead) return;
   if (!player || player.hp <= 0) return;
+
+  const targetPosResolved = this._resolveAimTargetPosition(player);
+  if (!targetPosResolved) return;
 
   const nowMs = performance.now();
 
   // Initialize cooldown tracker
   if (!this._lastMelee) this._lastMelee = 0;
 
-  const meleeCooldown = 800;
+  const meleeCooldown = Number.isFinite(Number(opts.attackCooldownMs))
+    ? Number(opts.attackCooldownMs)
+    : (Number.isFinite(Number(this._meleeRushAttackCooldownMs)) ? Number(this._meleeRushAttackCooldownMs) : 800);
   if (nowMs - this._lastMelee < meleeCooldown) return;
 
-  const reach = 2.0;
-  const radius = 1.2;
+  const meleeRange = Number.isFinite(Number(opts.meleeRange))
+    ? Number(opts.meleeRange)
+    : (Number.isFinite(Number(this._meleeRushMeleeRange)) ? Number(this._meleeRushMeleeRange) : 1.5);
+  const hitPadding = 0.35;
   const damage = 10;
   const knockbackForce = 0.25;
 
-  const origin = this.mesh.position;
-  const targetPos = player.position; // SAFE: Vector3
+  const origin = this.mesh.position.clone();
+  const targetPos = targetPosResolved.clone();
+  origin.y = 0;
+  targetPos.y = 0;
 
   const dist = origin.distanceTo(targetPos);
 
-  if (dist > reach + radius) return; // ❗ no hit, no cooldown
+  if (dist > (meleeRange + hitPadding)) return; // no hit, no cooldown
 
   // ✅ HIT CONFIRMED — now consume cooldown
   this._lastMelee = nowMs;
@@ -3002,7 +3017,10 @@ _updateMeleeRush(deltaMs, nowMs, params = {}, player) {
 
   // Optional knockback
   if (player.mesh) {
-const dir = targetPos.clone().sub(origin).normalize();
+const dir = targetPosResolved.clone().sub(this.mesh.position);
+    dir.y = 0;
+    if (dir.lengthSq() <= 1e-8) return;
+    dir.normalize();
 
     
 	if (!player._knockback) player._knockback = new THREE.Vector3();

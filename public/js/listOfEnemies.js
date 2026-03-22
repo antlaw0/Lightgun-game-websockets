@@ -93,16 +93,18 @@ export const ENEMY_DEFS = {
     }, // end behavior
 
     sprite: "assets/sprites/grunt.png",
+  voice: {
+    pain: voices.brute.pain,
+    death: voices.brute.death,
+    taunt: voices.brute.taunt,
+    engage: voices.brute.engage
+  }, // end voice
 
-    hitSounds: [
-      "assets/sfx/grunt/hit1.ogg",
-      "assets/sfx/grunt/hit2.ogg"
-    ],
+  hitSounds: voices.brute.hitSounds,
 
-    deathSounds: [
-      "assets/sfx/grunt/death1.ogg",
-      "assets/sfx/grunt/death2.ogg"
-    ]
+  deathSounds: voices.brute.deathSounds
+
+
 
   }, // end melee_brute
 

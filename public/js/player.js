@@ -167,9 +167,11 @@ this.meleeCooldownMs = _meleeDef.attackSpeed || 600;
     this._emitHealth();
   }
   get position() {
-    // Assume your player is represented by a camera or some 3D position
-    //return window.camera.position.clone(); // or wherever your player "is"
-return this._position;	
+    // Keep world position authoritative from camera when available.
+    if (this.camera && this.camera.position) {
+      return this.camera.position;
+    }
+    return this._position;
   }
   getForwardVector() {
     const forward = new THREE.Vector3(0, 0, -1);
@@ -499,6 +501,11 @@ updateArm(deltaMs) {
     set position(v) {
     // copy the vector so _position stays updated
     this._position.copy(v);
+    try {
+      if (this.camera && this.camera.position) {
+        this.camera.position.copy(v);
+      }
+    } catch (e) {}
   }
   
   // Cycle weapons forward/backward
