@@ -1,4 +1,5 @@
 import sounds from "../listOfSounds.js";
+import { materials } from "../listOfMaterials.js";
 
 // js/scenes/scene_test_range.js
 
@@ -190,21 +191,7 @@ scale:  {  x:  1, y:  1, z:  1 }
       y: 0.5,
       z: 16
     },
-    
-	material: {
-  horizontalRepeat:  1,
-  verticalRepeat:  1,
-  map: "assets/textures/pavingstone.png",                  // base color / albedo
-  normalMap: "assets/textures/pavingstoneNormal.png",  // normal map for bumps
-  roughnessMap: "assets/textures/pavingstoneRoughness.png", // roughness map
-  aoMap: "assets/textures/pavingstoneAO.png",          // ambient occlusion
-  roughness: 1.0,       // base roughness, multiplied by roughnessMap
-  metalness: 0.0,       // stone is not metallic
-  color: 0xffffff,      // optional tint
-  transparent: false,   // only true if you have alpha
-  opacity: 1.0,         // ignored unless transparent=true
-  emissive: 0x000000    // cobblestone does not emit light
-},
+    material:  materials.concrete01,
 
     notes: "",
     hp: 9999,

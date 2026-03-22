@@ -292,6 +292,48 @@ intensity: 1.2,
         y: 1,
         z: 1
     }
+  },
+  {
+    id: "zone2_room_light_left",
+    type: "point",
+    color: 0xf2f0e6,
+    intensity: 1.35,
+    distance: 14,
+    decay: 2,
+    position: { x: 32.5, y: 3.2, z: -11 },
+    castShadow: true,
+    shadow: {
+      mapSize: {
+        width: 1024,
+        height: 1024
+      },
+      camera: {
+        near: 0.5,
+        far: 50
+      },
+      bias: -0.0001
+    }
+  },
+  {
+    id: "zone2_room_light_right",
+    type: "point",
+    color: 0xf2f0e6,
+    intensity: 1.35,
+    distance: 14,
+    decay: 2,
+    position: { x: 39.5, y: 3.2, z: -11 },
+    castShadow: true,
+    shadow: {
+      mapSize: {
+        width: 1024,
+        height: 1024
+      },
+      camera: {
+        near: 0.5,
+        far: 50
+      },
+      bias: -0.0001
+    }
 }
 ], // closes lights
   
@@ -832,6 +874,254 @@ position: { x: 4, y: 2.2, z: 18 },
         _convertedToCenter: true,
 		material:  floorTexture,
         hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_wall_back_zone2",
+        type: "wall",
+        position: {
+          x: 36,
+          y: 0,
+          z: -15
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 15,
+          y: 4,
+          z: 0.2
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_wall_left_zone2",
+        type: "wall",
+        position: {
+          x: 28.5,
+          y: 0,
+          z: -11
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 0.2,
+          y: 4,
+          z: 8
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_wall_right_zone2",
+        type: "wall",
+        position: {
+          x: 43.5,
+          y: 0,
+          z: -11
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 0.2,
+          y: 4,
+          z: 8
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_wall_front_left_zone2",
+        type: "wall",
+        position: {
+          x: 31.95,
+          y: 0,
+          z: -7
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 6.9,
+          y: 4,
+          z: 0.2
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_wall_front_right_zone2",
+        type: "wall",
+        position: {
+          x: 40.05,
+          y: 0,
+          z: -7
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 6.9,
+          y: 4,
+          z: 0.2
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        id: "door3",
+        type: "door",
+		model: "assets/models/props/door1.glb",
+        position: {
+          x: 36,
+          y: 0,
+          z: -7
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 1.2,
+          y: 2.2,
+          z: 0.15
+        },
+        hp: 9999,
+        maxHp: 9999,
+        indestructible: true,
+		texture: "assets/textures/door_wood.png",
+        modelRotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        modelPivotOffset: {
+          x: 0,
+          y: 0,
+          z: 0.6
+        },
+        scale: 1,
+        openDirection: 1,
+        openInOut: 1,
+        openDuration: 800,
+        openSound: "assets/sfx/props/door1.ogg"
+      },
+      {
+        def: "wall",
+		id: "room_wall_above_door_zone2",
+        type: "wall",
+        position: {
+          x: 36,
+          y: 2.2,
+          z: -7
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 1.2,
+          y: 1.8,
+          z: 0.2
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "wall",
+		id: "room_ceiling_gap_fill_zone2",
+        type: "wall",
+        position: {
+          x: 36,
+          y: 3,
+          z: -6.9
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 4,
+          y: 1,
+          z: 0.2
+        },
+        _convertedToCenter: true,
+		material: outerWall,
+        hp: 9999
+      },
+      {
+        def: "tile",
+		id: "floor_room_zone2",
+        type: "tile",
+        position: {
+          x: 36,
+          y: 0,
+          z: -11
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 15,
+          y: 0.2,
+          z: 8
+        },
+        _convertedToCenter: true,
+		material: floorTexture,
+        hp: 9999,
+        coverType: "none"
+      },
+      {
+        def: "tile",
+		id: "ceiling_room_zone2",
+        type: "tile",
+        position: {
+          x: 36,
+          y: 4,
+          z: -11
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 15,
+          y: 0.2,
+          z: 8
+        },
+        _convertedToCenter: true,
+		material: ceilingTexture,
+        hp: 9999,
+        coverType: "none"
       }
       
       
