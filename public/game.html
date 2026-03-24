@@ -9,7 +9,18 @@
 </head>
 <body>
 <canvas id="canvas"></canvas>
-<div id="reticle"></div>
+<div id="reticleTrail" aria-hidden="true"></div>
+<div id="reticle" aria-hidden="true">
+  <div class="reticle-visual">
+    <span class="reticle-ring reticle-ring-outer"></span>
+    <span class="reticle-ring reticle-ring-inner"></span>
+    <span class="reticle-line reticle-line-h reticle-line-outer"></span>
+    <span class="reticle-line reticle-line-v reticle-line-outer"></span>
+    <span class="reticle-line reticle-line-h reticle-line-inner"></span>
+    <span class="reticle-line reticle-line-v reticle-line-inner"></span>
+    <span class="reticle-line reticle-line-h reticle-line-accent"></span>
+  </div>
+</div>
 
 <div id="hud">
   <div><strong>Lightgun - 3D</strong></div>

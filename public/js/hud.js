@@ -299,7 +299,8 @@ export const HUD = {
     if (!el) return;
 
     if (this._reticleKick.framesRemaining <= 0) {
-      el.style.transform = '';
+      el.style.setProperty('--reticle-kick-x', '0px');
+      el.style.setProperty('--reticle-kick-y', '0px');
       return;
     }
 
@@ -311,7 +312,8 @@ export const HUD = {
 
     const ox = r.offset.x * ease;
     const oy = r.offset.y * ease;
-    el.style.transform = `translate(${ox}px, ${oy}px)`;
+    el.style.setProperty('--reticle-kick-x', `${ox}px`);
+    el.style.setProperty('--reticle-kick-y', `${oy}px`);
 
     r.framesRemaining = Math.max(0, r.framesRemaining - 1);
   },

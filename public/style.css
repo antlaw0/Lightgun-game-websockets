@@ -39,43 +39,167 @@ html, body {
    ========================= */
 :root {
   --reticle-size: 24px;
-  --reticle-border: 2px;
-  --cross-color: lime;
-  --cross-thickness: 3px;
-  --cross-length: 10vw;
+  --reticle-size-local: var(--reticle-size);
+  --reticle-ring-thickness: 2px;
+  --reticle-outer-color: rgba(28, 28, 28, 0.96);
+  --reticle-inner-color: rgba(255, 255, 255, 0.98);
+  --reticle-accent-color: rgba(255, 221, 36, 0.98);
+  --reticle-outer-line-thickness: 5px;
+  --reticle-inner-line-thickness: 2px;
+  --reticle-accent-thickness: 2px;
+  --reticle-cross-length: clamp(96px, 10vw, 180px);
+  --reticle-inner-cross-length: calc(var(--reticle-cross-length) - 18px);
+  --reticle-accent-length: clamp(26px, 3vw, 48px);
+  --reticle-kick-x: 0px;
+  --reticle-kick-y: 0px;
+}
+
+#reticleTrail {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
 }
 
 #reticle {
   position: fixed;
   left: 50%;
   top: 50%;
-  width: var(--reticle-size);
-  height: var(--reticle-size);
-  border: var(--reticle-border) solid var(--cross-color);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+  transform: translate(var(--reticle-kick-x), var(--reticle-kick-y));
   pointer-events: none;
   z-index: 1000;
 }
 
-#reticle::before,
-#reticle::after {
-  content: "";
+.reticle-visual {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--reticle-size-local);
+  height: var(--reticle-size-local);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+}
+
+#reticle .reticle-visual {
+  animation: reticle-pulse 1.8s ease-in-out infinite;
+}
+
+.reticle-ring,
+.reticle-line {
   position: absolute;
   left: 50%;
   top: 50%;
-  background: var(--cross-color);
   transform: translate(-50%, -50%);
+  border-radius: 999px;
 }
 
-#reticle::before {
-  width: var(--cross-length);
-  height: var(--cross-thickness);
+.reticle-ring-outer {
+  inset: 0;
+  left: 0;
+  top: 0;
+  transform: none;
+  border-radius: 50%;
+  border: calc(var(--reticle-ring-thickness) + 1px) solid var(--reticle-outer-color);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
-#reticle::after {
-  height: var(--cross-length);
-  width: var(--cross-thickness);
+.reticle-ring-inner {
+  inset: 2px;
+  left: 2px;
+  top: 2px;
+  transform: none;
+  border-radius: 50%;
+  border: var(--reticle-ring-thickness) solid var(--reticle-inner-color);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+}
+
+.reticle-line-outer {
+  background: var(--reticle-outer-color);
+}
+
+.reticle-line-inner {
+  background: var(--reticle-inner-color);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.reticle-line-accent {
+  background: var(--reticle-accent-color);
+  box-shadow: 0 0 12px rgba(255, 221, 36, 0.45);
+}
+
+.reticle-line-h.reticle-line-outer {
+  width: var(--reticle-cross-length);
+  height: var(--reticle-outer-line-thickness);
+}
+
+.reticle-line-v.reticle-line-outer {
+  width: var(--reticle-outer-line-thickness);
+  height: var(--reticle-cross-length);
+}
+
+.reticle-line-h.reticle-line-inner {
+  width: var(--reticle-inner-cross-length);
+  height: var(--reticle-inner-line-thickness);
+}
+
+.reticle-line-v.reticle-line-inner {
+  width: var(--reticle-inner-line-thickness);
+  height: var(--reticle-inner-cross-length);
+}
+
+.reticle-line-h.reticle-line-accent {
+  width: var(--reticle-accent-length);
+  height: var(--reticle-accent-thickness);
+}
+
+.reticle-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 999;
+  animation: reticle-ghost-fade 180ms ease-out forwards;
+}
+
+.reticle-ghost .reticle-visual {
+  opacity: 0.42;
+  filter: blur(0.35px) drop-shadow(0 0 6px rgba(255, 255, 255, 0.14));
+}
+
+.reticle-ghost .reticle-ring-inner,
+.reticle-ghost .reticle-line-inner {
+  opacity: 0.7;
+}
+
+.reticle-ghost .reticle-line-accent {
+  opacity: 0.65;
+  box-shadow: 0 0 8px rgba(255, 221, 36, 0.28);
+}
+
+@keyframes reticle-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.035);
+  }
+}
+
+@keyframes reticle-ghost-fade {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
 }
 
 /* =========================

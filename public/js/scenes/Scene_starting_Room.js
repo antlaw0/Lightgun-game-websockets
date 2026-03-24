@@ -346,13 +346,21 @@ intensity: 1.2,
       backgroundBlurriness: 0.0
     },
     staticObjects: [
-	      {
+	      
+		    {
+	id:  "crate_01",
+type:  "prefab",
+prefab:  "woodenCrate01.glb",
+position:  {  x:  8, y:  0, z:  4  },
+scale:  {  x:  1, y:  1, z:  1 }	
+  },
+		  {
         id: "crate_01",
         type: "crate",
         position: {
-          x: 11.883029736852674,
-          y: 0.732152794253579,
-          z: 9.927079158278612
+          x: 11,
+          y: 0,
+          z: 9
         },
         rotation: {
           x: 0,
@@ -1152,40 +1160,24 @@ position:  {  x:  17, y:  0, z:  9 }
     stance: "wideGun"
   },
   },
-  {
-      def:  "grunt_pistol",
-	  id: "grunt_1",
-  	  active:  false,
-  	  groupId: 1,
+	{
+      def:  "grunt_crouch_cover",
+	  id: "grunt_crouch_crate_1",
       type: "Grunt",
-      hp: 40,
-      // Use a GLB humanoid base mesh instead of FBX
-      modelUrl: "assets/models/exo_red.glb",
-      aimYawOffset: -Math.PI / 2,
-      // allow automatic auto-scaling based on the GLTF bounding box
-      modelScale: null,
-      // provide common pistol animations as GLB clips
-      animationUrls: {
-        walk: "assets/animations/walk_pistol.glb",
-        shoot: "assets/animations/stand_pistol.glb"
-      },
-      position: { x: 10, y: 0.9, z: 3 },
-      behavior: {
-        pattern: "path",
-        params: {
-          loop: true,
-          steps: [
-            { type: "move", axis: "x", distance: 6, durationMs: 3000 },
-            { type: "pause", durationMs: 800 },
-            { type: "move", axis: "x", distance: -6, durationMs: 3000 },
-            { type: "pause", durationMs: 800 }
-          ]
-        }
-      },
-      firePauseMs: 800,
-      weapon: "pistol",
-      sprite: "assets/sprites/grunt.png"
-  }, // end of grunt 1
+      displayName: "Grunt Soldier",
+	  
+	  active: false,
+	  groupId:  1,
+      
+      // sit slightly behind the crate so crate is between camera and enemy
+      position: { x: 18, y: 0, z: 4 },
+      
+      coverObject: "crate_cover_1",
+      coverType: "low",
+      // increase crouch depth so model can hide behind 0.5m crate
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
+    },
+    ,
 	
     
   {

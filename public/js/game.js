@@ -320,6 +320,8 @@ function generateShotgunPelletDirections(forwardDir, numPellets, weaponAccuracy,
 // ---- UI elements assumed in page ----
 const canvas = document.getElementById('canvas');
 const reticleDiv = document.getElementById('reticle');
+const reticleTrailDiv = document.getElementById('reticleTrail');
+const reticleVisualTemplate = reticleDiv ? reticleDiv.querySelector('.reticle-visual') : null;
 const connStatus = document.getElementById('connStatus');
 const retXY = document.getElementById('retXY');
 const abc = document.getElementById('abc');
@@ -332,6 +334,63 @@ let ch = canvas.height = window.innerHeight;
 let ret = { x: cw / 2, y: ch / 2 }; // target position from controller (pixels)
 let displayedRet = { x: cw / 2, y: ch / 2 }; // smoothed position shown on screen
 const LERP_SPEED = 0.9;
+const RETICLE_TRAIL_MAX_GHOSTS = 8;
+const RETICLE_TRAIL_MIN_DISTANCE_PX = 10;
+const RETICLE_TRAIL_MIN_INTERVAL_MS = 20;
+const reticleTrailState = {
+  lastSpawnX: cw / 2,
+  lastSpawnY: ch / 2,
+  lastSpawnMs: 0,
+  ghosts: []
+};
+
+function removeReticleGhost(ghostEl) {
+  if (!ghostEl) return;
+  const ghostIndex = reticleTrailState.ghosts.indexOf(ghostEl);
+  if (ghostIndex >= 0) reticleTrailState.ghosts.splice(ghostIndex, 1);
+  if (ghostEl.parentNode) ghostEl.parentNode.removeChild(ghostEl);
+}
+
+function spawnReticleGhost(x, y) {
+  if (!reticleTrailDiv || !reticleVisualTemplate) return;
+
+  const ghostEl = document.createElement('div');
+  ghostEl.className = 'reticle-ghost';
+  ghostEl.style.left = `${x}px`;
+  ghostEl.style.top = `${y}px`;
+
+  const ghostVisual = reticleVisualTemplate.cloneNode(true);
+  const reticleSize = getComputedStyle(document.documentElement)
+    .getPropertyValue('--reticle-size')
+    .trim();
+  if (reticleSize) ghostVisual.style.setProperty('--reticle-size-local', reticleSize);
+
+  ghostEl.appendChild(ghostVisual);
+  ghostEl.addEventListener('animationend', () => removeReticleGhost(ghostEl), { once: true });
+  reticleTrailDiv.appendChild(ghostEl);
+  reticleTrailState.ghosts.push(ghostEl);
+
+  while (reticleTrailState.ghosts.length > RETICLE_TRAIL_MAX_GHOSTS) {
+    removeReticleGhost(reticleTrailState.ghosts[0]);
+  }
+}
+
+function updateReticleTrail(nowMs) {
+  if (!reticleTrailDiv || !reticleVisualTemplate) return;
+
+  const elapsedMs = nowMs - reticleTrailState.lastSpawnMs;
+  const distPx = Math.hypot(
+    displayedRet.x - reticleTrailState.lastSpawnX,
+    displayedRet.y - reticleTrailState.lastSpawnY
+  );
+
+  if (elapsedMs < RETICLE_TRAIL_MIN_INTERVAL_MS || distPx < RETICLE_TRAIL_MIN_DISTANCE_PX) return;
+
+  spawnReticleGhost(displayedRet.x, displayedRet.y);
+  reticleTrailState.lastSpawnX = displayedRet.x;
+  reticleTrailState.lastSpawnY = displayedRet.y;
+  reticleTrailState.lastSpawnMs = nowMs;
+}
 
 controllerRuntime = createControllerRuntime({
   connStatus,
@@ -1697,6 +1756,8 @@ function animate(nowMs) {
         reticleDiv.style.top = `${ch / 2}px`;
       }
     }
+
+    updateReticleTrail(nowMs);
 
     // --- Ducking/Zooming ---
     if (!isFPSMode) {
