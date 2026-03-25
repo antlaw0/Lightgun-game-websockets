@@ -76,7 +76,7 @@ export const scene_test = {
         position: {
           x: 5,
           y: 0,
-          z: 3.5
+          z: 4
         },
         rotation: {
           x: 0,
@@ -282,12 +282,24 @@ scale:  {  x:  1, y:  1, z:  1 }
 	  groupId:  2,
       
       // sit slightly behind the crate so crate is between camera and enemy
-      position: { x: 5, y: 0, z: 4 },
+      position: { x: 5, y: 0, z: 3 },
       
       coverObject: "crate_cover_01",
       coverType: "low",
-      // increase crouch depth so model can hide behind 0.5m crate
-      behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
+      behavior: {
+        pattern: "popOutFromCover",
+        params: {
+          coverType: "low",
+          popDurationMs: 300,
+          hideDurationMs: 1200,
+          firingDurationMs: 900,
+          autoAlignToCover: true,
+          autoFitCoverHeight: true,
+          hiddenTopClearance: 0.03,
+          useCrouchAnimation: true,
+          crouchAnimToHiddenReversed: true
+        }
+      }
     },
     ,
 	

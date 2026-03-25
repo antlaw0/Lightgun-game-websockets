@@ -111,13 +111,32 @@ export const ENEMY_DEFS = {
       ...grunt_pistol_def,
       displayName: "Grunt Soldier",
 	  active: false,
+      animationUrls: {
+        ...grunt_pistol_def.animationUrls,
+        aim: "assets/animations/exo_pistol_aiming.glb",
+        shoot: "assets/animations/exo_pistol_shooting.glb",
+        cover_crouch_transition: "assets/animations/exo_crouch_to_stand.glb"
+      },
       // sit slightly behind the crate so crate is between camera and enemy
       position: { x: 0, y: 0, z: -6 },
       facing: 0,
       coverObject: "crate_test",
       coverType: "low",
-      // increase crouch depth so model can hide behind 0.5m crate
-      behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
+      behavior: {
+        pattern: "popOutFromCover",
+        params: {
+          coverType: "low",
+          popDurationMs: 300,
+          hideDurationMs: 1200,
+          firingDurationMs: 900,
+          autoAlignToCover: true,
+          autoFitCoverHeight: true,
+          hiddenTopClearance: 0.03,
+          useCrouchAnimation: true,
+          // exo_crouch_to_stand starts crouched and ends standing, so hidden pose uses reverse playback.
+          crouchAnimToHiddenReversed: true
+        }
+      }
     },
 
 

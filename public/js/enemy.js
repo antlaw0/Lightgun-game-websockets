@@ -2045,6 +2045,11 @@ this.coverObjectId = instanceConfig.coverObject || null;
                 else if (n.includes('right')) { a.loop = THREE.LoopRepeat; this._actions.strafe_right = a; }
                 else { a.loop = THREE.LoopRepeat; this._actions.strafe = a; }
               }
+              else if (n.includes('crouch') || (n.includes('cover') && n.includes('stand'))) {
+                a.loop = THREE.LoopOnce;
+                a.clampWhenFinished = true;
+                this._actions.cover_crouch_transition = a;
+              }
               else if (n.includes('shoot') || n.includes('fire')) { a.loop = THREE.LoopOnce; a.clampWhenFinished = true; this._actions.shoot = a; }
             } catch (e) { console.warn('[Enemy] embedded clip mapping failed', e); }
           });
@@ -2102,6 +2107,12 @@ this.coverObjectId = instanceConfig.coverObject || null;
                         if (k.includes('left') || clipName.includes('left')) { action.loop = THREE.LoopRepeat; this._actions.strafe_left = action; mapped = 'strafe_left'; }
                         else if (k.includes('right') || clipName.includes('right')) { action.loop = THREE.LoopRepeat; this._actions.strafe_right = action; mapped = 'strafe_right'; }
                         else { action.loop = THREE.LoopRepeat; this._actions.strafe = action; mapped = 'strafe'; }
+                      }
+                      else if (k.includes('crouch') || clipName.includes('crouch') || (k.includes('cover') && k.includes('stand')) || (clipName.includes('cover') && clipName.includes('stand'))) {
+                        action.loop = THREE.LoopOnce;
+                        action.clampWhenFinished = true;
+                        this._actions.cover_crouch_transition = action;
+                        mapped = 'cover_crouch_transition';
                       }
                       else if (k.includes('shoot') || k.includes('fire') || clipName.includes('shoot') || clipName.includes('fire')) { action.loop = THREE.LoopOnce; action.clampWhenFinished = true; this._actions.shoot = action; mapped = 'shoot'; }
                       else { action.loop = THREE.LoopRepeat; this._actions[k] = action; mapped = k; }
@@ -2371,7 +2382,9 @@ this._isFullyPoppedTarget = false;
       lateralInset: (p.lateralInset ?? 0.08),
       hiddenTopClearance: (p.hiddenTopClearance ?? 0.05),
       autoAlignToCover: (p.autoAlignToCover ?? true),
-      autoFitCoverHeight: (p.autoFitCoverHeight ?? true)
+      autoFitCoverHeight: (p.autoFitCoverHeight ?? true),
+      useCrouchAnimation: (p.useCrouchAnimation ?? true),
+      crouchAnimToHiddenReversed: (p.crouchAnimToHiddenReversed ?? true)
     };
 
     // initialize pop/cover state - will randomize first hide
@@ -2390,6 +2403,14 @@ this._leanSide = 1; // default right
     // crouch bone blending state (0 = standing, 1 = fully crouched)
     this._currentCrouchAlpha = 0;
     this._targetCrouchAlpha = 0;
+    this._coverCrouchAnimState = {
+      isCrouched: false,
+      active: false,
+      targetHidden: false,
+      startedAtMs: 0,
+      durationMs: 0,
+      initializedToHidden: false
+    };
 
 // Explicit override from behavior params
 if (this.behavior?.params?.leanSide) {
@@ -2811,7 +2832,7 @@ if (
 
       // toggle actions with smooth crossfade
       try {
-        if (this.mixer && this._actions) {
+        if (this.mixer && this._actions && pattern !== "popOutFromCover") {
           if (moved) {
             // compute movement vector (world-space) using mesh position delta
             const moveVec = this.mesh.position.clone().sub(lastMesh);
@@ -3398,6 +3419,93 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
     }
   }
 
+  _getCoverCrouchAction() {
+    return (this._actions && this._actions.cover_crouch_transition) ? this._actions.cover_crouch_transition : null;
+  }
+
+  _setCoverCrouchHoldPose(cp, hidden) {
+    const action = this._getCoverCrouchAction();
+    if (!action) return false;
+    try {
+      const clip = action.getClip ? action.getClip() : action._clip;
+      const duration = Math.max(0.001, Number(clip?.duration ?? 0.001));
+      const toHiddenReversed = cp?.crouchAnimToHiddenReversed !== false;
+      const crouchTime = toHiddenReversed ? 0 : duration;
+      const standTime = toHiddenReversed ? duration : 0;
+      action.enabled = true;
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.reset();
+      action.play();
+      action.paused = true;
+      action.timeScale = 1;
+      action.time = hidden ? crouchTime : standTime;
+      if (this.mixer) this.mixer.update(0);
+      this._coverCrouchAnimState.isCrouched = !!hidden;
+      this._coverCrouchAnimState.active = false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _startCoverCrouchTransition(cp, nowMs, toHidden) {
+    const action = this._getCoverCrouchAction();
+    if (!action || cp?.useCrouchAnimation === false || this.coverType !== 'low') {
+      return null;
+    }
+
+    try {
+      const clip = action.getClip ? action.getClip() : action._clip;
+      const durationSec = Math.max(0.001, Number(clip?.duration ?? 0.001));
+      const durationMs = Math.max(1, Math.round(durationSec * 1000));
+      const toHiddenReversed = cp?.crouchAnimToHiddenReversed !== false;
+      const playReversed = toHidden ? toHiddenReversed : !toHiddenReversed;
+      const epsilon = 1 / 120;
+
+      action.enabled = true;
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.reset();
+      action.play();
+      action.paused = false;
+      action.timeScale = playReversed ? -1 : 1;
+      action.time = playReversed ? Math.max(epsilon, durationSec - epsilon) : 0;
+      try { action.setEffectiveWeight?.(1); } catch (e) {}
+
+      this._coverCrouchAnimState.active = true;
+      this._coverCrouchAnimState.targetHidden = !!toHidden;
+      this._coverCrouchAnimState.startedAtMs = nowMs;
+      this._coverCrouchAnimState.durationMs = durationMs;
+
+      return durationMs;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _updateCoverCrouchTransition(cp, nowMs) {
+    const action = this._getCoverCrouchAction();
+    if (!action || !this._coverCrouchAnimState?.active) return;
+    try {
+      const elapsed = nowMs - (this._coverCrouchAnimState.startedAtMs || 0);
+      const durationMs = Math.max(1, Number(this._coverCrouchAnimState.durationMs || 1));
+      if (elapsed < durationMs - 10) return;
+
+      const toHidden = !!this._coverCrouchAnimState.targetHidden;
+      this._coverCrouchAnimState.active = false;
+      this._coverCrouchAnimState.isCrouched = toHidden;
+
+      if (toHidden) {
+        this._setCoverCrouchHoldPose(cp, true);
+      } else {
+        action.paused = true;
+      }
+    } catch (e) {
+      this._coverCrouchAnimState.active = false;
+    }
+  }
+
   _updatePopOut(deltaMs, nowMs, params) {
 	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
     // Ensure _coverParams reflect any runtime overrides
@@ -3415,13 +3523,19 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
       }
       // Make sure mesh is set to "behind cover" pose
       this._setTargetForCoverHidden(cp);
+      if (cp.useCrouchAnimation !== false && this.coverType === 'low' && this._coverCrouchAnimState && !this._coverCrouchAnimState.initializedToHidden) {
+        if (this._setCoverCrouchHoldPose(cp, true)) {
+          this._coverCrouchAnimState.initializedToHidden = true;
+        }
+      }
 
       if (elapsed >= s.nextHiddenDuration) {
         // begin popping
         s.phase = "popping";
         s.phaseSince = nowMs;
         // decide popDuration (how long transition to fully popped takes)
-        s.transitionMs = cp.popTransitionMs;
+        const transitionMs = this._startCoverCrouchTransition(cp, nowMs, false);
+        s.transitionMs = Number.isFinite(Number(transitionMs)) ? Number(transitionMs) : cp.popTransitionMs;
         if (this._isActive) this.mesh.visible = true; // make visible and transition out only if active
         // reset firing cadence tracker
         this._lastFireWhilePopped = 0;
@@ -3429,10 +3543,15 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
     } else if (s.phase === "popping") {
       // transition toward popped pose
       this._setTargetForCoverPopped(cp);
+      this._updateCoverCrouchTransition(cp, nowMs);
 
       if (elapsed >= (s.transitionMs || cp.popTransitionMs)) {
         s.phase = "firing";
         s.phaseSince = nowMs;
+        try {
+          if (this._actions?.aim) this._activateAction('aim', 0.1);
+          else if (this._actions?.idle) this._activateAction('idle', 0.1);
+        } catch (e) {}
         // how long will we stay firing before retreat
         s.firingDuration = this._randInterval(cp.firingDurationMs * 0.6, cp.firingDurationMs * 1.4);
       }
@@ -3449,11 +3568,13 @@ if (this._isFullyPoppedTarget &&
         // start retreating
         s.phase = "retreating";
         s.phaseSince = nowMs;
-        s.transitionMs = cp.retreatTransitionMs;
+        const transitionMs = this._startCoverCrouchTransition(cp, nowMs, true);
+        s.transitionMs = Number.isFinite(Number(transitionMs)) ? Number(transitionMs) : cp.retreatTransitionMs;
       }
     } else if (s.phase === "retreating") {
       // move back into hidden pose smoothly
       this._setTargetForCoverHidden(cp);
+      this._updateCoverCrouchTransition(cp, nowMs);
 
       if (elapsed >= (s.transitionMs || cp.retreatTransitionMs)) {
         // go hidden; pick next random wait
@@ -3526,15 +3647,20 @@ if (this._isFullyPoppedTarget &&
 
   // Reset offsets cleanly
   this._targetOffset.set(0, 0, 0);
+  const usingAnimCrouch = !!(cp?.useCrouchAnimation !== false && this.coverType === 'low' && this._getCoverCrouchAction());
   // When hidden behind cover, crouch / shrink slightly
   try {
     const s = (this.baseScale ? this.baseScale.clone() : new THREE.Vector3(1,1,1));
-    const hideScale = Number.isFinite(Number(this._autoHiddenCoverScale))
-      ? Number(this._autoHiddenCoverScale)
-      : (cp.crouchScale ?? 0.92);
-    this._targetScale = s.multiplyScalar(hideScale);
+    if (usingAnimCrouch) {
+      this._targetScale = s;
+    } else {
+      const hideScale = Number.isFinite(Number(this._autoHiddenCoverScale))
+        ? Number(this._autoHiddenCoverScale)
+        : (cp.crouchScale ?? 0.92);
+      this._targetScale = s.multiplyScalar(hideScale);
+    }
   } catch (e) { this._targetScale = new THREE.Vector3(0.92,0.92,0.92); }
-  this._targetCrouchAlpha = 1;
+  this._targetCrouchAlpha = usingAnimCrouch ? 0 : 1;
 }
 
   // Smoothly lerp actual mesh transform toward target transforms each frame
