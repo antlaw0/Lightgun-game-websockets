@@ -108,12 +108,9 @@ export const ENEMY_DEFS = {
 
   }, // end melee_brute
 	grunt_crouch_cover: {
-      
-      type: "Grunt",
+      ...grunt_pistol_def,
       displayName: "Grunt Soldier",
-	  hp:  40,
 	  active: false,
-      modelUrl: "assets/models/exo_red.glb",
       // sit slightly behind the crate so crate is between camera and enemy
       position: { x: 0, y: 0, z: -6 },
       facing: 0,
@@ -122,7 +119,6 @@ export const ENEMY_DEFS = {
       // increase crouch depth so model can hide behind 0.5m crate
       behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
     },
-    ,
 
 
 

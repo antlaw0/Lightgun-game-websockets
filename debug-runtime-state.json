@@ -1,0 +1,40 @@
+{
+  "savedAt": "2026-03-24T19:35:52.914Z",
+  "state": {
+    "version": 1,
+    "scene": {
+      "id": "Scene_test",
+      "name": "scene_test"
+    },
+    "camera": {
+      "position": {
+        "x": 14.8,
+        "y": 1.7,
+        "z": 21.270000000000067
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "order": "XYZ"
+      },
+      "quaternion": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 1
+      },
+      "fov": 60,
+      "near": 0.1,
+      "far": 200
+    },
+    "fps": {
+      "isFPSMode": false,
+      "yaw": 0,
+      "pitch": 0
+    },
+    "player": {
+      "hp": 9955
+    }
+  }
+}

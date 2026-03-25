@@ -74,12 +74,12 @@ export const LEVELS = {
             id: "gruntB",
             type: "Grunt",
             position: { x: 1, y: 0.5, z: -5 },
-            coverIndex: 1,
-            behavior: {
-              pattern: "popOutFromCover",
-              params: { popDurationMs: 700, hideDurationMs: 1400 }
-            }
-          },
+                  animationUrls: {
+                    shoot: "assets/animations/exo_pistol_shooting.glb",
+                    dying_rifle: "assets/animations/exo_dying_rifle.glb",
+                    strafe_left: "assets/animations/exo_pistol_strafe_left.glb",
+                    strafe_right: "assets/animations/exo_pistol_strafe_right.glb",
+                    aim: "assets/animations/exo_pistol_aiming.glb"
 
           // This enemy is standing in the open on the catwalk
           {
@@ -89,11 +89,11 @@ export const LEVELS = {
             // Make this a moving enemy that uses the exo_red model and strafing clips
             modelUrl: "assets/models/exo_red.glb",
             animationUrls: {
-              shoot: "assets/animations/exo_red_pistol_shooting.glb",
-              dying_rifle: "assets/animations/exo_red_dying_rifle.glb",
-              strafe_left: "assets/animations/exo_red_pistol_strafe_left.glb",
-              strafe_right: "assets/animations/exo_red_pistol_strafe_right.glb",
-              aim: "assets/animations/exo_red_pistol_aiming.glb"
+              shoot: "assets/animations/exo_pistol_shooting.glb",
+              dying_rifle: "assets/animations/exo_dying_rifle.glb",
+              strafe_left: "assets/animations/exo_pistol_strafe_left.glb",
+              strafe_right: "assets/animations/exo_pistol_strafe_right.glb",
+              aim: "assets/animations/exo_pistol_aiming.glb"
             },
             behavior: { pattern: "patrol", params: { minX: -1.2, maxX: 1.2, speed: 0.004, fireIntervalMs: 1200 } }
           }
@@ -130,10 +130,10 @@ export const ENEMY_DEFS = {
       walk: "assets/animations/walk_pistol.glb",
       shoot: "assets/animations/stand_pistol.glb",
       // default strafes (if present these will be mapped to strafe actions)
-      strafe_left: "assets/animations/exo_red_pistol_strafe_left.glb",
-      strafe_right: "assets/animations/exo_red_pistol_strafe_right.glb",
-      aim: "assets/animations/exo_red_pistol_aiming.glb",
-      dying_rifle: "assets/animations/exo_red_dying_rifle.glb"
+      strafe_left: "assets/animations/exo_pistol_strafe_left.glb",
+      strafe_right: "assets/animations/exo_pistol_strafe_right.glb",
+      aim: "assets/animations/exo_pistol_aiming.glb",
+      dying_rifle: "assets/animations/exo_dying_rifle.glb"
     },
 
     weapon: {

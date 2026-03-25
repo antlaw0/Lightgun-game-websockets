@@ -217,6 +217,7 @@ let projectileRuntime = null;
 let controllerRuntime = null;
 let doorRuntime = null;
 let editorJsonModalRuntime = null;
+const DEBUG_RUNTIME_STATE_API = '/api/debug-runtime-state';
 
 function triggerReload() {
   return fireController?.triggerReload();
@@ -268,6 +269,204 @@ function closeEditModal() {
 
 function applyEditedJSON() {
   return editorJsonModalRuntime?.applyEditedJSON();
+}
+
+function toFiniteNumber(value, fallback = null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function snapshotVector3(v) {
+  if (!v) return null;
+  const x = toFiniteNumber(v.x, null);
+  const y = toFiniteNumber(v.y, null);
+  const z = toFiniteNumber(v.z, null);
+  if (x === null || y === null || z === null) return null;
+  return { x, y, z };
+}
+
+function snapshotEuler(e) {
+  if (!e) return null;
+  const x = toFiniteNumber(e.x, null);
+  const y = toFiniteNumber(e.y, null);
+  const z = toFiniteNumber(e.z, null);
+  if (x === null || y === null || z === null) return null;
+  return { x, y, z, order: typeof e.order === 'string' ? e.order : 'YXZ' };
+}
+
+function snapshotQuaternion(q) {
+  if (!q) return null;
+  const x = toFiniteNumber(q.x, null);
+  const y = toFiniteNumber(q.y, null);
+  const z = toFiniteNumber(q.z, null);
+  const w = toFiniteNumber(q.w, null);
+  if (x === null || y === null || z === null || w === null) return null;
+  return { x, y, z, w };
+}
+
+function findCurrentSceneEntry() {
+  const activeScene = window.sceneLoader?.sceneDef || null;
+  if (!activeScene || !Array.isArray(ALL_SCENES)) return null;
+  return ALL_SCENES.find((entry) => entry?.scene === activeScene) || null;
+}
+
+function buildRuntimeDebugState() {
+  const sceneEntry = findCurrentSceneEntry();
+  const sceneName = window.sceneLoader?.sceneDef?.name || sceneEntry?.scene?.name || null;
+  return {
+    version: 1,
+    scene: {
+      id: sceneEntry?.id || null,
+      name: sceneName
+    },
+    camera: {
+      position: snapshotVector3(camera.position),
+      rotation: snapshotEuler(camera.rotation),
+      quaternion: snapshotQuaternion(camera.quaternion),
+      fov: toFiniteNumber(camera.fov, null),
+      near: toFiniteNumber(camera.near, null),
+      far: toFiniteNumber(camera.far, null)
+    },
+    fps: {
+      isFPSMode: !!isFPSMode,
+      yaw: toFiniteNumber(fpsState.yaw, null),
+      pitch: toFiniteNumber(fpsState.pitch, null)
+    },
+    player: {
+      hp: toFiniteNumber(player?.hp, null)
+    }
+  };
+}
+
+async function saveRuntimeDebugState() {
+  const state = buildRuntimeDebugState();
+  const response = await fetch(DEBUG_RUNTIME_STATE_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Save failed (${response.status})`);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (payload && payload.ok === false) {
+    throw new Error(payload.error || 'Save failed');
+  }
+  return state;
+}
+
+async function loadRuntimeDebugState() {
+  try {
+    const response = await fetch(DEBUG_RUNTIME_STATE_API, { cache: 'no-store' });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Load failed (${response.status})`);
+    const payload = await response.json();
+    const stored = payload?.state || null;
+    if (!stored || typeof stored !== 'object') return null;
+    if (stored.state && typeof stored.state === 'object') return stored.state;
+    return stored;
+  } catch (err) {
+    console.warn('[DEBUG STATE] Failed to load persisted runtime state:', err);
+    return null;
+  }
+}
+
+function resolveSceneFromDebugState(debugState) {
+  const sceneId = debugState?.scene?.id || null;
+  const sceneName = debugState?.scene?.name || null;
+
+  if (sceneId && Array.isArray(ALL_SCENES)) {
+    const byId = ALL_SCENES.find((entry) => entry?.id === sceneId);
+    if (byId?.scene) return byId.scene;
+  }
+
+  if (sceneName && Array.isArray(ALL_SCENES)) {
+    const byName = ALL_SCENES.find((entry) => {
+      const name = entry?.scene?.name;
+      return typeof name === 'string' && name.toLowerCase() === String(sceneName).toLowerCase();
+    });
+    if (byName?.scene) return byName.scene;
+  }
+
+  if (sceneName && Array.isArray(Level_Warehouse?.scenes)) {
+    const byWarehouseName = Level_Warehouse.scenes.find((sceneDef) => {
+      const name = sceneDef?.name;
+      return typeof name === 'string' && name.toLowerCase() === String(sceneName).toLowerCase();
+    });
+    if (byWarehouseName) return byWarehouseName;
+  }
+
+  return null;
+}
+
+function applyCameraStateFromDebugState(debugState) {
+  const cam = debugState?.camera;
+  if (!cam || typeof cam !== 'object') return;
+
+  if (cam.position) {
+    const x = toFiniteNumber(cam.position.x, camera.position.x);
+    const y = toFiniteNumber(cam.position.y, camera.position.y);
+    const z = toFiniteNumber(cam.position.z, camera.position.z);
+    camera.position.set(x, y, z);
+  }
+
+  if (cam.rotation) {
+    const rx = toFiniteNumber(cam.rotation.x, camera.rotation.x);
+    const ry = toFiniteNumber(cam.rotation.y, camera.rotation.y);
+    const rz = toFiniteNumber(cam.rotation.z, camera.rotation.z);
+    const order = typeof cam.rotation.order === 'string' ? cam.rotation.order : 'YXZ';
+    camera.rotation.set(rx, ry, rz, order);
+  } else if (cam.quaternion) {
+    const qx = toFiniteNumber(cam.quaternion.x, camera.quaternion.x);
+    const qy = toFiniteNumber(cam.quaternion.y, camera.quaternion.y);
+    const qz = toFiniteNumber(cam.quaternion.z, camera.quaternion.z);
+    const qw = toFiniteNumber(cam.quaternion.w, camera.quaternion.w);
+    camera.quaternion.set(qx, qy, qz, qw);
+  }
+
+  const fov = toFiniteNumber(cam.fov, null);
+  if (fov !== null) camera.fov = fov;
+  const near = toFiniteNumber(cam.near, null);
+  if (near !== null) camera.near = near;
+  const far = toFiniteNumber(cam.far, null);
+  if (far !== null) camera.far = far;
+  camera.updateProjectionMatrix();
+
+  const savedIsFPSMode = !!debugState?.fps?.isFPSMode;
+  isFPSMode = savedIsFPSMode;
+
+  fpsState.yaw = toFiniteNumber(debugState?.fps?.yaw, camera.rotation.y);
+  fpsState.pitch = toFiniteNumber(debugState?.fps?.pitch, camera.rotation.x);
+  if (savedIsFPSMode) {
+    camera.rotation.set(fpsState.pitch, fpsState.yaw, 0, 'YXZ');
+  }
+
+  playerStandingHeight = camera.position.y;
+}
+
+async function restoreRuntimeDebugStateOnBoot() {
+  const debugState = await loadRuntimeDebugState();
+  if (!debugState) return false;
+
+  const sceneToRestore = resolveSceneFromDebugState(debugState);
+  if (!sceneToRestore) {
+    console.warn('[DEBUG STATE] Saved scene not found, skipping restore.');
+    return false;
+  }
+
+  await window.sceneManager.loadScene(sceneToRestore);
+  applyCameraStateFromDebugState(debugState);
+  requestAnimationFrame(() => applyCameraStateFromDebugState(debugState));
+
+  const savedHp = toFiniteNumber(debugState?.player?.hp, null);
+  if (savedHp !== null && player) {
+    player.hp = savedHp;
+  }
+
+  logDebug(`Restored runtime debug state for scene: ${sceneToRestore.name || 'unknown'}`);
+  return true;
 }
 // ------------------ Projectiles ------------------
 const projectiles = [];
@@ -1658,6 +1857,25 @@ attachDesktopSimulation({
   }
 });
 
+window.addEventListener('keydown', async (e) => {
+  if (e.code !== 'F9') return;
+  e.preventDefault();
+
+  try {
+    await saveRuntimeDebugState();
+    logDebug('Runtime position saved');
+    try {
+      if (window.speak) window.speak('position saved', { interrupt: true });
+    } catch (_) {}
+  } catch (err) {
+    console.warn('[DEBUG STATE] Save failed:', err);
+    logDebug(`Runtime position save failed: ${err?.message || err}`);
+    try {
+      if (window.speak) window.speak('position save failed', { interrupt: true });
+    } catch (_) {}
+  }
+});
+
 
 // ------------------ Fire / Reload functions ------------------
 // ------------------ Reticle Accuracy Projection (WORLD-CORRECT) ------------------
@@ -1856,7 +2074,10 @@ function animate(nowMs) {
 }
 
 // Start the first level immediately
-loadLevel(Level_Warehouse);
+const restoredDebugSession = await restoreRuntimeDebugStateOnBoot();
+if (!restoredDebugSession) {
+  loadLevel(Level_Warehouse);
+}
 
 // Initialize turret debug tools
 setupTurretDebugTools();

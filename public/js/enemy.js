@@ -258,6 +258,148 @@ export class Enemy {
   const hits = raycaster.intersectObjects(blockers, false);
   return hits.length === 0;
 }
+
+_normalizeCoverObjectId(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_+/g, '_');
+}
+
+_getCoverBounds(cover = null) {
+  const resolvedCover = cover || this._resolveCoverObject();
+  if (!resolvedCover) return null;
+
+  try {
+    if (resolvedCover.mesh) {
+      resolvedCover.mesh.updateMatrixWorld?.(true);
+      const box = new THREE.Box3().setFromObject(resolvedCover.mesh);
+      if (Number.isFinite(box.min.x) && Number.isFinite(box.max.x)) {
+        return {
+          min: box.min.clone(),
+          max: box.max.clone(),
+          center: box.getCenter(new THREE.Vector3()),
+          size: box.getSize(new THREE.Vector3())
+        };
+      }
+    }
+  } catch (_) {}
+
+  if (resolvedCover.position && resolvedCover.size) {
+    const px = Number(resolvedCover.position.x ?? 0);
+    const py = Number(resolvedCover.position.y ?? 0);
+    const pz = Number(resolvedCover.position.z ?? 0);
+    const sx = Math.max(0.01, Number(resolvedCover.size.x ?? 1));
+    const sy = Math.max(0.01, Number(resolvedCover.size.y ?? 1));
+    const sz = Math.max(0.01, Number(resolvedCover.size.z ?? 1));
+    const half = new THREE.Vector3(sx * 0.5, sy * 0.5, sz * 0.5);
+    const center = new THREE.Vector3(px, py + half.y, pz);
+    return {
+      min: center.clone().sub(half),
+      max: center.clone().add(half),
+      center,
+      size: new THREE.Vector3(sx, sy, sz)
+    };
+  }
+
+  return null;
+}
+
+_measureStandingModelProfile() {
+  if (!this.mesh) return null;
+  try {
+    this.mesh.updateMatrixWorld?.(true);
+    const box = new THREE.Box3().setFromObject(this.mesh);
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return null;
+    const meshY = Number(this.mesh.position.y ?? 0);
+    return {
+      topOffsetFromMeshY: box.max.y - meshY,
+      bottomOffsetFromMeshY: box.min.y - meshY,
+      size: box.getSize(new THREE.Vector3())
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+_resolveNearestCoverFace(bounds, referencePoint = null) {
+  if (!bounds) return null;
+  const point = referencePoint || this.basePosition || this.position || new THREE.Vector3();
+  const faces = [
+    { key: 'minX', axis: 'x', sign: -1, plane: bounds.min.x, distance: Math.abs(point.x - bounds.min.x) },
+    { key: 'maxX', axis: 'x', sign: 1, plane: bounds.max.x, distance: Math.abs(point.x - bounds.max.x) },
+    { key: 'minZ', axis: 'z', sign: -1, plane: bounds.min.z, distance: Math.abs(point.z - bounds.min.z) },
+    { key: 'maxZ', axis: 'z', sign: 1, plane: bounds.max.z, distance: Math.abs(point.z - bounds.max.z) }
+  ];
+  faces.sort((a, b) => a.distance - b.distance);
+  return faces[0] || null;
+}
+
+_snapBasePositionToCoverObject() {
+  const cover = this._resolveCoverObject();
+  const bounds = this._getCoverBounds(cover);
+  if (!cover || !bounds || !this.basePosition) return;
+
+  const face = this._resolveNearestCoverFace(bounds, this.basePosition.clone());
+  if (!face) return;
+
+  const lateralInset = Math.max(0.02, Number(this._coverParams?.lateralInset ?? 0.08));
+  const coverGap = Math.max(0.02, Number(this._coverParams?.coverGap ?? 0.08));
+  const profile = this._standingModelProfile || this._measureStandingModelProfile();
+  const halfDepth = face.axis === 'x'
+    ? Math.max(0.05, Number(profile?.size?.x ?? 0.4) * 0.5)
+    : Math.max(0.05, Number(profile?.size?.z ?? 0.4) * 0.5);
+
+  if (face.axis === 'x') {
+    this.basePosition.x = face.sign > 0
+      ? bounds.max.x + halfDepth + coverGap
+      : bounds.min.x - halfDepth - coverGap;
+    this.basePosition.z = THREE.MathUtils.clamp(this.basePosition.z, bounds.min.z + lateralInset, bounds.max.z - lateralInset);
+  } else {
+    this.basePosition.z = face.sign > 0
+      ? bounds.max.z + halfDepth + coverGap
+      : bounds.min.z - halfDepth - coverGap;
+    this.basePosition.x = THREE.MathUtils.clamp(this.basePosition.x, bounds.min.x + lateralInset, bounds.max.x - lateralInset);
+  }
+
+  this._coverPlacement = { bounds, face };
+}
+
+_refreshCoverPlacementAndMetrics() {
+  if (!this.coverObjectId || !this.mesh || !this.basePosition || !this._coverParams) return;
+
+  this._standingModelProfile = this._measureStandingModelProfile();
+  if (!this._standingModelProfile) return;
+
+  const cover = this._resolveCoverObject();
+  const bounds = this._getCoverBounds(cover);
+  if (!cover || !bounds) return;
+
+  if (this._coverParams.autoAlignToCover !== false) {
+    if (this.coverType === 'low' || this.coverType === 'full') {
+      this._snapBasePositionToCoverObject();
+    }
+  }
+
+  const face = this._resolveNearestCoverFace(bounds, this.basePosition.clone());
+  this._coverPlacement = { bounds, face };
+
+  if (this.coverType === 'low' && this._coverParams.autoFitCoverHeight !== false) {
+    const clearance = Math.max(0.01, Number(this._coverParams.hiddenTopClearance ?? 0.05));
+    const crouchScale = Math.min(1, Math.max(0.45, Number(this._coverParams.crouchScale ?? 0.92)));
+    const logicalBaseY = Number(this.basePosition.y ?? this._groundY ?? 0);
+    const visualBaseY = logicalBaseY + Number(this._groundVisualOffsetY || 0);
+    const standingTopOffset = Number(this._standingModelProfile.topOffsetFromMeshY ?? 1.6);
+    const desiredTopY = bounds.max.y - clearance;
+    const autoOffsetY = desiredTopY - visualBaseY - (standingTopOffset * crouchScale);
+    this._autoHiddenCoverOffsetY = Math.min(0, autoOffsetY);
+    this._autoHiddenCoverScale = crouchScale;
+  }
+
+  if (this._targetPosition) this._targetPosition.copy(this.basePosition);
+  if (this._lastBasePosition) this._lastBasePosition.copy(this.basePosition);
+}
+
 _snapBasePositionToCoverEdge() {
   if (this.coverType !== "full") return;
 
@@ -300,7 +442,11 @@ _snapBasePositionToCoverEdge() {
   if (!this.coverObjectId) return null;
   if (!window.sceneLoader || !window.sceneLoader.staticObjects) return null;
 
-  return window.sceneLoader.staticObjects.find(o => o.id === this.coverObjectId) || null;
+  const exact = window.sceneLoader.staticObjects.find(o => o.id === this.coverObjectId) || null;
+  if (exact) return exact;
+
+  const normalizedTarget = this._normalizeCoverObjectId(this.coverObjectId);
+  return window.sceneLoader.staticObjects.find(o => this._normalizeCoverObjectId(o.id) === normalizedTarget) || null;
 }
 
   _isAutoTurretDef(mergedDef, instanceConfig) {
@@ -2140,6 +2286,7 @@ this.coverObjectId = instanceConfig.coverObject || null;
             if (!this._lastMeshPosition) this._lastMeshPosition = this.mesh.position.clone();
             if (!this._lastBasePosition) this._lastBasePosition = this.basePosition.clone();
           } catch (e) {}
+          try { this._refreshCoverPlacementAndMetrics(); } catch (e) {}
         }).catch(e => { console.warn('Failed to load character glTF', e); });
       }
 
@@ -2170,6 +2317,7 @@ if (this.behavior.pattern === "path") {
 }
     // preserve initial scale (respect any previously-locked scale)
     try { if (!this._scaleLocked) this.baseScale = this.mesh.scale.clone(); } catch(e) {}
+    try { this._refreshCoverPlacementAndMetrics(); } catch (e) {}
 
     this.mesh.rotation.y = this.baseRotationY;
     this.mesh.userData.enemyId = this.id;
@@ -2218,7 +2366,12 @@ this._isFullyPoppedTarget = false;
       crouchOffsetY: (p.crouchOffsetY ?? -0.55),
       crouchScale: (p.crouchScale ?? 0.92),
       leanRotationRad: (p.leanRotationRad ?? 0.20),
-      fireIntervalMs: (p.fireIntervalMs ?? 400)
+      fireIntervalMs: (p.fireIntervalMs ?? 400),
+      coverGap: (p.coverGap ?? 0.08),
+      lateralInset: (p.lateralInset ?? 0.08),
+      hiddenTopClearance: (p.hiddenTopClearance ?? 0.05),
+      autoAlignToCover: (p.autoAlignToCover ?? true),
+      autoFitCoverHeight: (p.autoFitCoverHeight ?? true)
     };
 
     // initialize pop/cover state - will randomize first hide
@@ -2259,6 +2412,9 @@ if (this.behavior?.params?.leanSide) {
 }
 if (this.coverType === "full") {
   this._snapBasePositionToCoverEdge();
+}
+if (this.coverType === "low" && this.coverObjectId) {
+  this._refreshCoverPlacementAndMetrics();
 }
 
     // knockback vector applied on top of other offsets (decays over time)
@@ -3358,7 +3514,12 @@ if (this._isFullyPoppedTarget &&
   // For low cover, lower the mesh so it hides behind low obstacles (crouch)
   if (this.coverType === "low") {
     try {
-      const offsetY = (cp.crouchOffsetY !== undefined) ? cp.crouchOffsetY : -1.05;
+      if (this._coverParams?.autoFitCoverHeight !== false && this.coverObjectId) {
+        this._refreshCoverPlacementAndMetrics();
+      }
+      const offsetY = Number.isFinite(Number(this._autoHiddenCoverOffsetY))
+        ? Number(this._autoHiddenCoverOffsetY)
+        : ((cp.crouchOffsetY !== undefined) ? cp.crouchOffsetY : -1.05);
       this._targetPosition.y = (this.basePosition && typeof this.basePosition.y === 'number') ? (this.basePosition.y + offsetY) : (this._targetPosition.y + offsetY);
     } catch (e) {}
   }
@@ -3368,7 +3529,10 @@ if (this._isFullyPoppedTarget &&
   // When hidden behind cover, crouch / shrink slightly
   try {
     const s = (this.baseScale ? this.baseScale.clone() : new THREE.Vector3(1,1,1));
-    this._targetScale = s.multiplyScalar(cp.crouchScale ?? 0.92);
+    const hideScale = Number.isFinite(Number(this._autoHiddenCoverScale))
+      ? Number(this._autoHiddenCoverScale)
+      : (cp.crouchScale ?? 0.92);
+    this._targetScale = s.multiplyScalar(hideScale);
   } catch (e) { this._targetScale = new THREE.Vector3(0.92,0.92,0.92); }
   this._targetCrouchAlpha = 1;
 }
@@ -3398,10 +3562,13 @@ if (this._isFullyPoppedTarget &&
     // Otherwise fall back to the global groundY so ground-based enemies stay clamped.
     let finalY = this._targetPosition.y;
     try {
-      if (!this._path || !this._path.allowVertical) {
+      const allowBehaviorVertical = this.behavior?.pattern === 'popOutFromCover';
+      if ((!this._path || !this._path.allowVertical) && !allowBehaviorVertical) {
         finalY = (typeof this._groundY === 'number')
           ? (this._groundY + (this._groundVisualOffsetY || 0))
           : this._targetPosition.y;
+      } else {
+        finalY = this._targetPosition.y + (this._groundVisualOffsetY || 0);
       }
     } catch (e) { finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y; }
     desiredPos.y = finalY + (this._targetOffset?.y || 0);
@@ -3462,29 +3629,70 @@ if (this._isFullyPoppedTarget &&
   _applyBoneCrouch(alpha) {
     if (!this.bones || alpha === undefined) return;
     try {
-      // alpha: 0 = standing, 1 = fully crouched
-      // target additive rotations (radians)
-      const spineBend = -0.35 * alpha; // bend forward
-      const hipsBend = 0.25 * alpha;   // tilt pelvis
-      const upperLegBend = 0.6 * alpha; // bend at hip
-      const lowerLegBend = -0.8 * alpha; // knee bend
+      const resolved = this._crouchBoneCache = this._crouchBoneCache || {};
+      const poseBase = this._boneBasePose = this._boneBasePose || {};
+      const findBone = (cacheKey, patterns) => {
+        if (resolved[cacheKey] !== undefined) return resolved[cacheKey];
+        const entries = Object.entries(this.bones || {});
+        for (const [name, bone] of entries) {
+          const lower = String(name || '').toLowerCase();
+          if (patterns.some((pattern) => pattern.test(lower))) {
+            resolved[cacheKey] = bone;
+            return bone;
+          }
+        }
+        resolved[cacheKey] = null;
+        return null;
+      };
+      const getBasePose = (cacheKey, bone) => {
+        if (!bone) return { rotX: 0, posY: 0 };
+        if (!poseBase[cacheKey]) {
+          poseBase[cacheKey] = {
+            rotX: bone.rotation.x || 0,
+            posY: bone.position.y || 0
+          };
+        }
+        return poseBase[cacheKey];
+      };
+      const applyRotX = (cacheKey, patterns, deltaX) => {
+        const bone = findBone(cacheKey, patterns);
+        if (!bone) return;
+        const base = getBasePose(cacheKey, bone);
+        bone.rotation.x = base.rotX + deltaX;
+      };
+      const applyPosY = (cacheKey, patterns, deltaY) => {
+        const bone = findBone(cacheKey, patterns);
+        if (!bone) return;
+        const base = getBasePose(cacheKey, bone);
+        bone.position.y = base.posY + deltaY;
+      };
 
-      const applyIf = (name, fn) => { const b = this.bones[name]; if (b) fn(b); };
+      const spineBend = -0.95 * alpha;
+      const spineMidBend = -0.72 * alpha;
+      const hipsBend = 0.82 * alpha;
+      const upperLegBend = 1.75 * alpha;
+      const lowerLegBend = -1.95 * alpha;
+      const ankleBend = 0.48 * alpha;
+      const neckTuck = 0.3 * alpha;
+      const pelvisDrop = -0.58 * alpha;
 
-      applyIf('spine', b => { b.rotation.x = (this._boneBaseRot['spine'] || 0) + spineBend; });
-      applyIf('spine1', b => { b.rotation.x = (this._boneBaseRot['spine1'] || 0) + spineBend * 0.8; });
-      applyIf('spine2', b => { b.rotation.x = (this._boneBaseRot['spine2'] || 0) + spineBend * 0.6; });
-      applyIf('hips', b => { b.rotation.x = (this._boneBaseRot['hips'] || 0) + hipsBend; });
+      applyRotX('hips', [/\bhips?\b/, /pelvis/], hipsBend);
+      applyPosY('hips', [/\bhips?\b/, /pelvis/], pelvisDrop);
 
-      applyIf('upper_leg_l', b => { b.rotation.x = (this._boneBaseRot['upper_leg_l'] || 0) + upperLegBend; });
-      applyIf('upper_leg_r', b => { b.rotation.x = (this._boneBaseRot['upper_leg_r'] || 0) + upperLegBend; });
-      applyIf('lower_leg_l', b => { b.rotation.x = (this._boneBaseRot['lower_leg_l'] || 0) + lowerLegBend; });
-      applyIf('lower_leg_r', b => { b.rotation.x = (this._boneBaseRot['lower_leg_r'] || 0) + lowerLegBend; });
+      applyRotX('spine', [/^spine$/i, /spine$/], spineBend);
+      applyRotX('spine1', [/spine1/, /spine_01/, /spine\.001/, /spine2$/], spineMidBend);
+      applyRotX('spine2', [/spine2/, /spine_02/, /spine\.002/, /chest/], spineMidBend * 0.75);
 
-      // small neck tuck when crouching
-      applyIf('neck', b => { b.rotation.x = (this._boneBaseRot['neck'] || 0) + (0.12 * alpha); });
+      applyRotX('upper_leg_l', [/left.*thigh/, /thigh.*left/, /upper.*leg.*l/, /leg_upper_l/, /upleg.*l/, /leftupleg/, /left.*upperleg/], upperLegBend);
+      applyRotX('upper_leg_r', [/right.*thigh/, /thigh.*right/, /upper.*leg.*r/, /leg_upper_r/, /upleg.*r/, /rightupleg/, /right.*upperleg/], upperLegBend);
+      applyRotX('lower_leg_l', [/left.*calf/, /calf.*left/, /lower.*leg.*l/, /leg_lower_l/, /leg.*l$/, /leftleg/], lowerLegBend);
+      applyRotX('lower_leg_r', [/right.*calf/, /calf.*right/, /lower.*leg.*r/, /leg_lower_r/, /leg.*r$/, /rightleg/], lowerLegBend);
+      applyRotX('foot_l', [/foot.*l/, /leftfoot/], ankleBend);
+      applyRotX('foot_r', [/foot.*r/, /rightfoot/], ankleBend);
+      applyRotX('neck', [/neck/], neckTuck);
     } catch (e) {}
   }
+
 }
 export function killAllEnemies() {
   const activeGroupId = Number(window.sceneLoader?.currentActiveEnemyGroupId);

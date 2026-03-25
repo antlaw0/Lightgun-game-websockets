@@ -69,6 +69,29 @@ export const scene_test = {
 
   environment: {
     staticObjects: [
+		  {
+        def:  "crate_wood",
+		id: "crate_cover_01",
+        type: "crate",
+        position: {
+          x: 5,
+          y: 0,
+          z: 3.5
+        },
+        rotation: {
+          x: 0,
+          y: 0,
+          z: 0
+        },
+        size: {
+          x: 1,
+          y: 1,
+          z: 1
+        },
+        hp: 10
+      },
+
+	
 
 
 {
@@ -249,12 +272,31 @@ scale:  {  x:  1, y:  1, z:  1 }
   },
 
   enemies: [
-  
+  	{
+      def:  "grunt_crouch_cover",
+	  id: "grunt_crouch_crate_1",
+      type: "Grunt",
+      displayName: "Grunt Soldier",
+	  
+	  active: false,
+	  groupId:  2,
+      
+      // sit slightly behind the crate so crate is between camera and enemy
+      position: { x: 5, y: 0, z: 4 },
+      
+      coverObject: "crate_cover_01",
+      coverType: "low",
+      // increase crouch depth so model can hide behind 0.5m crate
+      behavior: { pattern: "popOutFromCover", params: { coverType: "low", popDurationMs: 300, hideDurationMs: 1200, firingDurationMs: 900, crouchOffsetY: -2.5, crouchScale: 0.85 } }
+    },
+    ,
+	
+
   {
 	def:  "autoturret_tripod",
 id:  "autoturret_1",
 
-groupId:  2,
+groupId:  1,
 position:  { x:  5, y:  0,  z:  4  },
   },
   {

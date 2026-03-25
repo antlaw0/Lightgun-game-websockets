@@ -40,6 +40,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 const CRASH_REPORT_DIR = path.join(__dirname, 'crash-reports');
+const DEBUG_RUNTIME_STATE_PATH = path.join(__dirname, 'debug-runtime-state.json');
 
 function ensureCrashReportDir() {
   if (!fs.existsSync(CRASH_REPORT_DIR)) {
@@ -141,6 +142,42 @@ app.get('/api/list-textures', (req, res) => {
   }
   walk(texDir);
   res.json({ textures: out });
+});
+
+app.get('/api/debug-runtime-state', (req, res) => {
+  try {
+    if (!fs.existsSync(DEBUG_RUNTIME_STATE_PATH)) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    const raw = fs.readFileSync(DEBUG_RUNTIME_STATE_PATH, 'utf8');
+    const state = JSON.parse(raw);
+    res.json({ ok: true, state });
+  } catch (err) {
+    console.error('Failed to read debug runtime state:', err);
+    res.status(500).json({ ok: false, error: err?.message || 'unknown error' });
+  }
+});
+
+app.post('/api/debug-runtime-state', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const state = payload.state || null;
+    if (!state || typeof state !== 'object') {
+      return res.status(400).json({ ok: false, error: 'state object required' });
+    }
+
+    const toWrite = {
+      savedAt: new Date().toISOString(),
+      state
+    };
+
+    fs.writeFileSync(DEBUG_RUNTIME_STATE_PATH, JSON.stringify(toWrite, null, 2), 'utf8');
+    res.json({ ok: true, relativePath: 'debug-runtime-state.json', savedAt: toWrite.savedAt });
+  } catch (err) {
+    console.error('Failed to write debug runtime state:', err);
+    res.status(500).json({ ok: false, error: err?.message || 'unknown error' });
+  }
 });
 
 const server = https.createServer(options, app);

@@ -16,6 +16,7 @@ export function attachInputController({
   camRotSpeed
 }) {
   const listeners = [];
+  const fullscreenRoot = document.documentElement;
   const state = {
     ducking: false,
     zoomed: false,
@@ -27,6 +28,72 @@ export function attachInputController({
     target.addEventListener(type, handler, options);
     listeners.push(() => target.removeEventListener(type, handler, options));
   }
+
+  function getCurrentFullscreenElement() {
+    return (
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.msFullscreenElement ||
+      null
+    );
+  }
+
+  function requestFullscreenCompat(element) {
+    const fn =
+      element.requestFullscreen ||
+      element.webkitRequestFullscreen ||
+      element.msRequestFullscreen;
+    if (!fn) return Promise.reject(new Error('Fullscreen API unavailable'));
+    try {
+      const maybePromise = fn.call(element);
+      return maybePromise && typeof maybePromise.then === 'function'
+        ? maybePromise
+        : Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
+  function exitFullscreenCompat() {
+    const fn =
+      document.exitFullscreen ||
+      document.webkitExitFullscreen ||
+      document.msExitFullscreen;
+    if (!fn) return Promise.reject(new Error('Fullscreen exit unavailable'));
+    try {
+      const maybePromise = fn.call(document);
+      return maybePromise && typeof maybePromise.then === 'function'
+        ? maybePromise
+        : Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
+  function ensureFullscreen() {
+    if (getCurrentFullscreenElement()) return Promise.resolve();
+    return requestFullscreenCompat(fullscreenRoot).catch(() => Promise.resolve());
+  }
+
+  function toggleFullscreen() {
+    if (getCurrentFullscreenElement()) {
+      return exitFullscreenCompat().catch(() => Promise.resolve());
+    }
+    return requestFullscreenCompat(fullscreenRoot).catch(() => Promise.resolve());
+  }
+
+  // Attempt fullscreen by default; browsers may require a user gesture.
+  ensureFullscreen();
+
+  add(window, 'pointerdown', () => {
+    ensureFullscreen();
+  }, { once: true, passive: true });
+
+  add(window, 'keydown', (e) => {
+    if (e.code !== 'F11') return;
+    e.preventDefault();
+    toggleFullscreen();
+  });
 
   add(
     window,

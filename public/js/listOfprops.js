@@ -2,6 +2,9 @@
 // Centralized reusable prop base definitions
 // Scene instances should reference these via { def: "name", ...overrides }
 import sounds from "./listOfSounds.js";
+import { materials } from "./listOfMaterials.js";
+
+
 
 export const PROP_DEFS = {
 wall:  {
@@ -29,13 +32,7 @@ hitSounds:  sounds.ric
     maxHp: 8,
 
     coverType: "low",
-
-    material: {
-      map: "assets/props/crate.png",
-      color: 0xffffff,
-      roughness: 0.75,
-      metalness: 0.0
-    }, // end material
+material:  materials.planks01,
 
     hitSounds: [
       "assets/sfx/props/crate_hit1.ogg"
