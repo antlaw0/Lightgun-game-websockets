@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { DEFAULT_HDRI_FILE, HDRI_CACHE_MAX_ENTRIES } from './constants.js';
+import { trackLoad } from '../game/loadingTracker.js';
 
 export async function loadModelCache(self, path) {
   if (!path) {
@@ -30,6 +31,7 @@ export async function loadModelCache(self, path) {
       throw err;
     });
 
+  trackLoad(pendingPromise);
   self.modelCache.set(path, { scene: null, promise: pendingPromise });
   const loadedScene = await pendingPromise;
   return loadedScene.clone();

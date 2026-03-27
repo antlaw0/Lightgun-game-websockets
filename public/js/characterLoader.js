@@ -2,6 +2,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js';
 import { configureGltfLoaderForKtx2 } from './textureSupport.js';
+import { trackLoad } from './game/loadingTracker.js';
 
 const gltfLoader = new GLTFLoader();
 configureGltfLoaderForKtx2(gltfLoader);
@@ -418,7 +419,7 @@ export async function loadCharacter(opts) {
   const MODEL_DEBUG = /drone\.glb$|brute\.glb$/i.test(String(url)) || !!params.debug;
   try { if (MODEL_DEBUG) console.log(`[characterLoader] loadCharacter called for url='${url}' autoPlay=${autoPlay}`); } catch(e) {}
 
-  return new Promise((resolve, reject) => {
+  const _charLoadPromise = new Promise((resolve, reject) => {
     const onError = err => { console.error(`❌ Failed to load model: ${url}`, err); reject(err); };
 
     gltfLoader.load(url, gltf => {
@@ -732,6 +733,8 @@ export async function loadCharacter(opts) {
       } catch (e) { reject(e); }
     }
   });
+  trackLoad(_charLoadPromise);
+  return _charLoadPromise;
 }
 
 /**
@@ -739,7 +742,7 @@ export async function loadCharacter(opts) {
  * Returns an array of AnimationClip objects (may be empty).
  */
 export function loadAnimationClips(url) {
-  return new Promise((resolve, reject) => {
+  const _animLoadPromise = new Promise((resolve, reject) => {
     if (!url) return resolve([]);
     const onError = (e) => { console.warn('[characterLoader] loadAnimationClips failed', url, e); resolve([]); };
 
@@ -748,6 +751,8 @@ export function loadAnimationClips(url) {
       catch (e) { onError(e); }
     }, undefined, onError);
   });
+  trackLoad(_animLoadPromise);
+  return _animLoadPromise;
 }
 
 // Debug helper: call from browser console to quickly load and inspect a model

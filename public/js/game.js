@@ -21,6 +21,7 @@ import { createBallistics } from './game/combat/ballistics.js';
 import { createDoorRuntime } from './game/doorRuntime.js';
 import { setupEditorJsonModal } from './game/editorJsonModal.js';
 import { setupTurretDebugTools } from './debugTurretTools.js';
+import { waitForLoads } from './game/loadingTracker.js';
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { killAllEnemies } from "./enemy.js";
@@ -1903,6 +1904,7 @@ const LERP = 0.9;
 let lastMs = performance.now();
 
 let frameSpikeCount = 0;
+let isLoadingPhase = true;        // suppresses spike failsafe until initial assets are loaded
 const MAX_FRAME_SPIKES = 5;       // consecutive slow frames to trigger stop
 const FRAME_THRESHOLD = 100;      // ms per frame = 10 FPS
 const MAX_SCENE_CHILDREN = 800;   // scene object limit for failsafe
@@ -1915,7 +1917,7 @@ function animate(nowMs) {
     const deltaMs = nowMs - lastMs;
     lastMs = nowMs;
 
-    if (deltaMs > FRAME_THRESHOLD) frameSpikeCount++;
+    if (deltaMs > FRAME_THRESHOLD && !isLoadingPhase) frameSpikeCount++;
     else frameSpikeCount = 0;
 
     if (frameSpikeCount >= MAX_FRAME_SPIKES) {
@@ -2073,13 +2075,48 @@ function animate(nowMs) {
   }
 }
 
+// Loading screen helpers — shown while initial scene assets are being fetched
+function showLoadingScreen() {
+  const el = document.createElement('div');
+  el.id = 'ltg-loading-screen';
+  el.style.cssText = [
+    'position:fixed', 'inset:0', 'background:#000',
+    'color:#c00', 'font:bold 2.5rem/1 monospace',
+    'display:flex', 'flex-direction:column',
+    'align-items:center', 'justify-content:center',
+    'z-index:9999', 'user-select:none'
+  ].join(';');
+  el.innerHTML =
+    '<div>LOADING</div>' +
+    '<div style="font-size:0.45em;margin-top:1em;color:#555;letter-spacing:0.12em">PREPARING ASSETS…</div>';
+  document.body.appendChild(el);
+}
+
+function hideLoadingScreen() {
+  document.getElementById('ltg-loading-screen')?.remove();
+}
+
 // Start the first level immediately
 const restoredDebugSession = await restoreRuntimeDebugStateOnBoot();
 if (!restoredDebugSession) {
+  // Register the sceneLoaded listener BEFORE calling loadLevel — the event
+  // can fire synchronously within the call stack.
+  const _sceneReady = new Promise(r => window.addEventListener('sceneLoaded', r, { once: true }));
+  showLoadingScreen();
   loadLevel(Level_Warehouse);
+  // Wait for scene entities to be constructed and their load Promises registered.
+  await _sceneReady;
+  // Wait for all character models, animation clips, and prop GLBs to finish loading.
+  await waitForLoads();
+  hideLoadingScreen();
 }
+
+// Spike counter can now run — initial assets are in the GPU.
+isLoadingPhase = false;
 
 // Initialize turret debug tools
 setupTurretDebugTools();
 
-requestAnimationFrame(animate); 
+// Reset lastMs so the very first animate frame gets a sane delta.
+lastMs = performance.now();
+requestAnimationFrame(animate);

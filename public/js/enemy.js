@@ -654,8 +654,8 @@ this._hasExplicitModelScale =
     const rawAimYawOffset = (instanceConfig.aimYawOffset ?? mergedDef.aimYawOffset);
     if (Number.isFinite(Number(rawAimYawOffset))) {
       this._aimYawOffset = Number(rawAimYawOffset);
-    } else if (typeof mergedDef.modelUrl === 'string' && /exo_red\.glb$/i.test(mergedDef.modelUrl)) {
-      // exo_red forward axis is offset from gameplay-forward by ~90 degrees
+    } else if (typeof mergedDef.modelUrl === 'string' && /exo_red\.glb/i.test(mergedDef.modelUrl)) {
+      // exo_red has its forward axis offset from gameplay-forward by ~90 degrees
       this._aimYawOffset = Math.PI / 2;
     } else {
       this._aimYawOffset = 0;
@@ -821,17 +821,76 @@ this._nextTauntTime = null;
       instanceConfig.position.z || 0
     );
 
+    const sampleSceneGroundYAt = (x, z, fallbackY = 0) => {
+      try {
+        const sl = window.sceneLoader;
+        const floorCandidates = [];
+        const allCandidates = [];
+
+        const consider = (obj) => {
+          if (!obj || !obj.isMesh || !obj.geometry) return;
+          if (_isReferenceNodeMesh(obj)) return;
+          allCandidates.push(obj);
+          const idText = String(obj.userData?.propId || obj.userData?.id || obj.name || '').toLowerCase();
+          const isTaggedFloor =
+            obj.userData?.layer === 'floor' ||
+            obj.userData?.type === 'floor' ||
+            obj.userData?.type === 'room' ||
+            /floor|tile/.test(idText);
+          if (isTaggedFloor) floorCandidates.push(obj);
+        };
+
+        if (sl) {
+          (sl.roomMeshes || []).forEach(consider);
+          (sl.propMeshes || []).forEach(consider);
+        }
+        if ((!allCandidates.length) && this.sceneGroup && typeof this.sceneGroup.traverse === 'function') {
+          this.sceneGroup.traverse(consider);
+        }
+
+        const candidates = floorCandidates.length ? floorCandidates : allCandidates;
+        if (!candidates.length) return fallbackY;
+
+        const origin = new THREE.Vector3(x, Math.max(300, fallbackY + 100), z);
+        const rayDir = new THREE.Vector3(0, -1, 0);
+        const ray = new THREE.Raycaster(origin, rayDir, 0.01, 1000);
+        const hits = ray.intersectObjects(candidates, false);
+        if (!hits.length) return fallbackY;
+
+        const normalMatrix = new THREE.Matrix3();
+        for (const hit of hits) {
+          if (!hit || !hit.object || !hit.point) continue;
+          if (hit.face && hit.object.matrixWorld) {
+            const n = hit.face.normal.clone();
+            normalMatrix.getNormalMatrix(hit.object.matrixWorld);
+            n.applyMatrix3(normalMatrix).normalize();
+            if (n.y < 0.2) continue;
+          }
+          return hit.point.y;
+        }
+
+        return hits[0].point?.y ?? fallbackY;
+      } catch (e) {
+        return fallbackY;
+      }
+    };
+
     // Single source-of-truth for ground height used by all enemies.
     // Priority: explicit groundY -> (optional) authored position.y -> scene ground -> 0
     const usePositionYAsGround = !!(instanceConfig && (instanceConfig.usePositionYAsGround === true || instanceConfig.lockPositionY === true));
     const hasAuthoredPositionY = !!(instanceConfig && instanceConfig.position && typeof instanceConfig.position.y === 'number');
+    const sampledGroundY = (typeof instanceConfig.groundY === 'number')
+      ? null
+      : sampleSceneGroundYAt(this.position.x, this.position.z, this.position.y || 0);
     this._groundY = (typeof instanceConfig.groundY === 'number')
       ? instanceConfig.groundY
       : (usePositionYAsGround && hasAuthoredPositionY)
         ? instanceConfig.position.y
-        : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
-          ? window.sceneLoader.groundY
-          : 0;
+        : (Number.isFinite(Number(sampledGroundY))
+          ? Number(sampledGroundY)
+          : (window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+            ? window.sceneLoader.groundY
+            : 0);
     // Visual Y offset from ground plane (used by fallback mannequin/sprite meshes
     // whose origins are not at the feet). 0 means mesh origin is already ground-aligned.
     this._groundVisualOffsetY = 0;
@@ -844,13 +903,15 @@ this._nextTauntTime = null;
         // Determine groundY from instance config, scene loader, or default to 0
         const cfgUsePositionYAsGround = !!(instanceCfg && (instanceCfg.usePositionYAsGround === true || instanceCfg.lockPositionY === true));
         const cfgHasAuthoredPositionY = !!(instanceCfg && instanceCfg.position && typeof instanceCfg.position.y === 'number');
-        const groundY = (typeof (instanceCfg && instanceCfg.groundY) === 'number')
-          ? instanceCfg.groundY
-          : (cfgUsePositionYAsGround && cfgHasAuthoredPositionY)
-            ? instanceCfg.position.y
-            : ((window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
-              ? window.sceneLoader.groundY
-              : 0);
+        const groundY = (typeof this._groundY === 'number')
+          ? this._groundY
+          : (typeof (instanceCfg && instanceCfg.groundY) === 'number')
+            ? instanceCfg.groundY
+            : (cfgUsePositionYAsGround && cfgHasAuthoredPositionY)
+              ? instanceCfg.position.y
+              : ((window.sceneLoader && typeof window.sceneLoader.groundY === 'number')
+                ? window.sceneLoader.groundY
+                : 0);
 
         // Get target height (defaults to camera height)
         const targetHeight = (defObj && (defObj.desiredHeight || defObj.modelDesiredHeight))
@@ -1164,65 +1225,6 @@ this.coverObjectId = instanceConfig.coverObject || null;
         this._weaponRecoil = 0;
         this._boneRecoil = 0;
       } catch (e) {}
-
-      // If this enemy's resolved weapon looks like a rifle, try to load an AK model
-      try {
-        const weaponName = (weaponDef && weaponDef.name) ? String(weaponDef.name).toLowerCase() : '';
-        const rifleKeywords = ['rifle', 'assault', 'ak47', 'ak-47', 'ak'];
-        const shouldLoadAk = rifleKeywords.some(k => weaponName.includes(k));
-        const akPath = 'assets/models/ak47.glb';
-        if (shouldLoadAk) {
-          const loader = configureGltfLoaderForKtx2(new GLTFLoader());
-          loader.load(akPath,
-            (gltf) => {
-              try {
-                const weaponModel = gltf.scene || gltf.scenes?.[0];
-                if (!weaponModel) return;
-                weaponModel.name = 'ak47_model';
-                weaponModel.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = false; } });
-
-                // heuristic: find a right-hand bone to attach to
-                let handBone = null;
-                try {
-                  if (this.mesh && this.mesh.skeleton && Array.isArray(this.mesh.skeleton.bones)) {
-                    handBone = this.mesh.skeleton.bones.find(b => /hand|righthand|hand_r|RightHand/i.test(b.name));
-                  }
-                } catch (e) { handBone = null; }
-
-                // remove placeholder weaponMesh if present
-                try { if (this.weaponMesh && this.weaponMesh.parent) this.weaponMesh.parent.remove(this.weaponMesh); } catch (e) {}
-
-                // adjust scale/offset so model looks roughly right in the hand
-                let modelScale = 1.0;
-                // try to compute a small scale relative to mesh bbox
-                try {
-                  const bbox = new THREE.Box3().setFromObject(weaponModel);
-                  const size = new THREE.Vector3(); bbox.getSize(size);
-                  const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
-                  // target approx 0.5m length on model -> scale factor
-                  modelScale = 0.5 / maxDim;
-                } catch (e) { modelScale = 0.01; }
-                modelScale = THREE.MathUtils.clamp(modelScale, 0.005, 0.5);
-                weaponModel.scale.setScalar(modelScale);
-
-                // default local transform tweak (tweakable later)
-                weaponModel.position.set(0.06, -0.04, 0.08);
-                weaponModel.rotation.set(-0.15, 0, 0);
-
-                if (handBone) {
-                  handBone.add(weaponModel);
-                } else if (this.mesh) {
-                  this.mesh.add(weaponModel);
-                }
-
-                this.weaponMesh = weaponModel;
-              } catch (e) { console.warn('Failed to attach ak47.glb to enemy:', e); }
-            },
-            undefined,
-            (err) => { /* ignore load errors silently */ }
-          );
-        }
-      } catch (e) { console.warn('AK attach check failed', e); }
 
       // store skeleton and bones for later manipulation
       this.skeleton = skeleton;
@@ -1987,6 +1989,107 @@ this.coverObjectId = instanceConfig.coverObject || null;
             }
           } catch (e) {}
 
+          // Attach weapon GLB to the right-hand bone for exo_red, Exo_gray, and swatguy models.
+          // The weapon follows the hand bone automatically as animations play.
+          try {
+            const _modelUrlStr = String(mergedDef.modelUrl || '');
+            const _isHandWeaponModel = /exo_red\.glb|exo_gray\.glb|swatguy\.glb/i.test(_modelUrlStr);
+            if (_isHandWeaponModel) {
+              const _weaponId = mergedDef.weapon || null;
+              const _weaponDef = _weaponId ? getWeapon(_weaponId) : null;
+              const _weaponFile = _weaponDef && _weaponDef.weaponModel ? _weaponDef.weaponModel : null;
+              if (_weaponFile) {
+                // Find the Mixamo right-hand bone (all three models use this naming)
+                const _handBoneName = 'mixamorig:RightHand';
+                let _handBone = this.bones[_handBoneName] || null;
+                if (!_handBone) {
+                  this.mesh.traverse(o => { if (o.isBone && /RightHand$/i.test(o.name) && !_handBone) _handBone = o; });
+                }
+                if (_handBone) {
+                  const _weaponUrl = `assets/models/weapons/${_weaponFile}`;
+                  const _wLoader = configureGltfLoaderForKtx2(new GLTFLoader());
+                  _wLoader.load(_weaponUrl, (gltf) => {
+                    try {
+                      const _weaponScene = gltf.scene || gltf.scenes?.[0];
+                      if (!_weaponScene) return;
+
+                      // Hide any hand/arm geometry that may be bundled in the weapon pack
+                      _weaponScene.traverse(n => {
+                        if (!n.isMesh) return;
+                        const nm = (n.name || '').toLowerCase();
+                        const isBodyPart = /\b(hand|finger|thumb|index|middle|ring|pinky|forearm|upperarm|sleeve|wrist|palm)\b/.test(nm);
+                        if (isBodyPart) { n.visible = false; return; }
+                        n.castShadow = true;
+                        n.receiveShadow = false;
+                        n.frustumCulled = false;
+                      });
+
+                      // Measure weapon size in its own unparented space
+                      try { _weaponScene.updateMatrixWorld(true); } catch(e) {}
+                      const _wBbox = new THREE.Box3().setFromObject(_weaponScene);
+                      const _wSz = new THREE.Vector3();
+                      _wBbox.getSize(_wSz);
+                      const _wMaxDim = Math.max(_wSz.x, _wSz.y, _wSz.z) || 1;
+
+                      // The hand bone inherits the character mesh's world scale. When the weapon
+                      // is parented to the bone, its local scale is multiplied by that chain.
+                      // We read the bone's world scale so we can divide it out and end up with
+                      // the correct world-space weapon size.
+                      const _boneWS = new THREE.Vector3();
+                      try { _handBone.getWorldScale(_boneWS); } catch(e) { _boneWS.setScalar(1); }
+                      const _boneSF = (_boneWS.x > 0) ? _boneWS.x : 1;
+
+                      // Target world-space longest dimension per weapon type
+                      const _wName = (_weaponDef.name || '').toLowerCase();
+                      const _targetWS = /rifle|assault/.test(_wName) ? 0.38
+                                      : /shotgun/.test(_wName)       ? 0.35
+                                      : /sniper/.test(_wName)        ? 0.44
+                                      : 0.22; // pistol / default
+
+                      // weaponLocalScale × _boneSF × _wMaxDim = _targetWS
+                      const _wScalar = THREE.MathUtils.clamp(_targetWS / (_wMaxDim * _boneSF), 0.000001, 100000);
+                      _weaponScene.scale.setScalar(_wScalar);
+
+                      // Position offsets are specified in world metres; convert to bone-local units
+                      // by dividing by the bone's world scale factor.
+                      let _px = 0, _py = 0.04 / _boneSF, _pz = 0;
+                      let _rx = 0, _ry = 0, _rz = 0;
+                      if (/pistol/.test(_wName)) {
+                        _px = 0; _py = 0.04 / _boneSF; _pz = 0.01 / _boneSF;
+                      } else if (/rifle|assault/.test(_wName)) {
+                        _px = 0; _py = 0.06 / _boneSF; _pz = 0;
+                      } else if (/shotgun/.test(_wName)) {
+                        _px = 0; _py = 0.06 / _boneSF; _pz = 0;
+                      } else if (/sniper/.test(_wName)) {
+                        _px = 0; _py = 0.08 / _boneSF; _pz = 0;
+                      }
+                      // Allow per-def or per-instance overrides (values in world metres)
+                      const _offsetCfg = mergedDef.weaponHandOffset || instanceConfig.weaponHandOffset || null;
+                      const _rotCfg    = mergedDef.weaponHandRotation || instanceConfig.weaponHandRotation || null;
+                      if (_offsetCfg) {
+                        if (typeof _offsetCfg.x === 'number') _px = _offsetCfg.x / _boneSF;
+                        if (typeof _offsetCfg.y === 'number') _py = _offsetCfg.y / _boneSF;
+                        if (typeof _offsetCfg.z === 'number') _pz = _offsetCfg.z / _boneSF;
+                      }
+                      if (_rotCfg) {
+                        if (typeof _rotCfg.x === 'number') _rx = _rotCfg.x;
+                        if (typeof _rotCfg.y === 'number') _ry = _rotCfg.y;
+                        if (typeof _rotCfg.z === 'number') _rz = _rotCfg.z;
+                      }
+                      _weaponScene.position.set(_px, _py, _pz);
+                      _weaponScene.rotation.set(_rx, _ry, _rz);
+                      console.log(`[Enemy ${this.id}] weapon scale: boneSF=${_boneSF.toFixed(4)} wMaxDim=${_wMaxDim.toFixed(4)} wScalar=${_wScalar.toFixed(4)} targetWS=${_targetWS}m`);
+
+                      _handBone.add(_weaponScene);
+                      this.weaponMesh = _weaponScene;
+                      console.log(`[Enemy ${this.id}] weapon '${_weaponFile}' attached to ${_handBoneName}`);
+                    } catch (e) { console.warn(`[Enemy ${this.id}] weapon attach error`, e); }
+                  }, undefined, (err) => { console.warn(`[Enemy ${this.id}] weapon GLB load failed: ${_weaponUrl}`, err); });
+                }
+              }
+            }
+          } catch (e) { console.warn('[Enemy] weapon hand-attach failed', e); }
+
           // adopt mixer: ALWAYS create a new AnimationMixer bound to the model root
           // (avoids mixers created against the original FBX/scene which won't update this.mesh)
           try {
@@ -2244,12 +2347,6 @@ this.coverObjectId = instanceConfig.coverObject || null;
             }
           } catch (e) {}
 
-          // reattach weapon mesh to new hand bone if present
-          if (this.weaponMesh) {
-            try { this.weaponMesh.parent && this.weaponMesh.parent.remove(this.weaponMesh); } catch(_){}
-            const handBone = (this.mesh.skeleton && this.mesh.skeleton.bones) ? this.mesh.skeleton.bones.find(b => b.name === 'hand_r') : this.mesh.getObjectByName('hand_r');
-            if (handBone) handBone.add(this.weaponMesh); else this.mesh.add(this.weaponMesh);
-          }
           // Ensure loaded model feet are grounded and preserve visual ground offset.
           try {
             const groundY = (typeof this._groundY === 'number')
@@ -2494,25 +2591,10 @@ _randomTauntDelay() {
 
     const targetYaw = Math.atan2(toX, toZ);
 
-    // If a weapon mesh exists, infer its local yaw offset from the enemy root and
-    // solve the exact root yaw needed so weapon forward points at the target.
-    try {
-      if (this.weaponMesh && this.mesh && typeof this.weaponMesh.getWorldQuaternion === 'function') {
-        const q = new THREE.Quaternion();
-        this.weaponMesh.getWorldQuaternion(q);
-        const weaponFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-        const f2 = (weaponFwd.x * weaponFwd.x) + (weaponFwd.z * weaponFwd.z);
-        if (f2 > 1e-8) {
-          const weaponYaw = Math.atan2(weaponFwd.x, weaponFwd.z);
-          const meshYaw = this.mesh.rotation?.y || 0;
-          let localOffset = weaponYaw - meshYaw;
-          while (localOffset > Math.PI) localOffset -= Math.PI * 2;
-          while (localOffset < -Math.PI) localOffset += Math.PI * 2;
-          return targetYaw - localOffset;
-        }
-      }
-    } catch (_) {}
-
+    // Use the model's baked yaw offset (PI/2 for Mixamo models exported facing +X)
+    // to determine the correct mesh rotation. We intentionally do NOT use the weapon's
+    // world quaternion here — weapon nodes have complex local rotations that make the
+    // barrel-yaw math unreliable and cause the model to snap 90° off.
     return targetYaw + (this._aimYawOffset || 0);
   }
 
@@ -3255,6 +3337,20 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
     ? resolvedAimTarget.clone()
     : new THREE.Vector3(0, 1.7, 0);
 
+  // Keep muzzle outside the shooter's own body so projectiles don't immediately
+  // collide with the enemy mesh on spawn.
+  try {
+    const baseDir = targetPos.clone().sub(muzzle);
+    if (baseDir.lengthSq() > 1e-8) {
+      baseDir.normalize();
+      muzzle.addScaledVector(baseDir, 0.28);
+      const selfBox = new THREE.Box3().setFromObject(this.mesh);
+      if (selfBox && selfBox.containsPoint(muzzle)) {
+        muzzle.addScaledVector(baseDir, 0.45);
+      }
+    }
+  } catch (e) {}
+
   // Ensure the enemy is facing the target when firing (standInOpen should look at player)
   try {
     const yaw = this._computeAimYaw(targetPos);
@@ -3291,7 +3387,8 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
   this.fireCallback(
     muzzle,
     muzzle.clone().add(deviatedDir.multiplyScalar(28)),
-    28
+    28,
+    this.id
   );
 
   // Visual muzzle flash
@@ -3341,6 +3438,14 @@ const dir = targetPosResolved.clone().sub(this.mesh.position);
   //
   _updateStand(deltaMs, nowMs, params) {
 	      if (!ENEMY_AI_ENABLED) return; // STOP behavior entirely
+
+    // Always rotate to face the player (uses _computeAimYaw so _aimYawOffset is applied).
+    try {
+      const aimTarget = this._resolveAimTargetPosition(this.player);
+      const yaw = this._computeAimYaw(aimTarget);
+      if (yaw !== null) this._targetRotationY = yaw;
+    } catch (e) {}
+
     const burstCount = Math.max(1, Number(params?.burstCount || 1));
 
     if (burstCount <= 1) {
@@ -3687,14 +3792,15 @@ if (this._isFullyPoppedTarget &&
     // For Y: if the current path allows vertical movement, honor `_targetPosition.y`.
     // Otherwise fall back to the global groundY so ground-based enemies stay clamped.
     let finalY = this._targetPosition.y;
+    const visualGroundOffsetY = Math.max(0, Number(this._groundVisualOffsetY) || 0);
     try {
       const allowBehaviorVertical = this.behavior?.pattern === 'popOutFromCover';
       if ((!this._path || !this._path.allowVertical) && !allowBehaviorVertical) {
         finalY = (typeof this._groundY === 'number')
-          ? (this._groundY + (this._groundVisualOffsetY || 0))
+          ? (this._groundY + visualGroundOffsetY)
           : this._targetPosition.y;
       } else {
-        finalY = this._targetPosition.y + (this._groundVisualOffsetY || 0);
+        finalY = this._targetPosition.y + visualGroundOffsetY;
       }
     } catch (e) { finalY = (typeof this._groundY === 'number') ? this._groundY : this._targetPosition.y; }
     desiredPos.y = finalY + (this._targetOffset?.y || 0);

@@ -3,13 +3,17 @@ import { Projectile } from '../projectile.js';
 
 export function spawnProjectileCombat(self, startPos, targetPos, opts = {}) {
   let speed = 1;
+  let type = 'player';
   let projectileType = 'bullet';
   let lifetime = undefined;
+  let ownerEnemyId = null;
   if (typeof opts === 'number') speed = opts;
   else {
     speed = opts.speed ?? 1;
+    type = opts.type ?? 'player';
     projectileType = opts.projectileType ?? 'bullet';
     lifetime = opts.lifetime;
+    ownerEnemyId = opts.ownerEnemyId ?? null;
   }
 
   const id = 'proj_' + (self.nextProjectileId++);
@@ -21,9 +25,11 @@ export function spawnProjectileCombat(self, startPos, targetPos, opts = {}) {
     startPos: startPos.clone(),
     direction: dir,
     speed,
+    type,
     lifetime,
     projectileType
   });
+  p.ownerEnemyId = ownerEnemyId;
 
   self.projectiles[id] = p;
   return p;
@@ -39,6 +45,17 @@ export function updateCombat(self, deltaMs, nowMs) {
     if (hit) {
       const hitObj = hit.object;
       const hitPoint = hit.point ?? proj.position;
+
+      // Enemy-fired shots should not collide with the firing enemy.
+      if (proj.type === 'enemy' && proj.ownerEnemyId) {
+        let ownerCheckObj = hitObj;
+        while (ownerCheckObj && ownerCheckObj.userData && !ownerCheckObj.userData.enemyId && !ownerCheckObj.userData.propId && ownerCheckObj.userData.type !== 'room') {
+          ownerCheckObj = ownerCheckObj.parent;
+        }
+        if (ownerCheckObj && ownerCheckObj.userData && ownerCheckObj.userData.enemyId === proj.ownerEnemyId) {
+          return;
+        }
+      }
 
       if (proj.projectileType === 'bullet') {
         let obj = hitObj;

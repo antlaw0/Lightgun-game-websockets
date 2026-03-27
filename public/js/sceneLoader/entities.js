@@ -427,11 +427,15 @@ export function loadSceneDataEntities(self, sceneDef, isPending) {
 
   self._createLights(sceneDef, isPending);
 
-  const fireCallback = (origin, target, speed = 28) => {
+  const fireCallback = (origin, target, speed = 28, ownerEnemyId = null) => {
     self.spawnProjectile(
       new THREE.Vector3(origin.x, origin.y, origin.z),
       new THREE.Vector3(target.x, target.y, target.z),
-      speed
+      {
+        speed,
+        type: 'enemy',
+        ownerEnemyId
+      }
     );
   };
 

@@ -272,6 +272,16 @@ scale:  {  x:  1, y:  1, z:  1 }
   },
 
   enemies: [
+  {
+	  def:  "swat_rifle_standing_open",
+	  id:  "swat_rifle_test",
+	  position:  {  x:  5,  y:  0.5,  z:  5  },
+	  active:  true,
+	  groupId:  2
+	  
+  }, //end of swatguy rifle
+  
+  
   	{
       def:  "grunt_crouch_cover",
 	  id: "grunt_crouch_crate_1",
@@ -279,7 +289,7 @@ scale:  {  x:  1, y:  1, z:  1 }
       displayName: "Grunt Soldier",
 	  
 	  active: false,
-	  groupId:  2,
+	  groupId:  1,
       
       // sit slightly behind the crate so crate is between camera and enemy
       position: { x: 5, y: 0, z: 3 },
@@ -339,6 +349,7 @@ active:  false
       type: "Grunt",
       displayName: "Grunt Soldier",
       hp: 100,
+      usePositionYAsGround: true,
       // Use your provided SWAT model and shooting + dying animations
       modelUrl: "assets/models/swatguy.glb",
       animationUrls: {
@@ -349,8 +360,6 @@ active:  false
       // standing in the open and firing at intervals
       active:  false,
 	  position: { x: 2, y: 0, z: -6 },
-      // set an explicit groundY so the loader aligns the model's feet to this height
-      groundY: 0.85,
       facing: 0,
       behavior: { pattern: "standInOpen", params: { fireIntervalMs: 900 } }
     }
