@@ -85,12 +85,29 @@ const DEFAULT_LIGHT_DEFINITIONS = {
 // Assigned after post-processing passes are created.
 let applyEditorRenderPerformanceMode = () => {};
 
+// Diagnostic logging helper
+function appendDiagnostic(event, details, sl) {
+  try {
+    const fs = window.require ? window.require('fs') : null;
+    if (!fs) return;
+    const path = 'diagnostic.txt';
+    const now = new Date().toISOString();
+    const scene = sl && sl.scene ? sl.scene : null;
+    let sceneChildren = scene && scene.children ? scene.children.length : 'n/a';
+    let roomMeshes = sl && sl.roomMeshes ? sl.roomMeshes.length : 'n/a';
+    let propMeshes = sl && sl.propMeshes ? sl.propMeshes.length : 'n/a';
+    let msg = `[${now}] [${event}] ${details} | sceneChildren=${sceneChildren} roomMeshes=${roomMeshes} propMeshes=${propMeshes}\n`;
+    fs.appendFileSync(path, msg);
+  } catch (e) { /* ignore */ }
+}
+
 function setEditorMode(enabled) {
   window.engine.isEditorMode = !!enabled;
   const g = window.engine.editorGrid = window.engine.editorGrid || { sizes: [0, 1, 0.5, 0.25], index: 0, size: 0, helper: null, worldSize: 200 };
   const sl = window.sceneLoader;
 
   if (window.engine.isEditorMode) {
+    appendDiagnostic('EDITOR_MODE_ON', 'Entering editor mode', sl);
     // disable enemy AI and combat, enable free FPS movement
     try { setEnemyAIEnabled(false); } catch(_) {}
     isFPSMode = true;
@@ -103,6 +120,7 @@ function setEditorMode(enabled) {
     try { if (window.speak) window.speak('Editor mode on', { interrupt: true }); } catch(e){}
     toggleLightHelpers(true);
   } else {
+    appendDiagnostic('EDITOR_MODE_OFF', 'Exiting editor mode', sl);
     try { setEnemyAIEnabled(true); } catch(_) {}
     window.engine.disableCombat = false;
     // Force grid off outside editor mode to avoid unnecessary GPU load.

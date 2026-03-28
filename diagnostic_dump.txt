@@ -1,0 +1,5 @@
+[2026-03-28T16:53:41.473Z] WS: connection from ::ffff:192.168.12.239
+[2026-03-28T16:53:41.474Z] Registered game client
+[2026-03-28T17:01:13.778Z] WS: connection closed for clientType= game
+[2026-03-28T17:01:14.143Z] WS: connection from ::ffff:192.168.12.239
+[2026-03-28T17:01:14.144Z] Registered game client

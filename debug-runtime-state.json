@@ -1,16 +1,16 @@
 {
-  "savedAt": "2026-03-24T19:35:52.914Z",
+  "savedAt": "2026-03-28T21:15:14.603Z",
   "state": {
     "version": 1,
     "scene": {
-      "id": "Scene_test",
-      "name": "scene_test"
+      "id": "Scene_starting_Room",
+      "name": "startingRoom"
     },
     "camera": {
       "position": {
-        "x": 14.8,
+        "x": 15.075416666666667,
         "y": 1.7,
-        "z": 21.270000000000067
+        "z": 20.880833333333335
       },
       "rotation": {
         "x": 0,
@@ -34,7 +34,7 @@
       "pitch": 0
     },
     "player": {
-      "hp": 9955
+      "hp": 9970
     }
   }
 }

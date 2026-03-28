@@ -1,3 +1,70 @@
+console.log('[DIAGNOSTIC] sceneLoader.js loaded');
+
+// --- Robust Diagnostics Recorder ---
+window._diagnosticRecorder = (function() {
+  let isRecording = false;
+  let sessionId = null;
+  function tts(msg) {
+    try { if (window.speak) window.speak(msg, { interrupt: true }); } catch(e) {}
+  }
+  async function controlRecording(action) {
+    // Always send a valid action property, and only include sessionId if defined
+    const payload = { action };
+    if (sessionId) payload.sessionId = sessionId;
+    const res = await fetch('/api/diagnostic-log-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.sessionId) sessionId = data.sessionId;
+    return data;
+  }
+  async function log(event, details, self) {
+    if (!isRecording) return;
+    const now = new Date().toISOString();
+    const scene = self && self.scene ? self.scene : null;
+    let sceneChildren = scene && scene.children ? scene.children.length : 'n/a';
+    let roomMeshes = self && self.roomMeshes ? self.roomMeshes.length : 'n/a';
+    let propMeshes = self && self.propMeshes ? self.propMeshes.length : 'n/a';
+    let msg = `[${now}] [${event}] ${details} | sceneChildren=${sceneChildren} roomMeshes=${roomMeshes} propMeshes=${propMeshes}`;
+    try {
+      await fetch('/api/diagnostic-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event, details, sessionId, timestamp: now })
+      });
+    } catch (e) { console.warn('Failed to send diagnostic log', e); }
+    console.log('[DIAGNOSTIC]', msg);
+  }
+  async function toggleRecording() {
+    if (!isRecording) {
+      await controlRecording('start');
+      isRecording = true;
+      tts('recording diagnostic data');
+      console.log('[DIAGNOSTIC] Recording started, sessionId:', sessionId);
+    } else {
+      await controlRecording('stop');
+      isRecording = false;
+      tts('stopped recording diagnostic data');
+      console.log('[DIAGNOSTIC] Recording stopped, sessionId:', sessionId);
+    }
+  }
+  // F10 toggles recording
+  if (!window._diagnosticRecordingRegistered) {
+    window._diagnosticRecordingRegistered = true;
+    window.addEventListener('keydown', function(e) {
+      if (e.code === 'F10') toggleRecording();
+    });
+  }
+  return { log, toggleRecording, get isRecording() { return isRecording; }, get sessionId() { return sessionId; } };
+})();
+
+// Ensure window.appendDiagnostic always points to the real implementation
+window.appendDiagnostic = function(event, details, self) {
+  console.log('[DIAGNOSTIC][sceneLoader] appendDiagnostic called:', event, details, self);
+  window._diagnosticRecorder.log(event, details, self);
+};
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { ENEMY_INSTANCES } from "./enemy.js";
 window.ENEMY_INSTANCES = ENEMY_INSTANCES;

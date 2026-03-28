@@ -1,3 +1,7 @@
+// --- Diagnostic Logging ---
+const diagnosticLogger = require('./diagnostic-logger.js');
+let isRecordingDiagnostics = false;
+let currentDiagnosticSessionId = null;
 // server.js
 //
 // Simple HTTPS static file server + a single WebSocket relay.
@@ -29,8 +33,33 @@ const options = {
   key: fs.readFileSync(KEY_PATH),
 };
 
+// ...existing code...
 const app = express();
+
+// --- Diagnostic Logging Endpoints ---
 app.use(express.json({ limit: '2mb' }));
+
+app.post('/api/diagnostic-log-control', (req, res) => {
+  const { action, sessionId } = req.body || {};
+  if (action === 'start') {
+    isRecordingDiagnostics = true;
+    currentDiagnosticSessionId = sessionId || (Date.now().toString(36));
+    diagnosticLogger.writeDiagnosticControl('start', currentDiagnosticSessionId);
+    return res.json({ ok: true, recording: true, sessionId: currentDiagnosticSessionId });
+  } else if (action === 'stop') {
+    isRecordingDiagnostics = false;
+    diagnosticLogger.writeDiagnosticControl('stop', currentDiagnosticSessionId);
+    return res.json({ ok: true, recording: false, sessionId: currentDiagnosticSessionId });
+  }
+  return res.status(400).json({ ok: false, error: 'Invalid action' });
+});
+
+app.post('/api/diagnostic-log', (req, res) => {
+  if (!isRecordingDiagnostics) return res.json({ ok: false, recording: false });
+  const { event, details, sessionId, timestamp } = req.body || {};
+  diagnosticLogger.appendDiagnosticLog({ event, details, sessionId: sessionId || currentDiagnosticSessionId, timestamp });
+  res.json({ ok: true });
+});
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.js')) {

@@ -1,6 +1,16 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 import { mergeGeometries } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/BufferGeometryUtils.js';
 
+// Diagnostic logging helper (browser-based, routes to global appendDiagnostic)
+function appendDiagnostic(event, details, self) {
+  console.log('[DIAGNOSTIC][staticBatching] appendDiagnostic called:', event, details, self);
+  if (typeof window !== 'undefined' && typeof window.appendDiagnostic === 'function') {
+    window.appendDiagnostic(event, details, self);
+  } else {
+    console.warn('[DIAGNOSTIC][staticBatching] window.appendDiagnostic not available');
+  }
+}
+
 function isShellType(wrapper) {
   const rawType = String(wrapper?._sceneDef?.type || wrapper?.type || wrapper?.mesh?.userData?.type || '').toLowerCase();
   const rawId = String(wrapper?.id || wrapper?._sceneDef?.id || '').toLowerCase();
@@ -53,6 +63,7 @@ export function setStaticShellMerged(self, shouldMerge) {
   if (!shouldMerge) {
     if (!state.merged) return;
 
+    appendDiagnostic('UNMERGE_START', 'Unmerging static shell', self);
     removeMergedRoomMeshes(self);
 
     for (const mesh of state.sourceMeshes) {
@@ -70,6 +81,7 @@ export function setStaticShellMerged(self, shouldMerge) {
 
     state.sourceMeshes = [];
     state.merged = false;
+    appendDiagnostic('UNMERGE_DONE', 'Unmerged static shell complete', self);
     console.log('[StaticBatch] unmerged static shell for editor/runtime toggle.');
     return;
   }
@@ -80,6 +92,7 @@ export function setStaticShellMerged(self, shouldMerge) {
   if (window.engine?.isEditorMode) return;
   if (state.merged) return;
 
+  appendDiagnostic('MERGE_START', 'Merging static shell', self);
   removeMergedRoomMeshes(self);
 
   const groups = new Map();
@@ -128,7 +141,10 @@ export function setStaticShellMerged(self, shouldMerge) {
     mergedCount++;
   }
 
-  if (!mergedCount) return;
+  if (!mergedCount) {
+    appendDiagnostic('MERGE_ABORT', 'No meshes merged', self);
+    return;
+  }
 
   // Keep gameplay wrappers but remove source render meshes from draw/raycast lists.
   for (const wrapper of (self.props || [])) {
@@ -146,6 +162,7 @@ export function setStaticShellMerged(self, shouldMerge) {
   self.propMeshes = (self.propMeshes || []).filter((mesh) => !sourceMeshes.has(mesh));
   state.sourceMeshes = Array.from(sourceMeshes);
   state.merged = true;
+  appendDiagnostic('MERGE_DONE', `Merged static shell into ${mergedCount} room mesh(es)`, self);
   console.log(`[StaticBatch] merged static shell into ${mergedCount} room mesh(es).`);
 }
 
